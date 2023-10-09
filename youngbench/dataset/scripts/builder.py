@@ -20,7 +20,7 @@ from typing import Generator, Tuple
 
 from youngbench.dataset.modules import Dataset, Network, Instance
 
-from youngbench.dataset.utils import load_onnx_model, get_opset_version
+from youngbench.dataset.utils import load_onnx_model, get_opset_version, set_cache_root
 from youngbench.dataset.logging import logger
 
 
@@ -73,6 +73,7 @@ if __name__ == "__main__":
     # Dataset Save/Load Path.
     parser.add_argument('--load-path', type=str, default='')
     parser.add_argument('--save-path', type=str, default='')
+    parser.add_argument('--cache-dir', type=str, default='')
 
     # Mode - Create / Update
     parser.add_argument('--mode', type=str, default='Update', choices=['Update', 'Create'])
@@ -81,6 +82,12 @@ if __name__ == "__main__":
 
     assert semantic_version.validate(args.version), f'The version provided must follow the SemVer 2.0.0 Specification.'
     version = semantic_version.Version(args.version)
+
+    if args.cache_dir == '':
+        pass
+    else:
+        cache_dir = pathlib.Path(args.cache_dir)
+        set_cache_root(cache_dir)
 
     dataset = Dataset()
 
