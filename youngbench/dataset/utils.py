@@ -25,6 +25,10 @@ from typing import List, Iterable
 from youngbench.dataset.logging import logger
 
 
+cache_root = pathlib.Path(tempfile.gettempdir())
+logger.info(f'Cache Root: {cache_root}')
+
+
 def hash_binary(filepath: pathlib.Path, block_size: int = 8192, hash_algorithm: str = "SHA256") -> str:
     hasher = hashlib.new(hash_algorithm)
     with open(filepath, 'rb') as file:
@@ -105,9 +109,16 @@ def write_json(serializable_object: object, filepath: pathlib.Path) -> None:
     return
 
 
+def set_cache_root(dirpath: pathlib.Path) -> None:
+    assert dirpath.is_dir(), f'No such directory: {dirpath}.'
+    global cache_root
+    cache_root = dirpath
+    logger.info(f'Cache Root is set to be: {cache_root}')
+
+
 def create_cache(onnx_model: onnx.ModelProto) -> pathlib.Path:
     identifier = hash_bytes(onnx_model.SerializeToString())
-    cache_dir = pathlib.Path.home().joinpath(f'.youngbench/dataset')
+    cache_dir = cache_root.joinpath(f'.youngbench/dataset')
     create_dir(cache_dir)
     cache_filepath = cache_dir.joinpath(identifier)
     if cache_filepath.is_file():
@@ -118,9 +129,9 @@ def create_cache(onnx_model: onnx.ModelProto) -> pathlib.Path:
     return cache_filepath
 
 
-def remove_cache(onnx_model: onnx.ModelProto, cache_filepath: pathlib.Path):
+def remove_cache(onnx_model: onnx.ModelProto, cache_filepath: pathlib.Path) -> None:
     identifier = hash_bytes(onnx_model.SerializeToString())
-    cache_dir = pathlib.Path.home().joinpath(f'.youngbench/dataset')
+    cache_dir = cache_root.joinpath(f'.youngbench/dataset')
     assert cache_filepath.parent == cache_dir, f'Wrong Cache Dir: {cache_filepath.parent}'
     assert cache_filepath.name == identifier, f'Wrong Cache Name: {cache_filepath.name}'
     if cache_filepath.is_file():
