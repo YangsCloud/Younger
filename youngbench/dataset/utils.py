@@ -10,12 +10,14 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import os
 import sys
 import onnx
 import json
 import shutil
 import hashlib
 import pathlib
+import tempfile
 import networkx
 
 from typing import List, Iterable
@@ -59,8 +61,7 @@ def hash_string(string: str, hash_algorithm: str = "SHA256") -> str:
 
 def create_dir(dirpath: pathlib.Path) -> None:
     try:
-        dirpath.mkdir()
-        logger.info(f'Directory \"{dirpath}\" created successfully')
+        dirpath.mkdir(parents=True, exist_ok=True)
     except FileExistsError:
         logger.warn(f'The directory \"{dirpath}\" exists.')
     except Exception as e:
@@ -73,7 +74,6 @@ def create_dir(dirpath: pathlib.Path) -> None:
 def backup_file(filepath: pathlib.Path) -> None:
     try:
         shutil.copy(filepath, filepath+'.backup')
-        logger.info(f'The backup file \"{filepath}.backup\" created successfully.')
     except Exception as e:
         logger.error(f'An Error occurred while creating the backup file: {str(e)}')
         sys.exit(1)
@@ -85,7 +85,7 @@ def read_json(filepath: pathlib.Path) -> object:
     try:
         with open(filepath, 'r', encoding='utf-8') as file:
             serializable_object = json.load(file)
-        logger.info(f'The serializable object reading from the file \"{filepath}\" successfully.')
+        # logger.info(f'The serializable object reading from the file \"{filepath}\" successfully.')
     except Exception as e:
         logger.error(f'An Error occurred while reading serializable object from the file: {str(e)}')
         sys.exit(1)
@@ -97,12 +97,34 @@ def write_json(serializable_object: object, filepath: pathlib.Path) -> None:
     try:
         with open(filepath, 'w', encoding='utf-8') as file:
             json.dump(serializable_object, file)
-        logger.info(f'The serializable object writing into the file \"{filepath}\" successfully.')
+        # logger.info(f'The serializable object writing into the file \"{filepath}\" successfully.')
     except Exception as e:
         logger.error(f'An Error occurred while writing serializable object into the file: {str(e)}')
         sys.exit(1)
 
     return
+
+
+def create_cache(onnx_model: onnx.ModelProto) -> pathlib.Path:
+    identifier = hash_bytes(onnx_model.SerializeToString())
+    cache_dir = pathlib.Path.home().joinpath(f'.youngbench/dataset')
+    create_dir(cache_dir)
+    cache_filepath = cache_dir.joinpath(identifier)
+    if cache_filepath.is_file():
+        pass
+    else:
+        save_onnx_model(onnx_model, cache_filepath)
+
+    return cache_filepath
+
+
+def remove_cache(onnx_model: onnx.ModelProto, cache_filepath: pathlib.Path):
+    identifier = hash_bytes(onnx_model.SerializeToString())
+    cache_dir = pathlib.Path.home().joinpath(f'.youngbench/dataset')
+    assert cache_filepath.parent == cache_dir, f'Wrong Cache Dir: {cache_filepath.parent}'
+    assert cache_filepath.name == identifier, f'Wrong Cache Name: {cache_filepath.name}'
+    if cache_filepath.is_file():
+        os.remove(cache_filepath)
 
 
 def load_onnx_model(model_filepath: pathlib.Path) -> onnx.ModelProto:

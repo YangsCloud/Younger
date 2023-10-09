@@ -18,7 +18,7 @@ import semantic_version
 from youngbench.dataset.modules.meta import Meta
 from youngbench.dataset.modules.prototype import Prototype
 
-from youngbench.dataset.utils import read_json, write_json, hash_bytes, load_onnx_model, save_onnx_model
+from youngbench.dataset.utils import read_json, write_json, hash_bytes, load_onnx_model, save_onnx_model, create_cache, remove_cache
 from youngbench.dataset.logging import logger
 
 
@@ -33,7 +33,8 @@ class Instance(object):
         self._meta = Meta()
 
         self._model_filename = 'model.onnx'
-        self._model = None
+        self._model_filepath = ''
+        self._model_cache = ''
 
         self._mode_code = 0B0
         self._legacy = False
@@ -54,8 +55,15 @@ class Instance(object):
         return self._model_filepath
 
     @property
+    def model_cache(self) -> str:
+        return self._model_cache
+
+    @property
     def model(self) -> onnx.ModelProto:
-        return self._model
+        if self._model_cache:
+            return load_onnx_model(self.model_cache)
+        else:
+            return None
 
     @property
     def prototype(self) -> networkx.DiGraph:
@@ -64,7 +72,7 @@ class Instance(object):
 
     @property
     def identifier(self) -> str:
-        return hash_bytes(self._model.SerializeToString())
+        return hash_bytes(self.model.SerializeToString())
 
     @property
     def mode_code(self) -> bool:
@@ -191,7 +199,9 @@ class Instance(object):
 
         if self.mode_code == self.get_mode_code('close'):
             assert model_filepath.is_file(), f'There is no \"Model\" can be loaded from the specified path \"{model_filepath.absolute()}\".'
-            self._model = load_onnx_model(model_filepath)
+            model = load_onnx_model(model_filepath)
+            self._model_filepath = model_filepath
+            self._model_cache = model_filepath
 
         return
 
@@ -201,7 +211,7 @@ class Instance(object):
 
         if self.mode_code == self.get_mode_code('close'):
             assert not model_filepath.is_file(), f'\"Model\" can not be saved into the specified path \"{model_filepath.absolute()}\".'
-            save_onnx_model(self._model, model_filepath)
+            save_onnx_model(self.model, model_filepath)
 
         return
 
@@ -209,12 +219,17 @@ class Instance(object):
         if self.mode_code == self.get_mode_code('open'):
             if self.is_fresh:
                 assert isinstance(model, onnx.ModelProto), f'\"Model\" must be an ONNX Model Proto (onnx.ModelProto) instead \"{type(model)}\"!'
-                self._model = model
+                self._model_cache = create_cache(model)
             else:
                 logger.info(f'\"Model\" has already been set, \"set\" operation will not take effect.')
         else:
             logger.warn(f'The mode of \"Instance\" is \"close\", no action')
 
+        return
+
+    def clean_cache(self) -> None:
+        if len(self._model_filepath) == 0:
+            remove_cache(self.model, self.model_cache)
         return
 
     def add(self) -> None:

@@ -28,6 +28,13 @@ def get_onnx_official_models() -> Generator[Tuple[str, onnx.ModelProto], None, N
     all_models = sorted(hub.list_models(), key=lambda x: x.metadata['model_bytes'])
     for model_info in all_models:
         onnx_model = hub.load(model=model_info.model, opset=model_info.opset)
+        # total_try = 10
+        # for i in range(total_try):
+        #     try:
+        #         onnx_model = hub.load(model=model_info.model, opset=model_info.opset)
+        #         break
+        #     except:
+        #         print(f'Try No. {i+1}/{total_try} to re-load.')
         yield (model_info.model, onnx_model)
 
 
@@ -101,8 +108,8 @@ if __name__ == "__main__":
 
         dataset.load(load_path)
 
-        # models = get_provided_models(onnx_path)
-        models = get_official_models(onnx=True, pytorch=False, tensorflow=False)
+        models = get_provided_models(onnx_path)
+        # models = get_official_models(onnx=True, pytorch=False, tensorflow=False)
 
     logger.info(f'-> Dataset Created.')
     dataset.open()
@@ -124,3 +131,7 @@ if __name__ == "__main__":
 
     dataset.save(save_path)
     logger.info(f'-> Dataset Saved: {save_path}.')
+
+    for network in dataset.networks:
+        for instance in network.instances:
+            instance.clean_cache()
