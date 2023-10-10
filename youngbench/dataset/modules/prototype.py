@@ -14,9 +14,11 @@ import onnx
 import pathlib
 import networkx
 
-from typing import List, Tuple, Generator
+from typing import List, Dict, Tuple, Generator
 
 from youngbench.dataset.utils import hash_strings
+
+from youngbench.constants import ONNX
 
 
 class Prototype(object):
@@ -113,10 +115,10 @@ class Prototype(object):
             bfs_layer = [int(node_id) for node_id in bfs_layer]
             yield bfs_layer
 
-    def get_node(self, node_id: int):
+    def get_node(self, node_id: int) -> Dict:
         return self.neural_network.nodes[str(node_id)]
 
-    def get_edge(self, u_node_id: int, v_node_id: int):
+    def get_edge(self, u_node_id: int, v_node_id: int) -> Dict:
         return self.neural_network.edges[(str(u_node_id), str(v_node_id))]
 
     def from_onnx_model(self, onnx_model: onnx.ModelProto) -> None:
@@ -130,7 +132,7 @@ class Prototype(object):
 
         for index, node in id2nd.items():
             op_type = node.op_type
-            op_domain = node.domain or 'ai.onnx'
+            op_domain = node.domain or ONNX.OP_OFFICIAL_DOMAIN
             i_num = len(node.input)
             o_num = len(node.output)
             neural_network.add_node(str(index), op_type=op_type, op_domain=op_domain, i_num=i_num, o_num=o_num)

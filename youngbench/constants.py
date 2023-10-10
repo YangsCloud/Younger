@@ -12,6 +12,14 @@
 
 import enum
 
+from onnx.defs import (
+    ONNX_DOMAIN,
+    ONNX_ML_DOMAIN,
+    AI_ONNX_PREVIEW_TRAINING_DOMAIN,
+)
 
-class Dataset(enum.Enum):
-    PATH = ""
+
+class ONNX(enum.Enum):
+    OP_DOMAIN = ONNX_DOMAIN or 'ai.onnx'
+    OP_ML_DOMAIN = ONNX_ML_DOMAIN
+    OP_PREVIEW_TRAINING_DOMAIN = AI_ONNX_PREVIEW_TRAINING_DOMAIN
