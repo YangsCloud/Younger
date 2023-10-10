@@ -73,6 +73,8 @@ if __name__ == "__main__":
     # Dataset Save/Load Path.
     parser.add_argument('--load-path', type=str, default='')
     parser.add_argument('--save-path', type=str, default='')
+
+    # Dataset Cache's Dir
     parser.add_argument('--cache-dir', type=str, default='')
 
     # Mode - Create / Update
