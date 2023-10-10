@@ -18,7 +18,7 @@ from typing import Set, List, Dict
 from youngbench.dataset.modules.stamp import Stamp
 from youngbench.dataset.modules.network import Network
 
-from youngbench.dataset.utils import hash_strings, read_json, write_json
+from youngbench.dataset.utils import hash_strings, read_json, write_json, create_dir
 from youngbench.dataset.logging import logger
 
 
@@ -137,7 +137,7 @@ class Dataset(object):
 
         if self.mode_code == self.get_mode_code('close'):
             assert not dataset_dirpath.is_dir(), f'\"Dataset\" can not be saved into the specified directory \"{dataset_dirpath.absolute()}\".'
-            dataset_dirpath.mkdir()
+            create_dir(dataset_dirpath)
             logger.info(f'Now saving \"Dataset\" into {dataset_dirpath.absolute()} ...')
             networks_dirpath = dataset_dirpath.joinpath(self._networks_dirname)
             self._save_networks(networks_dirpath)
@@ -234,7 +234,7 @@ class Dataset(object):
         if self.mode_code == self.get_mode_code('close'):
             assert not networks_dirpath.is_dir(), f'\"Network\"s can not be saved into the specified directory \"{networks_dirpath.absolute()}\".'
 
-            networks_dirpath.mkdir()
+            create_dir(networks_dirpath)
             for index, identifier in enumerate(self._uniques):
                 network_dirpath = networks_dirpath.joinpath(f'{index}-{identifier}')
                 network = self._networks[index]

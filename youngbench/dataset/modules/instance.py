@@ -18,7 +18,7 @@ import semantic_version
 from youngbench.dataset.modules.meta import Meta
 from youngbench.dataset.modules.prototype import Prototype
 
-from youngbench.dataset.utils import read_json, write_json, hash_bytes, load_onnx_model, save_onnx_model, create_cache, remove_cache
+from youngbench.dataset.utils import read_json, write_json, hash_bytes, load_onnx_model, save_onnx_model, create_cache, remove_cache, create_dir
 from youngbench.dataset.logging import logger
 
 
@@ -163,7 +163,7 @@ class Instance(object):
 
         if self.mode_code == self.get_mode_code('close'):
             assert not instance_dirpath.is_dir(), f'\"Instance\" can not be saved into the specified directory \"{instance_dirpath.absolute()}\".'
-            instance_dirpath.mkdir()
+            create_dir(instance_dirpath)
             model_filepath = instance_dirpath.joinpath(self._model_filename)
             self._save_model(model_filepath)
             meta_filepath = instance_dirpath.joinpath(self._meta_filename)

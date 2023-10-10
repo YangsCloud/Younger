@@ -21,7 +21,7 @@ from youngbench.dataset.modules.stamp import Stamp
 from youngbench.dataset.modules.instance import Instance
 from youngbench.dataset.modules.prototype import Prototype
 
-from youngbench.dataset.utils import hash_strings, read_json, write_json
+from youngbench.dataset.utils import hash_strings, read_json, write_json, create_dir
 from youngbench.dataset.logging import logger
 
 
@@ -209,7 +209,7 @@ class Network(object):
 
         if self.mode_code == self.get_mode_code('close'):
             assert not network_dirpath.is_dir(), f'\"Network\" can not be saved into the specified directory \"{network_dirpath.absolute()}\".'
-            network_dirpath.mkdir()
+            create_dir(network_dirpath)
             prototype_filepath = network_dirpath.joinpath(self._prototype_filename)
             self._save_prototype(prototype_filepath)
             meta_filepath = network_dirpath.joinpath(self._meta_filename)
@@ -351,7 +351,7 @@ class Network(object):
         if self.mode_code == self.get_mode_code('close'):
             assert not instances_dirpath.is_dir(), f'\"Instances\"s can not be saved into the specified directory \"{instances_dirpath.absolute()}\".'
 
-            instances_dirpath.mkdir()
+            create_dir(instances_dirpath)
             for index, identifier in enumerate(self._uniques):
                 instance_dirpath = instances_dirpath.joinpath(f'{index}-{identifier}')
                 instance = self._instances[index]
@@ -510,7 +510,7 @@ class Network(object):
             )
 
             if stamp not in self._stamps:
-                print(f'No Change on Network, no release.')
+                logger.info(f'No Change on Network, no release.')
             else:
                 self._stamps.add(stamp)
 
