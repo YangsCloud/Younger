@@ -132,7 +132,7 @@ class Prototype(object):
 
         for index, node in id2nd.items():
             op_type = node.op_type
-            op_domain = node.domain or ONNX.OP_OFFICIAL_DOMAIN
+            op_domain = node.domain or str(ONNX.OP_DOMAIN)
             i_num = len(node.input)
             o_num = len(node.output)
             neural_network.add_node(str(index), op_type=op_type, op_domain=op_domain, i_num=i_num, o_num=o_num)

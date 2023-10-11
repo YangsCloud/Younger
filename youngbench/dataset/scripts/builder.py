@@ -27,14 +27,14 @@ from youngbench.dataset.logging import logger
 def get_onnx_official_models() -> Generator[Tuple[str, onnx.ModelProto], None, None]:
     all_models = sorted(hub.list_models(), key=lambda x: x.metadata['model_bytes'])
     for model_info in all_models:
-        onnx_model = hub.load(model=model_info.model, opset=model_info.opset)
-        # total_try = 10
-        # for i in range(total_try):
-        #     try:
-        #         onnx_model = hub.load(model=model_info.model, opset=model_info.opset)
-        #         break
-        #     except:
-        #         print(f'Try No. {i+1}/{total_try} to re-load.')
+        # onnx_model = hub.load(model=model_info.model, opset=model_info.opset)
+        total_try = 10
+        for i in range(total_try):
+            try:
+                onnx_model = hub.load(model=model_info.model, opset=model_info.opset)
+                break
+            except:
+                print(f'Try No. {i+1}/{total_try} to re-load.')
         yield (model_info.model, onnx_model)
 
 
@@ -73,8 +73,6 @@ if __name__ == "__main__":
     # Dataset Save/Load Path.
     parser.add_argument('--load-path', type=str, default='')
     parser.add_argument('--save-path', type=str, default='')
-
-    # Dataset Cache's Dir
     parser.add_argument('--cache-dir', type=str, default='')
 
     # Mode - Create / Update
