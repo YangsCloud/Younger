@@ -25,7 +25,7 @@ def get_official_ops() -> Set[Tuple[str, str]]:
     official_ops = set()
     for op_schema in onnx.defs.get_all_schemas():
         op_name = op_schema.name
-        op_domain = op_schema.domain or ONNX.OP_OFFICIAL_DOMAIN
+        op_domain = op_schema.domain or ONNX.OP_DOMAIN.value
         official_ops.add((op_name, op_domain))
 
     assert len(official_ops) == len(onnx.defs.get_all_schemas())
