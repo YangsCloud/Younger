@@ -10,23 +10,18 @@
 # LICENSE file in the root directory of this source tree.
 
 
-import os
 import sys
 import onnx
 import json
-import shutil
 import hashlib
 import pathlib
-import tempfile
 import networkx
 
-from typing import List, Iterable
+from onnx import version_converter
+from typing import List, Union
 
-from youngbench.dataset.logging import logger
-
-
-cache_root = pathlib.Path(tempfile.gettempdir())
-logger.info(f'Cache Root: {cache_root}')
+from youngbench.logging import logger
+from youngbench.constants import ONNX
 
 
 def hash_binary(filepath: pathlib.Path, block_size: int = 8192, hash_algorithm: str = "SHA256") -> str:
@@ -66,8 +61,6 @@ def hash_string(string: str, hash_algorithm: str = "SHA256") -> str:
 def create_dir(dirpath: pathlib.Path) -> None:
     try:
         dirpath.mkdir(parents=True, exist_ok=True)
-    except FileExistsError:
-        logger.warn(f'The directory \"{dirpath}\" exists.')
     except Exception as e:
         logger.error(f'An Error occurred while creating the directory: {str(e)}')
         sys.exit(1)
@@ -75,21 +68,10 @@ def create_dir(dirpath: pathlib.Path) -> None:
     return
 
 
-def backup_file(filepath: pathlib.Path) -> None:
-    try:
-        shutil.copy(filepath, filepath+'.backup')
-    except Exception as e:
-        logger.error(f'An Error occurred while creating the backup file: {str(e)}')
-        sys.exit(1)
-
-    return
-
-
 def read_json(filepath: pathlib.Path) -> object:
     try:
-        with open(filepath, 'r', encoding='utf-8') as file:
+        with open(filepath, 'r') as file:
             serializable_object = json.load(file)
-        # logger.info(f'The serializable object reading from the file \"{filepath}\" successfully.')
     except Exception as e:
         logger.error(f'An Error occurred while reading serializable object from the file: {str(e)}')
         sys.exit(1)
@@ -99,9 +81,9 @@ def read_json(filepath: pathlib.Path) -> object:
 
 def write_json(serializable_object: object, filepath: pathlib.Path) -> None:
     try:
-        with open(filepath, 'w', encoding='utf-8') as file:
+        create_dir(filepath.parent)
+        with open(filepath, 'w') as file:
             json.dump(serializable_object, file)
-        # logger.info(f'The serializable object writing into the file \"{filepath}\" successfully.')
     except Exception as e:
         logger.error(f'An Error occurred while writing serializable object into the file: {str(e)}')
         sys.exit(1)
@@ -109,53 +91,35 @@ def write_json(serializable_object: object, filepath: pathlib.Path) -> None:
     return
 
 
-def set_cache_root(dirpath: pathlib.Path) -> None:
-    assert dirpath.is_dir(), f'No such directory: {dirpath}.'
-    global cache_root
-    cache_root = dirpath
-    logger.info(f'Cache Root is set to be: {cache_root}')
-
-
-def create_cache(onnx_model: onnx.ModelProto) -> pathlib.Path:
-    identifier = hash_bytes(onnx_model.SerializeToString())
-    cache_dir = cache_root.joinpath(f'.youngbench/dataset')
-    create_dir(cache_dir)
-    cache_filepath = cache_dir.joinpath(identifier)
-    if cache_filepath.is_file():
-        pass
-    else:
-        save_onnx_model(onnx_model, cache_filepath)
-
-    return cache_filepath
-
-
-def remove_cache(onnx_model: onnx.ModelProto, cache_filepath: pathlib.Path) -> None:
-    identifier = hash_bytes(onnx_model.SerializeToString())
-    cache_dir = cache_root.joinpath(f'.youngbench/dataset')
-    assert cache_filepath.parent == cache_dir, f'Wrong Cache Dir: {cache_filepath.parent}'
-    assert cache_filepath.name == identifier, f'Wrong Cache Name: {cache_filepath.name}'
-    if cache_filepath.is_file():
-        os.remove(cache_filepath)
+def check_onnx_model(model_handler: Union[onnx.ModelProto, pathlib.Path]) -> bool:
+    if isinstance(model_handler, pathlib.Path):
+        model_handler = str(model_handler)
+    try:
+        onnx.checker.check_model(model_handler)
+        check_result = True
+    except onnx.checker.ValidationError as check_error:
+        logger.warn(f'The ONNX Model is invalid: {check_error}')
+        check_result = False
+    except Exception as error:
+        logger.error(f'An error occurred while checking the ONNX model: {error}')
+        sys.exit(1)
+    return check_result
 
 
 def load_onnx_model(model_filepath: pathlib.Path) -> onnx.ModelProto:
-    try:
-        onnx.checker.check_model(str(model_filepath))
-        model = onnx.load(model_filepath)
-    except onnx.checker.ValidationError as e:
-        logger.error(f'The onnx model is invalid: {e}')
-        sys.exit(2)
-    except Exception as e:
-        logger.error(f'An Error occurred while loading onnx model: {str(e)}')
-        sys.exit(1)
-
+    model = onnx.load(model_filepath)
     return model
 
 
-def save_onnx_model(model: onnx.ModelProto, model_filepath: pathlib.Path) -> None:
-    onnx.save(model, model_filepath)
-
+def save_onnx_model(onnx_model: onnx.ModelProto, model_filepath: pathlib.Path) -> None:
+    create_dir(model_filepath.parent)
+    onnx.save(onnx_model, model_filepath)
     return
+
+
+def clean_onnx_model(onnx_model: onnx.ModelProto) -> onnx.ModelProto:
+    onnx_model = version_converter.convert_version(onnx_model, ONNX.OPSetVersions[-1])
+    return onnx_model
 
 
 def get_opset_version(onnx_model: onnx.ModelProto):

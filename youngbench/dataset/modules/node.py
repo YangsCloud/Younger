@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#
+# Copyright (c) Jason Young (杨郑鑫).
+#
+# E-Mail: <AI.Jason.Young@outlook.com>
+# 2023-10-13 09:19
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
+
+from typing import Dict
+
+
+class Node(object):
+    def __init__(self,
+        operator_type: str,
+        operator_domain: str,
+        attributes: Dict,
+        parameters: Dict,
+        operands: Dict,
+        results: Dict,
+    ) -> None:
+        self._type = operator_type
+        self._domain = operator_domain
+
+        self._attributes = attributes
+        self._parameters = parameters
+        self._operands = operands
+        self._results = results
+
+    @property
+    def features(self) -> Dict:
+        features = dict(
+            type = self._type,
+            domain = self._domain,
+            in_number = len(self._operands),
+            out_number = len(self._results),
+        )
+        return features
+
+    @property
+    def dict(self) -> Dict:
+        return dict(
+            operator_type = self._type,
+            operator_domain = self._domain,
+            attributes = self._attributes,
+            parameters = self._parameters,
+            operands = self._operands,
+            results = self._results,
+        )
+
+    @property
+    def attributes(self) -> Dict:
+        return self._attributes
+
+    @property
+    def parameters(self) -> Dict:
+        return self._parameters
+
+    @property
+    def operands(self) -> Dict:
+        return self._operands
+
+    @property
+    def results(self) -> Dict:
+        return self._results
