@@ -26,7 +26,6 @@ from youngbench.logging import logger
 
 
 def get_onnx_official_onnx_models() -> Generator[Tuple[str, onnx.ModelProto], None, None]:
-    hub.set_dir('/home/jason/WSL_Share/YBD/onnx/hub')
     all_models = sorted(hub.list_models(), key=lambda x: x.metadata['model_bytes'])
     for model_info in all_models:
         # onnx_model = hub.load(model=model_info.model, opset=model_info.opset)
