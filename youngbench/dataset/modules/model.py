@@ -16,8 +16,8 @@ import semantic_version
 
 from youngbench.dataset.modules.meta import Meta
 
-from youngbench.dataset.utils import hash_bytes, read_json, write_json, load_onnx_model, save_onnx_model, check_onnx_model
-from youngbench.dataset.cache import get_cache_root
+from youngbench.dataset.utils.io import hash_bytes, read_json, write_json, load_onnx_model, save_onnx_model, check_onnx_model
+from youngbench.dataset.utils.cache import get_cache_root
 
 
 class Model(object):

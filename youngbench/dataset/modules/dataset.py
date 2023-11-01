@@ -18,7 +18,7 @@ from typing import Set, List, Dict
 from youngbench.dataset.modules.stamp import Stamp
 from youngbench.dataset.modules.instance import Instance
 
-from youngbench.dataset.utils import hash_strings, read_json, write_json
+from youngbench.dataset.utils.io import hash_strings, read_json, write_json
 
 
 class Dataset(object):
@@ -168,9 +168,6 @@ class Dataset(object):
             instance_number = instance_number,
             model_number = model_number,
         )
-
-    def search(self, instance: Instance) -> Instance:
-        return self.instances.get(instance.identifier, None)
 
     def insert(self, instance: Instance) -> None:
         new_instance = self.instances.get(instance.identifier, Instance())

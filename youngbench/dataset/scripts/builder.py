@@ -18,10 +18,11 @@ import semantic_version
 from onnx import hub
 from typing import Generator, Tuple
 
-from youngbench.dataset.modules import Dataset, Instance, Model
+from youngbench.dataset.modules import Dataset
 
-from youngbench.dataset.utils import load_onnx_model, get_opset_version
-from youngbench.dataset.cache import set_cache_root, get_cache_root
+from youngbench.dataset.utils.io import load_onnx_model
+from youngbench.dataset.utils.cache import set_cache_root, get_cache_root
+from youngbench.dataset.utils.management import enrich_dataset
 from youngbench.logging import logger
 
 
@@ -62,6 +63,14 @@ def get_provided_onnx_models(onnx_path: pathlib.Path) -> Generator[Tuple[str, on
         yield (filepath.stem, onnx_model)
 
 
+def get_opset_version(onnx_model: onnx.ModelProto):
+    for opset_info in onnx_model.opset_import:
+        if opset_info.domain == "":
+            opset_version = opset_info.version
+            break
+    return opset_version
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Create/Update The Young Neural Network Architecture Dataset (YoungBench - Dataset).")
 
@@ -97,6 +106,14 @@ if __name__ == "__main__":
     dataset = Dataset()
 
     if args.mode == 'Create':
+        if len(args.onnx_path) == 0:
+            logger.info(f'Using default ONNX Hub cache location.')
+        else:
+            onnx_path = pathlib.Path(args.onnx_path)
+            assert onnx_path.is_dir(), f'Directory does not exists at the specified \"ONNX Path\": {onnx_path}.'
+            hub.set_dir(str(onnx_path.absolute()))
+            logger.info(f'ONNX Hub cache location is set to: {hub.get_dir()}')
+
         save_path = pathlib.Path(args.save_path)
         assert not save_path.is_dir(), f'Directory exists at the specified \"Save Path\": {save_path}.'
 
@@ -126,24 +143,7 @@ if __name__ == "__main__":
 
     for index, (onnx_model_name, onnx_model) in enumerate(onnx_models):
         logger.info(f' # {index+1}: Now processing the model: {onnx_model_name} (ONNX opset={get_opset_version(onnx_model)})')
-
-        new_model = Model(onnx_model=onnx_model)
-        new_instance = Instance(network=Instance.extract_network(new_model), models=[new_model,])
-
-        new = False
-        instance = dataset.search(new_instance)
-        if instance is None:
-            new = True
-        else:
-            model = instance.search(new_model)
-            if model is None:
-                new = True
-        
-        if new:
-            dataset.insert(instance=new_instance)
-            logger.info(f'   Inserted Successfully.')
-        else:
-            logger.info(f'   Skip: ONNX Model Already Exists.')
+        enrich_dataset(onnx_model, dataset)
 
     dataset.release(version)
     logger.info(f'-> Dataset Released.')

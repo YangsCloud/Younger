@@ -10,23 +10,18 @@
 # LICENSE file in the root directory of this source tree.
 
 
-import onnx
 import pathlib
-import networkx
 import semantic_version
 
 from typing import Set, List, Dict
-from onnx.shape_inference import infer_shapes
-from google.protobuf import json_format
 
 from youngbench.dataset.modules.meta import Meta
 from youngbench.dataset.modules.network import Network
 from youngbench.dataset.modules.stamp import Stamp
 from youngbench.dataset.modules.model import Model
-from youngbench.dataset.modules.node import Node
 
-from youngbench.dataset.utils import hash_strings, read_json, write_json
-from youngbench.constants import ONNXOperatorDomain, ONNXAttributeType
+from youngbench.dataset.utils.io import hash_strings, read_json, write_json
+from youngbench.dataset.utils.extraction import extract_network
 
 
 class Instance(object):
@@ -286,14 +281,11 @@ class Instance(object):
             self.set_old()
         return
 
-    def search(self, model: Model) -> Model:
-        return self.models.get(model.identifier, None)
-
     def insert(self, model: Model) -> None:
         if self.is_fresh:
             return
         if self.is_new:
-            if self.network == self.__class__.extract_network(model):
+            if self.network == extract_network(model):
                 new_model = model.copy()
                 self.models[new_model.identifier] = new_model
         return 
@@ -302,7 +294,7 @@ class Instance(object):
         if self.is_fresh:
             return
         if self.is_new:
-            if self.network == self.__class__.extract_network(model):
+            if self.network == extract_network(model):
                 old_model = self.models.get(model.identifier, Model())
                 old_model.set_old()
         return
@@ -352,121 +344,3 @@ class Instance(object):
                 self.meta.set_release(version)
 
         return
-
-    @classmethod
-    def extract_network(cls, model: Model) -> Network:
-        onnx_model = infer_shapes(model.onnx_model)
-        nn_graph = networkx.DiGraph()
-        nn_nodes = dict()
-        nn_size = 0
-
-        # Parameter
-        pm_info = dict()
-        for initializer in onnx_model.graph.initializer:
-            initializer_dict = json_format.MessageToDict(initializer)
-            pm_info[initializer.name] = dict(
-                dims = ['dims'],
-                dataType = initializer_dict['dataType'],
-            )
-
-        # Input & Output
-        io_info = dict()
-        for input in onnx_model.graph.input:
-            io_info[input.name] = json_format.MessageToDict(input.type)
-        for value in onnx_model.graph.value_info:
-            io_info[value.name] = json_format.MessageToDict(value.type)
-        for output in onnx_model.graph.output:
-            io_info[output.name] = json_format.MessageToDict(output.type)
-
-        i2x = dict()
-        o2x = dict()
-        for nid, node in enumerate(onnx_model.graph.node):
-            nid = str(nid)
-            if node.domain in ONNXOperatorDomain:
-                operator = onnx.defs.get_schema(node.op_type, domain=node.domain)
-
-                attributes = dict()
-                for attribute in node.attribute:
-                    if attribute.type == ONNXAttributeType.GRAPH or attribute.type == ONNXAttributeType.GRAPHS:
-                        attributes[attribute.name] = 'GRAPH(S)'
-                    else:
-                        attributes[attribute.name] = json_format.MessageToDict(attribute)
-
-                parameters = dict()
-                if len(operator.inputs) and (operator.inputs[-1].option != operator.inputs[-1].option.Variadic.value):
-                    assert len(node.input) <= len(operator.inputs)
-                for index, input in enumerate(node.input):
-                    index = min(index, len(operator.inputs) - 1)
-                    if input in pm_info:
-                        parameters[operator.inputs[index].name] = pm_info[input]
-
-                operands = dict()
-                if len(operator.inputs) and (operator.inputs[-1].option != operator.inputs[-1].option.Variadic.value):
-                    assert len(node.input) <= len(operator.inputs)
-                for index, input in enumerate(node.input):
-                    index = min(index, len(operator.inputs) - 1)
-                    if input in io_info:
-                        i2x[input] = (nid, operator.inputs[index].name)
-                        operands[operator.inputs[index].name] = io_info[input]
-
-                results = dict()
-                if len(operator.outputs) and (operator.outputs[-1].option != operator.outputs[-1].option.Variadic.value):
-                    assert len(node.output) <= len(operator.outputs)
-                for index, output in enumerate(node.output):
-                    index = min(index, len(operator.outputs) - 1)
-                    if output in io_info:
-                        o2x[output] = (nid, operator.outputs[index].name)
-                        results[operator.outputs[index].name] = io_info[output]
-
-                node = Node(
-                    operator_type=node.op_type,
-                    operator_domain=node.domain,
-                    attributes=attributes,
-                    parameters=parameters,
-                    operands=operands,
-                    results=results
-                )
-            else:
-                operands = dict()
-                for index, input in enumerate(node.input):
-                    if input in io_info:
-                        i2x[input] = (nid, input)
-                        operands[input] = io_info[input]
-
-                results = dict()
-                for index, output in enumerate(node.output):
-                    if output in io_info:
-                        o2x[output] = (nid, output)
-                        results[output] = io_info[output]
-
-                node = Node(
-                    operator_type=node.op_type,
-                    operator_domain=node.domain,
-                    attributes=dict(),
-                    parameters=dict(),
-                    operands=operands,
-                    results=results
-                )
-
-            nn_graph.add_node(nid, **node.features)
-            nn_nodes[nid] = node
-            nn_size += 1
-
-        for nid, node in enumerate(onnx_model.graph.node):
-            nid = str(nid)
-
-            for input in node.input:
-                if input in i2x and input in o2x:
-                    u_nid, u_opn = o2x[input]
-                    v_nid, v_opn = i2x[input]
-                    nn_graph.add_edge(u_nid, v_nid, u_opn=u_opn, v_opn=v_opn)
-
-            for output in node.output:
-                if output in o2x and output in i2x:
-                    u_nid, u_opn = o2x[output]
-                    v_nid, v_opn = i2x[output]
-                    nn_graph.add_edge(u_nid, v_nid, u_opn=u_opn, v_opn=v_opn)
-            
-        assert networkx.is_directed_acyclic_graph(nn_graph), f'The \"Network\" converted from the \"ONNX Model\" (onnx_model) of Model() is not a Directed Acyclic Graph.'
-
-        return Network(nn_graph=nn_graph, nn_nodes=nn_nodes, nn_size=nn_size)

@@ -10,20 +10,28 @@
 # LICENSE file in the root directory of this source tree.
 
 
-import json
 import pathlib
 import networkx
 
-from google.protobuf import json_format
 from typing import Set, List, Dict, Tuple, Generator
 
 from youngbench.dataset.modules.node import Node
 
-from youngbench.dataset.utils import hash_strings, read_json, write_json
+from youngbench.dataset.utils.io import hash_strings, read_json, write_json
 
 
 class Network(object):
-    def __init__(self, nn_graph: networkx.DiGraph = networkx.DiGraph(), nn_nodes: Dict[str, Node] = dict(), nn_size: int = int()) -> None:
+    def __init__(self,
+        nn_graph: networkx.DiGraph = networkx.DiGraph(),
+        nn_nodes: Dict[str, Node] = dict(),
+        nn_size: int = int(),
+        is_sub: bool = bool(),
+        parent_iid: str = str(),
+        parent_fnf: bool = bool(),
+        parent_nid: int = int(),
+        parent_nopt: str = str(),
+        parent_ndom: str = str(),
+    ) -> None:
         assert len(nn_graph) == nn_size
         assert len(nn_nodes) == nn_size
 
@@ -35,6 +43,13 @@ class Network(object):
 
         self._nn_size = nn_size
 
+        self._is_sub = is_sub # Whether Subgraphs
+        self._parent_iid = parent_iid # Instance Identifier
+        self._parent_fnf = parent_fnf # Function Flag - (True: parent_nid is invalid)
+        self._parent_nid = parent_nid # Node ID
+        self._parent_nopt = parent_nopt # Node ID
+        self._parent_ndom = parent_ndom # Node ID
+
     @property
     def nn_graph(self) -> networkx.DiGraph:
         return self._nn_graph
@@ -42,6 +57,30 @@ class Network(object):
     @property
     def nn_nodes(self) -> Dict[str, Node]:
         return self._nn_nodes
+
+    @property
+    def is_sub(self) -> bool:
+        return self._is_sub
+
+    @property
+    def parent_iid(self) -> str:
+        return self._parent_iid
+
+    @property
+    def parent_fnf(self) -> bool:
+        return self._parent_fnf
+
+    @property
+    def parent_nid(self) -> int:
+        return self._parent_nid
+
+    @property
+    def parent_nopt(self) -> str:
+        return self._parent_nopt
+
+    @property
+    def parent_ndom(self) -> str:
+        return self._parent_ndom
 
     @property
     def node_ids(self) -> List[int]:
@@ -105,10 +144,24 @@ class Network(object):
             layer_strings.append(layer_string)
         return hash_strings(layer_strings)
 
-    @property
-    def dict(self) -> Dict:
+    def dict2meta(self, dict) -> None:
+        self._nn_size = dict['nn_size']
+        self._is_sub = dict['is_sub']
+        self._parent_iid = dict['parent_iid']
+        self._parent_fnf = dict['parent_fnf']
+        self._parent_nid = dict['parent_nid']
+        self._parent_nopt = dict['parent_nopt']
+        self._parent_ndom = dict['parent_ndom']
+
+    def meta2dict(self) -> Dict:
         return dict(
             nn_size = self._nn_size,
+            is_sub = self._is_sub,
+            parent_iid = self._parent_iid,
+            parent_fnf = self._parent_fnf,
+            parent_nid = self._parent_nid,
+            parent_nopt = self._parent_nopt,
+            parent_ndom = self._parent_ndom,
         )
 
     def __eq__(self, network: 'Network') -> bool:
@@ -127,7 +180,8 @@ class Network(object):
 
     def load(self, network_filepath: pathlib.Path) -> None:
         assert network_filepath.is_file(), f'There is no \"Network\" can be loaded from the specified directory \"{network_filepath.absolute()}\".'
-        self._nn_size = read_json(network_filepath)
+        info = read_json(network_filepath)
+        self.dict2meta(info)
         network_dirpath = network_filepath.parent
         nn_garph_filepath = network_dirpath.joinpath(self._nn_graph_filename)
         self._load_nn_graph(nn_garph_filepath)
@@ -137,7 +191,8 @@ class Network(object):
 
     def save(self, network_filepath: pathlib.Path) -> None:
         assert not network_filepath.is_file(), f'\"Network\" can not be saved into the specified directory \"{network_filepath.absolute()}\".'
-        write_json(self._nn_size, network_filepath)
+        info = self.meta2dict()
+        write_json(info, network_filepath)
         network_dirpath = network_filepath.parent
         nn_garph_filepath = network_dirpath.joinpath(self._nn_graph_filename)
         self._save_nn_graph(nn_garph_filepath)

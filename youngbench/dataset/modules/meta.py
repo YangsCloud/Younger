@@ -14,7 +14,7 @@ import semantic_version
 
 from typing import Dict
 
-from youngbench.dataset.utils import hash_string
+from youngbench.dataset.utils.io import hash_string
 
 
 class Meta(object):
