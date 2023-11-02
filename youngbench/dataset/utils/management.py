@@ -60,10 +60,10 @@ def add_network_to_dataset(network: Network, dataset: Dataset) -> None:
 
 def enrich_dataset(onnx_model: onnx.ModelProto, dataset: Dataset) -> None:
     model = Model(onnx_model=onnx_model)
-    network, sub_networks = extract_networks(model, deep_extract=True)
+    network, deep_networks = extract_networks(model, deep_extract=True)
 
     add_network_to_dataset(network, dataset)
     add_model_to_dataset(model, dataset)
-    for sub_network in sub_networks:
-        add_network_to_dataset(sub_network, dataset)
+    for deep_network in deep_networks:
+        add_network_to_dataset(deep_network, dataset)
     return

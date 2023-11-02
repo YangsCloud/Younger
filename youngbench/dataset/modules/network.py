@@ -26,11 +26,7 @@ class Network(object):
         nn_nodes: Dict[str, Node] = dict(),
         nn_size: int = int(),
         is_sub: bool = bool(),
-        parent_iid: str = str(),
-        parent_fnf: bool = bool(),
-        parent_nid: int = int(),
-        parent_nopt: str = str(),
-        parent_ndom: str = str(),
+        is_fnc: bool = bool()
     ) -> None:
         assert len(nn_graph) == nn_size
         assert len(nn_nodes) == nn_size
@@ -43,12 +39,8 @@ class Network(object):
 
         self._nn_size = nn_size
 
-        self._is_sub = is_sub # Whether Subgraphs
-        self._parent_iid = parent_iid # Instance Identifier
-        self._parent_fnf = parent_fnf # Function Flag - (True: parent_nid is invalid)
-        self._parent_nid = parent_nid # Node ID
-        self._parent_nopt = parent_nopt # Node ID
-        self._parent_ndom = parent_ndom # Node ID
+        self._is_sub = is_sub # Whether Subgraph
+        self._is_fnc = is_fnc # Whether Function
 
     @property
     def nn_graph(self) -> networkx.DiGraph:
@@ -63,24 +55,8 @@ class Network(object):
         return self._is_sub
 
     @property
-    def parent_iid(self) -> str:
-        return self._parent_iid
-
-    @property
-    def parent_fnf(self) -> bool:
-        return self._parent_fnf
-
-    @property
-    def parent_nid(self) -> int:
-        return self._parent_nid
-
-    @property
-    def parent_nopt(self) -> str:
-        return self._parent_nopt
-
-    @property
-    def parent_ndom(self) -> str:
-        return self._parent_ndom
+    def is_fnc(self) -> bool:
+        return self._is_fnc
 
     @property
     def node_ids(self) -> List[int]:
@@ -147,21 +123,13 @@ class Network(object):
     def dict2meta(self, dict) -> None:
         self._nn_size = dict['nn_size']
         self._is_sub = dict['is_sub']
-        self._parent_iid = dict['parent_iid']
-        self._parent_fnf = dict['parent_fnf']
-        self._parent_nid = dict['parent_nid']
-        self._parent_nopt = dict['parent_nopt']
-        self._parent_ndom = dict['parent_ndom']
+        self._is_fnc = dict['is_fnc']
 
     def meta2dict(self) -> Dict:
         return dict(
             nn_size = self._nn_size,
             is_sub = self._is_sub,
-            parent_iid = self._parent_iid,
-            parent_fnf = self._parent_fnf,
-            parent_nid = self._parent_nid,
-            parent_nopt = self._parent_nopt,
-            parent_ndom = self._parent_ndom,
+            is_fnc = self._is_fnc,
         )
 
     def __eq__(self, network: 'Network') -> bool:
