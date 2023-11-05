@@ -21,6 +21,8 @@ class Node(object):
         parameters: Dict,
         operands: Dict,
         results: Dict,
+        is_custom: bool = False,
+        has_subgraph: bool = False,
     ) -> None:
         self._type = operator_type
         self._domain = operator_domain
@@ -29,6 +31,8 @@ class Node(object):
         self._parameters = parameters
         self._operands = operands
         self._results = results
+        self._is_custom = is_custom
+        self._has_subgraph = has_subgraph
 
     @property
     def features(self) -> Dict:
@@ -37,6 +41,8 @@ class Node(object):
             domain = self._domain,
             in_number = len(self._operands),
             out_number = len(self._results),
+            is_custom = self._is_custom,
+            has_subgraph = self._has_subgraph,
         )
         return features
 
@@ -49,7 +55,28 @@ class Node(object):
             parameters = self._parameters,
             operands = self._operands,
             results = self._results,
+            is_custom = self._is_custom,
+            has_subgraph = self._has_subgraph,
         )
+
+    @property
+    def quasi_dict(self) -> Dict:
+        quasi_dict = self.dict
+        if self.is_custom:
+            quasi_dict['attributes'] = dict()
+        else:
+            for attribute_name, attribute_value in quasi_dict['attributes'].items():
+                if isinstance(attribute_value, list):
+                    quasi_dict['attributes'][attribute_name] = list()
+        return quasi_dict
+
+    @property
+    def type(self) -> str:
+        return self._type
+
+    @property
+    def domain(self) -> str:
+        return self._domain
 
     @property
     def attributes(self) -> Dict:
@@ -66,3 +93,11 @@ class Node(object):
     @property
     def results(self) -> Dict:
         return self._results
+
+    @property
+    def is_custom(self) -> bool:
+        return self._is_custom
+
+    @property
+    def has_subgraph(self) -> bool:
+        return self._has_subgraph

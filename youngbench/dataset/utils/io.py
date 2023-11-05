@@ -17,7 +17,7 @@ import hashlib
 import pathlib
 
 from onnx import version_converter
-from typing import List, Union
+from typing import List, Dict, Union
 
 from youngbench.logging import logger
 from youngbench.constants import ONNX
@@ -90,15 +90,22 @@ def write_json(serializable_object: object, filepath: pathlib.Path) -> None:
     return
 
 
-def check_onnx_model(model_handler: Union[onnx.ModelProto, pathlib.Path]) -> bool:
-    if isinstance(model_handler, pathlib.Path):
-        model_handler = str(model_handler)
+def check_onnx_model(onnx_model_handler: Union[onnx.ModelProto, pathlib.Path]) -> str:
+    assert isinstance(onnx_model_handler, onnx.ModelProto) or isinstance(onnx_model_handler, pathlib.Path)
+    if isinstance(onnx_model_handler, onnx.ModelProto):
+        onnx_model = onnx_model_handler
+    if isinstance(onnx_model_handler, pathlib.Path):
+        onnx_model = onnx.load(str(onnx_model_handler))
     try:
-        onnx.checker.check_model(model_handler)
-        check_result = True
+        if len(onnx_model.graph.node) == 0:
+            check_result = str()
+        else:
+            onnx_model = onnx_model.SerializeToString()
+            onnx.checker.check_model(onnx_model)
+            check_result = hash_bytes(onnx_model)
     except onnx.checker.ValidationError as check_error:
         logger.warn(f'The ONNX Model is invalid: {check_error}')
-        check_result = False
+        check_result = str()
     except Exception as error:
         logger.error(f'An error occurred while checking the ONNX model: {error}')
         sys.exit(1)

@@ -15,6 +15,7 @@ import argparse
 import semantic_version
 
 from youngbench.dataset.modules import Dataset
+from youngbench.logging import logger
 
 
 if __name__ == "__main__":
@@ -35,13 +36,29 @@ if __name__ == "__main__":
     version = semantic_version.Version(args.version)
 
     dataset = Dataset()
+    logger.info(f' v Loading Dataset ... ')
     dataset.load(dataset_path)
-    dataset = dataset.acquire(version)
-    total_nn = 0
-    for net_index, network in enumerate(dataset.networks):
-        print(f'Net {net_index}: {network.identifier}')
-        for ins_index, instance in enumerate(network.instances):
-            total_nn += 1
-            print(f' -> Ins {ins_index}: {instance.identifier}')
+    logger.info(f' ^ Loaded. ')
 
-    print(f'Total NN: {total_nn}')
+    logger.info(f' v Checking Dataset {version}... ')
+    dataset.check()
+    logger.info(f' ^ Checked. ')
+
+    logger.info(f' v Getting Version {version} Dataset ... ')
+    dataset = dataset.acquire(version)
+    logger.info(f' ^ Got. ')
+
+    logger.info(f' = Below are Details of Acquired Dataset ({version}) = ')
+    total_model = 0
+    total_network = 0
+    for index, (instance_identifier, instance) in enumerate(dataset.instances.items()):
+        logger.info(f' . No.{index} Instance: {instance_identifier}')
+        for network_index, (network_identifier, network) in enumerate(instance.networks.items()):
+            total_network += 1
+            logger.info(f' . \u2514 No.{network_index} Network: {network_identifier}')
+            for model_index, (model_identifier, model) in enumerate(network.models.items()):
+                total_model += 1
+                logger.info(f' .   \u2514 No.{model_index} Model: {model_identifier}')
+
+    logger.info(f' - Total Models: {total_model}')
+    logger.info(f' - Total Networks: {total_network}')

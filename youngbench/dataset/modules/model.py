@@ -14,19 +14,24 @@ import onnx
 import pathlib
 import semantic_version
 
+from typing import Union
+
 from youngbench.dataset.modules.meta import Meta
 
-from youngbench.dataset.utils.io import hash_bytes, read_json, write_json, load_onnx_model, save_onnx_model, check_onnx_model
+from youngbench.dataset.utils.io import read_json, write_json, load_onnx_model, save_onnx_model, check_onnx_model
 from youngbench.dataset.utils.cache import get_cache_root
 
 
 class Model(object):
-    def __init__(self, onnx_model: onnx.ModelProto = onnx.ModelProto(), version: semantic_version.Version = semantic_version.Version('0.0.0')) -> None:
+    def __init__(self, onnx_model: Union[onnx.ModelProto, pathlib.Path] = None, version: semantic_version.Version = semantic_version.Version('0.0.0')) -> None:
+        onnx_model = onnx_model or onnx.ModelProto()
         self._meta_filename = 'meta.json'
         self._meta = Meta()
 
         self._onnx_model_filename = 'model.onnx'
         self._onnx_model_cache_filepath = ''
+
+        self._identifier = str()
 
         self._legacy = False
 
@@ -43,7 +48,7 @@ class Model(object):
 
     @property
     def identifier(self) -> str:
-        return hash_bytes(self.onnx_model.SerializeToString())
+        return self._identifier
 
     @property
     def status(self) -> int:
@@ -65,8 +70,17 @@ class Model(object):
         return self.status == 0B100
 
     @property
+    def is_release(self) -> bool:
+        return (self.status & 0B011) == 0B010
+
+    @property
+    def is_retired(self) -> bool:
+        return (self.status & 0B011) == 0B011
+
+    @property
     def is_internal(self) -> bool:
         return (self.status & 0B010) == 0B010
+
     @property
     def is_external(self) -> bool:
         return (self.status & 0B010) == 0B000
@@ -88,7 +102,9 @@ class Model(object):
         return
 
     def copy(self) -> 'Model':
-        model = Model(onnx_model=self.onnx_model)
+        model = Model()
+        model._onnx_model_cache_filepath = self._onnx_model_cache_filepath
+        model._identifier = self._identifier
         return model
 
     def load(self, model_dirpath: pathlib.Path) -> None:
@@ -121,7 +137,7 @@ class Model(object):
 
     def _load_onnx_model(self, onnx_model_filepath: pathlib.Path) -> None:
         assert onnx_model_filepath.is_file(), f'There is no \"ONNX Model\" can be loaded from the specified path \"{onnx_model_filepath.absolute()}\".'
-        check_onnx_model(onnx_model_filepath)
+        self._identifier = check_onnx_model(onnx_model_filepath)
         self._onnx_model_cache_filepath = onnx_model_filepath
         return
 
@@ -132,18 +148,25 @@ class Model(object):
 
     def acquire(self, version: semantic_version.Version) -> 'Model':
         if (self.meta.release and self.meta.release_version <= version) and (not self.meta.retired or version < self.meta.retired_version):
-            model = Model(onnx_model=self.onnx_model, version=version)
+            model = Model()
+            model._identifier = self._identifier
+            model._onnx_model_cache_filepath = self._onnx_model_cache_filepath
         else:
             model = None
         return model
 
-    def set_onnx_model(self, onnx_model: onnx.ModelProto) -> None:
-        assert isinstance(onnx_model, onnx.ModelProto), f'\"Model\" must be an ONNX Model Proto (onnx.ModelProto) instead \"{type(onnx_model)}\"!'
-        if self.is_fresh and check_onnx_model(onnx_model):
-            cache_root = get_cache_root()
-            onnx_model_cache_filename = hash_bytes(onnx_model.SerializeToString())
-            self._onnx_model_cache_filepath = cache_root.joinpath(onnx_model_cache_filename)
-            save_onnx_model(onnx_model, self._onnx_model_cache_filepath)
+    def set_onnx_model(self, onnx_model_handler: Union[onnx.ModelProto, pathlib.Path]) -> None:
+        assert isinstance(onnx_model_handler, onnx.ModelProto) or isinstance(onnx_model_handler, pathlib.Path), f'\"Model\" must be an ONNX Model Proto (onnx.ModelProto) or a Path (pathlib.Path) instead \"{type(onnx_model_handler)}\"!'
+        if self.is_fresh:
+            identifier = check_onnx_model(onnx_model_handler)
+            if isinstance(onnx_model_handler, onnx.ModelProto) and identifier:
+                cache_root = get_cache_root()
+                self._identifier = identifier
+                self._onnx_model_cache_filepath = cache_root.joinpath(self._identifier)
+                save_onnx_model(onnx_model_handler, self._onnx_model_cache_filepath)
+            if isinstance(onnx_model_handler, pathlib.Path) and identifier:
+                self._identifier = identifier
+                self._onnx_model_cache_filepath = onnx_model_handler
         return
 
     def release(self, version: semantic_version.Version) -> None:

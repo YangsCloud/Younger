@@ -16,25 +16,23 @@ import semantic_version
 from typing import Set, List, Dict
 
 from youngbench.dataset.modules.meta import Meta
-from youngbench.dataset.modules.network import Network
+from youngbench.dataset.modules.network import Prototype, Network
 from youngbench.dataset.modules.stamp import Stamp
-from youngbench.dataset.modules.model import Model
 
 from youngbench.dataset.utils.io import hash_strings, read_json, write_json
-from youngbench.dataset.utils.extraction import extract_network
+from youngbench.logging import logger
 
 
 class Instance(object):
-    def __init__(self,
-        network: Network = Network(),
-        models: List[Model] = list(),
-        version: semantic_version.Version = semantic_version.Version('0.0.0')
-    ) -> None:
+    def __init__(self, prototype: Prototype = None, networks: List[Network] = None, version: semantic_version.Version = semantic_version.Version('0.0.0')) -> None:
+        prototype = prototype or Prototype()
+        networks = networks or list()
+
         self._meta_filename = 'meta.json'
         self._meta = Meta()
 
-        self._network_filename = 'network.json'
-        self._network = Network()
+        self._prototype_filename = 'prototype.json'
+        self._prototype = Prototype()
 
         self._stamps_filename = 'stamps.json'
         self._stamps = set()
@@ -42,15 +40,15 @@ class Instance(object):
         self._uniques_filename = 'uniques.json'
         self._uniques = list()
 
-        self._models_dirname = 'models'
-        self._models = dict()
+        self._networks_dirname = 'networks'
+        self._networks = dict() 
 
         self._mode = None
 
         self._legacy = False
 
-        self.setup_network(network)
-        self.insert_models(models)
+        self.setup_prototype(prototype)
+        self.insert_networks(networks)
         self.release(version)
 
     @property
@@ -58,8 +56,8 @@ class Instance(object):
         return self._meta
 
     @property
-    def network(self) -> Network:
-        return self._network
+    def prototype(self) -> Prototype:
+        return self._prototype
 
     @property
     def stamps(self) -> Set[Stamp]:
@@ -70,8 +68,8 @@ class Instance(object):
         return self._uniques
 
     @property
-    def models(self) -> Dict[str, Model]:
-        return self._models
+    def networks(self) -> Dict[str, Network]:
+        return self._networks
 
     @property
     def mode(self):
@@ -95,21 +93,23 @@ class Instance(object):
     @property
     def checksum(self) -> str:
         ids = list()
-        for model in self.models.values():
-            ids.append(model.meta.identifier)
-            ids.append(model.identifier)
+        ids.append(self.identifier)
+        for identifier in self.uniques:
+            network = self.networks[identifier]
+            if network.is_release:
+                ids.append(network.checksum)
         return hash_strings(ids)
 
     @property
     def identifier(self) -> str:
-        return self.network.identifier
+        return self.prototype.identifier
 
     def __len__(self) -> int:
-        return len(self.models)
+        return len(self.networks)
 
     @property
     def status(self) -> int:
-        status = ((len(self.network) == 0) << 2) + (self.meta.release << 1) + (self.meta.retired or self._legacy)
+        status = ((len(self.prototype) == 0) << 2) + (self.meta.release << 1) + (self.meta.retired or self._legacy)
         # 0B100 -> It has never been added before.
         # 0BX1X
         # 0BX10 -> Release (New)
@@ -127,8 +127,17 @@ class Instance(object):
         return self.status == 0B100
 
     @property
+    def is_release(self) -> bool:
+        return (self.status & 0B011) == 0B010
+
+    @property
+    def is_retired(self) -> bool:
+        return (self.status & 0B011) == 0B011
+
+    @property
     def is_internal(self) -> bool:
         return (self.status & 0B010) == 0B010
+
     @property
     def is_external(self) -> bool:
         return (self.status & 0B010) == 0B000
@@ -153,26 +162,26 @@ class Instance(object):
         assert instance_dirpath.is_dir(), f'There is no \"Instance\" can be loaded from the specified directory \"{instance_dirpath.absolute()}\".'
         meta_filepath = instance_dirpath.joinpath(self._meta_filename)
         self._load_meta(meta_filepath)
-        network_filepath = instance_dirpath.joinpath(self._network_filename)
-        self._load_network(network_filepath)
+        prototype_filepath = instance_dirpath.joinpath(self._prototype_filename)
+        self._load_prototype(prototype_filepath)
 
         stamps_filepath = instance_dirpath.joinpath(self._stamps_filename)
         self._load_stamps(stamps_filepath)
         uniques_filepath = instance_dirpath.joinpath(self._uniques_filename)
         self._load_uniques(uniques_filepath)
-        models_dirpath = instance_dirpath.joinpath(self._models_dirname)
-        self._load_models(models_dirpath)
+        networks_dirpath = instance_dirpath.joinpath(self._networks_dirname)
+        self._load_networks(networks_dirpath)
         return 
 
     def save(self, instance_dirpath: pathlib.Path) -> None:
         assert not instance_dirpath.is_dir(), f'\"Instance\" can not be saved into the specified directory \"{instance_dirpath.absolute()}\".'
-        network_filepath = instance_dirpath.joinpath(self._network_filename)
-        self._save_network(network_filepath)
+        prototype_filepath = instance_dirpath.joinpath(self._prototype_filename)
+        self._save_prototype(prototype_filepath)
         meta_filepath = instance_dirpath.joinpath(self._meta_filename)
         self._save_meta(meta_filepath)
 
-        models_dirpath = instance_dirpath.joinpath(self._models_dirname)
-        self._save_models(models_dirpath)
+        networks_dirpath = instance_dirpath.joinpath(self._networks_dirname)
+        self._save_networks(networks_dirpath)
         uniques_filepath = instance_dirpath.joinpath(self._uniques_filename)
         self._save_uniques(uniques_filepath)
         stamps_filepath = instance_dirpath.joinpath(self._stamps_filename)
@@ -191,14 +200,14 @@ class Instance(object):
         write_json(meta, meta_filepath)
         return
 
-    def _load_network(self, network_filepath: pathlib.Path) -> None:
-        assert network_filepath.is_file(), f'There is no \"Prototype\" can be loaded from the specified path \"{network_filepath.absolute()}\".'
-        self._network.load(network_filepath)
+    def _load_prototype(self, prototype_filepath: pathlib.Path) -> None:
+        assert prototype_filepath.is_file(), f'There is no \"Prototype\" can be loaded from the specified path \"{prototype_filepath.absolute()}\".'
+        self._prototype.load(prototype_filepath)
         return
 
-    def _save_network(self, network_filepath: pathlib.Path) -> None:
-        assert not network_filepath.is_file(), f'\"Prototype\" can not be saved into the specified path \"{network_filepath.absolute()}\".'
-        self._network.save(network_filepath)
+    def _save_prototype(self, prototype_filepath: pathlib.Path) -> None:
+        assert not prototype_filepath.is_file(), f'\"Prototype\" can not be saved into the specified path \"{prototype_filepath.absolute()}\".'
+        self._prototype.save(prototype_filepath)
         return
 
     def _load_stamps(self, stamps_filepath: pathlib.Path) -> None:
@@ -229,85 +238,110 @@ class Instance(object):
         write_json(self._uniques, uniques_filepath)
         return
 
-    def _load_models(self, models_dirpath: pathlib.Path) -> None:
-        assert models_dirpath.is_dir(), f'There is no \"Model\" can be loaded from the specified directory \"{models_dirpath.absolute()}\".'
+    def _load_networks(self, networks_dirpath: pathlib.Path) -> None:
+        if len(self._uniques) == 0:
+            return
+        assert networks_dirpath.is_dir(), f'There is no \"Network\" can be loaded from the specified directory \"{networks_dirpath.absolute()}\".'
         for index, identifier in enumerate(self._uniques):
-            model_dirpath = models_dirpath.joinpath(f'{index}-{identifier}')
-            self._models[identifier] = Instance()
-            self._models[identifier].load(model_dirpath)
+            logger.info(f' = [YBD] = \u2514 No.{index} Network: {identifier}')
+            network_dirpath = networks_dirpath.joinpath(f'{index}-{identifier}')
+            self._networks[identifier] = Network()
+            self._networks[identifier].load(network_dirpath)
         return
 
-    def _save_models(self, models_dirpath: pathlib.Path) -> None:
-        assert not models_dirpath.is_dir(), f'\"Model\"s can not be saved into the specified directory \"{models_dirpath.absolute()}\".'
+    def _save_networks(self, networks_dirpath: pathlib.Path) -> None:
+        if len(self._uniques) == 0:
+            return
+        assert not networks_dirpath.is_dir(), f'\"Network\"s can not be saved into the specified directory \"{networks_dirpath.absolute()}\".'
         for index, identifier in enumerate(self._uniques):
-            model_dirpath = models_dirpath.joinpath(f'{index}-{identifier}')
-            model = self._models[identifier]
-            model.save(model_dirpath)
+            logger.info(f' = [YBD] = \u2514 No.{index} Network: {identifier}')
+            network_dirpath = networks_dirpath.joinpath(f'{index}-{identifier}')
+            network = self._networks[identifier]
+            network.save(network_dirpath)
         return
 
-    def acquire(self, version: semantic_version.Version) -> 'Instance':
+    def acquire(self, version: semantic_version.Version, silence: bool = False) -> 'Instance':
         if (self.meta.release and self.meta.release_version <= version) and (not self.meta.retired or version < self.meta.retired_version):
-            instance = Instance(network=self.network, models=[model for model in self.models.values() if model.acquire(version) is not None], version=version)
+            instance = Instance()
+            instance.setup_prototype(self.prototype)
+            for index, identifier in enumerate(self._uniques):
+                network = self._networks[identifier].acquire(version, silence=silence)
+                if network is not None:
+                    if not silence:
+                        logger.info(f' = [YBD] = Acquired \u250c No.{index} Network: {identifier}')
+                    instance._networks[identifier] = network
         else:
             instance = None
         return instance
 
     def check(self) -> None:
         # Check Models
-        assert len(self.uniques) == len(self.models), f'The number of \"Model\"s does not match the number of \"Unique\"s.'
-        for identifier, model in zip(self.uniques, self.models.values()):
-            assert identifier == model.identifier, f'The \"Identifier={model.identifier}\" of \"Model\" does not match \"Unique={identifier}\" '
-            model.check()
+        assert len(self.uniques) == len(self.networks), f'The number of \"Model\"s does not match the number of \"Unique\"s.'
+        for identifier in self.uniques:
+            network = self.networks[identifier]
+            assert identifier == network.identifier, f'The \"Identifier={network.identifier}\" of \"Model\" does not match \"Unique={identifier}\" '
+            network.check()
         # Check Stamps
         for stamp in self.stamps:
-            instance = self.acquire(stamp.version)
+            instance = self.acquire(stamp.version, silence=True)
+            instance.release(stamp.version)
             assert stamp.checksum == instance.checksum, f'The \"Checksum={instance.checksum}\" of \"Instance\" (Version={stamp.version}) does not match \"Stamp={stamp.checksum}\"'
         return
 
-    def setup_network(self, network: Network) -> None:
-        assert isinstance(network, Network), f'Parameter network must be a \"Network\" object instead \"{type(network)}\"!'
+    def setup_prototype(self, prototype: Prototype) -> bool:
+        assert isinstance(prototype, Prototype), f'Parameter prototype must be a \"Prototype\" object instead \"{type(prototype)}\"!'
         if self.is_fresh:
-            self._network = network
+            self._prototype = prototype
             self.set_new()
-        return
+            return True
+        return False
 
-    def clear_network(self, network: Network) -> None:
-        assert isinstance(network, Network), f'Parameter network must be a \"Network\" object instead \"{type(network)}\"!'
+    def clear_prototype(self, prototype: Prototype) -> bool:
+        assert isinstance(prototype, Prototype), f'Parameter prototype must be a \"Prototype\" object instead \"{type(prototype)}\"!'
         all_old = True
-        for model in self.models.values():
-            all_old = all_old and model.meta.retired
+        for network in self.networks.values():
+            all_old = all_old and network.meta.retired
 
         if all_old:
             self.set_old()
-        return
+            return True
+        return False
 
-    def insert(self, model: Model) -> None:
+    def insert(self, network: Network) -> bool:
         if self.is_fresh:
-            return
-        if self.is_new:
-            if self.network == extract_network(model):
-                new_model = model.copy()
-                self.models[new_model.identifier] = new_model
-        return 
+            return False
+        if self.is_new and self.prototype == network.prototype:
+            new_network = self._networks.get(network.identifier, None)
+            if new_network is None:
+                new_network = network.copy()
+            flags_sum = new_network.insert_models(network.models.values())
+            self._networks[new_network.identifier] = new_network
+            return flags_sum > 0
+        return False
 
-    def delete(self, model: Model) -> None:
+    def delete(self, network: Network) -> bool:
         if self.is_fresh:
-            return
-        if self.is_new:
-            if self.network == extract_network(model):
-                old_model = self.models.get(model.identifier, Model())
-                old_model.set_old()
-        return
+            return False
+        if self.is_new and self.prototype == network.prototype:
+            old_network = self._networks.get(network.identifier, None)
+            if old_network is None:
+                return False
+            flags_sum = old_network.delete_models(network.models.values())
+            old_network.set_old()
+            return flags_sum > 0
+        return False
 
-    def insert_models(self, models: List[Model]) -> None:
-        for model in models:
-            self.insert(model)
-        return
+    def insert_networks(self, networks: List[Network]) -> int:
+        flags = list()
+        for network in networks:
+            flags.append(self.insert(network))
+        return sum(flags)
 
-    def delete_models(self, models: List[Model]) -> None:
-        for model in models:
-            self.insert(model)
-        return
+    def delete_networks(self, networks: List[Network]) -> int:
+        flags = list()
+        for network in networks:
+            flags.append(self.insert(network))
+        return sum(flags)
 
     def release(self, version: semantic_version.Version) -> None:
         if self.is_fresh or version == semantic_version.Version('0.0.0'):
@@ -315,17 +349,17 @@ class Instance(object):
 
         assert self.latest_version < version, (
             f'Version provided less than or equal to the latest version:\n'
-            f'Provided: {version}'
+            f'Provided: {version}\n'
             f'Latest: {self.latest_version}'
         )
 
-        for identifier, model in self._models.items():
-            if model.is_external:
-                if model.is_new:
+        for identifier, network in self._networks.items():
+            if network.is_external:
+                if network.is_new:
                     self._uniques.append(identifier)
-                if model.is_old:
-                    self._models.pop(identifier)
-            model.release(version)
+                if network.is_old:
+                    self._networks.pop(identifier)
+            network.release(version)
 
         stamp = Stamp(
             str(version),

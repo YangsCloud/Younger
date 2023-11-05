@@ -19,13 +19,13 @@ from youngbench.dataset.modules.stamp import Stamp
 from youngbench.dataset.modules.instance import Instance
 
 from youngbench.dataset.utils.io import hash_strings, read_json, write_json
+from youngbench.logging import logger
 
 
 class Dataset(object):
-    def __init__(self,
-        instances: List[Instance] = list(),
-        version: semantic_version.Version = semantic_version.Version('0.0.0')
-    ) -> None:
+    def __init__(self, instances: List[Instance] = None, version: semantic_version.Version = semantic_version.Version('0.0.0')) -> None:
+        instances = instances or list()
+
         self._stamps_filename = 'stamps.json'
         self._stamps = set()
 
@@ -74,13 +74,15 @@ class Dataset(object):
     @property
     def checksum(self) -> str:
         ids = list()
-        for instance in self.instances.values():
-            ids.append(instance.meta.identifier)
-            ids.append(instance.identifier)
+        for identifier in self.uniques:
+            instance = self.instances[identifier]
+            if instance.is_release:
+                ids.append(instance.checksum)
         return hash_strings(ids)
 
     def load(self, dataset_dirpath: pathlib.Path) -> None:
         assert dataset_dirpath.is_dir(), f'There is no \"Dataset\" can be loaded from the specified directory \"{dataset_dirpath.absolute()}\".'
+        logger.info(f' = [YBD] = Loading Dataset @ {dataset_dirpath}...')
         stamps_filepath = dataset_dirpath.joinpath(self._stamps_filename)
         self._load_stamps(stamps_filepath)
         uniques_filepath = dataset_dirpath.joinpath(self._uniques_filename)
@@ -91,6 +93,7 @@ class Dataset(object):
 
     def save(self, dataset_dirpath: pathlib.Path) -> None:
         assert not dataset_dirpath.is_dir(), f'\"Dataset\" can not be saved into the specified directory \"{dataset_dirpath.absolute()}\".'
+        logger.info(f' = [YBD] = Saving Dataset @ {dataset_dirpath}...')
         instances_dirpath = dataset_dirpath.joinpath(self._instances_dirname)
         self._save_instances(instances_dirpath)
         uniques_filepath = dataset_dirpath.joinpath(self._uniques_filename)
@@ -129,7 +132,9 @@ class Dataset(object):
 
     def _load_instances(self, instances_dirpath: pathlib.Path) -> None:
         assert instances_dirpath.is_dir(), f'There is no \"Instance\"s can be loaded from the specified directory \"{instances_dirpath.absolute()}\".'
+        logger.info(f' = [YBD] = Loading Instances ...')
         for index, identifier in enumerate(self._uniques):
+            logger.info(f' = [YBD] = No.{index} Instance: {identifier}')
             instance_dirpath = instances_dirpath.joinpath(f'{index}-{identifier}')
             self._instances[identifier] = Instance()
             self._instances[identifier].load(instance_dirpath)
@@ -137,25 +142,37 @@ class Dataset(object):
 
     def _save_instances(self, instances_dirpath: pathlib.Path) -> None:
         assert not instances_dirpath.is_dir(), f'\"Instance\"s can not be saved into the specified directory \"{instances_dirpath.absolute()}\".'
+        logger.info(f' = [YBD] = Saving Instances ...')
         for index, identifier in enumerate(self._uniques):
+            logger.info(f' = [YBD] = No.{index} Instance: {identifier}')
             instance_dirpath = instances_dirpath.joinpath(f'{index}-{identifier}')
             instance = self._instances[identifier]
             instance.save(instance_dirpath)
         return
 
-    def acquire(self, version: semantic_version.Version) -> 'Dataset':
-        dataset = Dataset([instance for instance in self.instances.values() if instance.acquire(version) is not None], version)
+    def acquire(self, version: semantic_version.Version, silence: bool = False) -> 'Dataset':
+        if not silence:
+            logger.info(f' = [YBD] = Acquiring Dataset: version = {version}...')
+        dataset = Dataset()
+        for index, identifier in enumerate(self._uniques):
+            instance = self._instances[identifier].acquire(version, silence=silence)
+            if instance is not None:
+                if not silence:
+                    logger.info(f' = [YBD] = Acquired No.{index} Instance: {identifier}')
+                dataset._instances[identifier] = instance
+        dataset.release(version=version)
         return dataset
 
     def check(self) -> None:
         # Check Instances
         assert len(self.uniques) == len(self.instances), f'The number of \"Instance\"s does not match the number of \"Unique\"s.'
-        for identifier, instance in zip(self.uniques, self.instances.values()):
+        for identifier in self.uniques:
+            instance = self.instances[identifier]
             assert identifier == instance.identifier, f'The \"Identifier={instance.identifier}\" of \"Instance\" does not match \"Unique={identifier}\" '
             instance.check()
         # Check Stamps
         for stamp in self.stamps:
-            dataset = self.acquire(stamp.version)
+            dataset = self.acquire(stamp.version, silence=True)
             assert stamp.checksum == dataset.checksum, f'The \"Checksum={dataset.checksum}\" of \"Dataset\" (Version={stamp.version}) does not match \"Stamp={stamp.checksum}\"'
         return
 
@@ -169,35 +186,37 @@ class Dataset(object):
             model_number = model_number,
         )
 
-    def insert(self, instance: Instance) -> None:
-        new_instance = self.instances.get(instance.identifier, Instance())
-        new_instance.setup_network(instance.network)
-        new_instance.insert_models(instance.models.values())
+    def insert(self, instance: Instance) -> bool:
+        new_instance = self._instances.get(instance.identifier, Instance())
+        flag = new_instance.setup_prototype(instance.prototype)
+        flags_sum = new_instance.insert_networks(instance.networks.values())
         self._instances[new_instance.identifier] = new_instance
-        return
+        return (flags_sum > 0) or flag
 
-    def delete(self, instance: Instance) -> None:
-        old_instance = self.instances.get(instance.identifier, Instance())
-        old_instance.delete_models(instance.models.values())
-        old_instance.clear_network(instance.network)
-        return
+    def delete(self, instance: Instance) -> bool:
+        old_instance = self._instances.get(instance.identifier, Instance())
+        flags_sum = old_instance.delete_networks(instance.networks.values())
+        flag = old_instance.clear_prototype(instance.prototype)
+        return (flags_sum > 0) or flag
 
-    def insert_instances(self, instances: List[Instance]) -> None:
+    def insert_instances(self, instances: List[Instance]) -> int:
+        flags = list()
         for instance in instances:
-            self.insert(instance)
-        return
+            flags.append(self.insert(instance))
+        return sum(flags)
 
-    def delete_instances(self, instances: List[Instance]) -> None:
+    def delete_instances(self, instances: List[Instance]) -> int:
+        flags = list()
         for instance in instances:
-            self.delete(instance)
-        return
+            flags.append(self.delete(instance))
+        return sum(flags)
 
     def release(self, version: semantic_version.Version) -> None:
         if version == semantic_version.Version('0.0.0'):
             return
         assert self.latest_version < version, (
             f'Version provided less than or equal to the latest version:\n'
-            f'Provided: {version}'
+            f'Provided: {version}\n'
             f'Latest: {self.latest_version}'
         )
 

@@ -139,13 +139,20 @@ if __name__ == "__main__":
 
         onnx_models = get_provided_onnx_models(onnx_path)
 
-    logger.info(f'-> Dataset Created.')
+    logger.info(f'-> Dataset Initialized.')
 
+    logger.info(f'-> Dataset Creating ...')
     for index, (onnx_model_name, onnx_model) in enumerate(onnx_models):
+        if (index + 1) % 5 == 0:
+            break
         logger.info(f' # {index+1}: Now processing the model: {onnx_model_name} (ONNX opset={get_opset_version(onnx_model)})')
         enrich_dataset(onnx_model, dataset)
+    logger.info(f'-> Created.')
 
+    logger.info(f'-> Dataset Releasing ...')
     dataset.release(version)
-    logger.info(f'-> Dataset Released.')
+    logger.info(f'-> Released.')
+
+    logger.info(f'-> Dataset Saving ...')
     dataset.save(save_path)
-    logger.info(f'-> Dataset Saved: {save_path}.')
+    logger.info(f'-> Saved: {save_path}.')
