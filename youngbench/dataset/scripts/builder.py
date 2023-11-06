@@ -143,8 +143,6 @@ if __name__ == "__main__":
 
     logger.info(f'-> Dataset Creating ...')
     for index, (onnx_model_name, onnx_model) in enumerate(onnx_models):
-        if (index + 1) % 5 == 0:
-            break
         logger.info(f' # {index+1}: Now processing the model: {onnx_model_name} (ONNX opset={get_opset_version(onnx_model)})')
         enrich_dataset(onnx_model, dataset)
     logger.info(f'-> Created.')
