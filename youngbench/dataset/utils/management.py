@@ -105,7 +105,8 @@ def add_network_to_dataset(network: Network, dataset: Dataset) -> bool:
     instance.setup_prototype(network.prototype)
     instance.insert(network)
     if dataset.insert(instance):
-        logger.info(f' [YBD] -> Network Insertion Successful, network: {network.identifier}.')
+        logger.info(f' [YBD] -> Network Insertion Successful, network: {network.identifier},')
+        logger.info(f' [YBD]                                  details: {network.nn_graph}.')
         flag = True
     else:
         logger.info(f' [YBD] -> Skip, network exists: {network.identifier}.')

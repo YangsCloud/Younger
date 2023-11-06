@@ -57,6 +57,7 @@ if __name__ == "__main__":
         for network_index, (network_identifier, network) in enumerate(instance.networks.items()):
             total_network += 1
             logger.info(f' . \u2514 No.{network_index} Network: {network_identifier}')
+            logger.info(f' .   \u2514 - {network.nn_graph}')
             for model_index, (model_identifier, model) in enumerate(network.models.items()):
                 total_model += 1
                 logger.info(f' .   \u2514 No.{model_index} Model: {model_identifier}')

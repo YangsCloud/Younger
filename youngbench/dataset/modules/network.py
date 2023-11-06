@@ -18,6 +18,7 @@ import semantic_version
 
 from typing import Set, List, Dict, Tuple, Generator
 from onnx.shape_inference import infer_shapes
+from onnx.helper import make_model
 from google.protobuf import json_format
 
 from youngbench.dataset.modules.meta import Meta
@@ -609,12 +610,14 @@ class Network(Prototype):
                         all_extracted = list()
                         all_deep_extracted = list()
                         if deep_extract and attribute.type == ONNXAttributeType.GRAPH:
-                            extracted, deep_extracted = cls.extract_from_gp(attribute.g, fp_networks, deep_extract=deep_extract, is_sub=True)
+                            submodel = infer_shapes(make_model(attribute.g))
+                            extracted, deep_extracted = cls.extract_from_gp(submodel.graph, fp_networks, deep_extract=deep_extract, is_sub=True)
                             all_extracted.append(extracted)
                             all_deep_extracted.extend(deep_extracted)
                         if deep_extract and attribute.type == ONNXAttributeType.GRAPHS:
                             for attribute_g in attribute.graphs:
-                                extracted, deep_extracted = cls.extract_from_gp(attribute_g, fp_networks, deep_extract=deep_extract, is_sub=True)
+                                submodel = infer_shapes(make_model(attribute_g))
+                                extracted, deep_extracted = cls.extract_from_gp(submodel.graph, fp_networks, deep_extract=deep_extract, is_sub=True)
                                 all_extracted.append(extracted)
                                 all_deep_extracted.extend(deep_extracted)
                         attributes[attribute.name] = [extracted.identifier for extracted in all_extracted]
@@ -752,12 +755,14 @@ class Network(Prototype):
                         all_extracted = list()
                         all_deep_extracted = list()
                         if deep_extract and attribute.type == ONNXAttributeType.GRAPH:
-                            extracted, deep_extracted = cls.extract_from_gp(attribute.g, fp_networks, deep_extract=deep_extract, is_sub=True)
+                            submodel = infer_shapes(make_model(attribute.g))
+                            extracted, deep_extracted = cls.extract_from_gp(submodel.graph, fp_networks, deep_extract=deep_extract, is_sub=True)
                             all_extracted.append(extracted)
                             all_deep_extracted.extend(deep_extracted)
                         if deep_extract and attribute.type == ONNXAttributeType.GRAPHS:
                             for attribute_g in attribute.graphs:
-                                extracted, deep_extracted = cls.extract_from_gp(attribute_g, fp_networks, deep_extract=deep_extract, is_sub=True)
+                                submodel = infer_shapes(make_model(attribute.g))
+                                extracted, deep_extracted = cls.extract_from_gp(submodel.graph, fp_networks, deep_extract=deep_extract, is_sub=True)
                                 all_extracted.append(extracted)
                                 all_deep_extracted.extend(deep_extracted)
                         attributes[attribute.name] = [extracted.identifier for extracted in all_extracted]
