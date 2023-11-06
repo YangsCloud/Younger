@@ -610,14 +610,16 @@ class Network(Prototype):
                         all_extracted = list()
                         all_deep_extracted = list()
                         if deep_extract and attribute.type == ONNXAttributeType.GRAPH:
-                            submodel = infer_shapes(make_model(attribute.g))
-                            extracted, deep_extracted = cls.extract_from_gp(submodel.graph, fp_networks, deep_extract=deep_extract, is_sub=True)
+                            # submodel = infer_shapes(make_model(attribute.g))
+                            # extracted, deep_extracted = cls.extract_from_gp(submodel.graph, fp_networks, deep_extract=deep_extract, is_sub=True)
+                            extracted, deep_extracted = cls.extract_from_gp(attribute.g, fp_networks, deep_extract=deep_extract, is_sub=True)
                             all_extracted.append(extracted)
                             all_deep_extracted.extend(deep_extracted)
                         if deep_extract and attribute.type == ONNXAttributeType.GRAPHS:
                             for attribute_g in attribute.graphs:
-                                submodel = infer_shapes(make_model(attribute_g))
-                                extracted, deep_extracted = cls.extract_from_gp(submodel.graph, fp_networks, deep_extract=deep_extract, is_sub=True)
+                                # submodel = infer_shapes(make_model(attribute_g))
+                                # extracted, deep_extracted = cls.extract_from_gp(submodel.graph, fp_networks, deep_extract=deep_extract, is_sub=True)
+                                extracted, deep_extracted = cls.extract_from_gp(attribute_g, fp_networks, deep_extract=deep_extract, is_sub=True)
                                 all_extracted.append(extracted)
                                 all_deep_extracted.extend(deep_extracted)
                         attributes[attribute.name] = [extracted.identifier for extracted in all_extracted]
@@ -632,8 +634,8 @@ class Network(Prototype):
                         index = len(operator.inputs) - 1
                         variadic_index += 1
                     operand_name = operator.inputs[index].name + (f'_{variadic_index}' if variadic_index else '')
-                    i2x[input] = (nid, operand_name, index)
                     operands[operand_name] = input
+                    i2x[input] = (nid, operand_name, index)
 
                 results = dict()
                 for index, output in enumerate(node.output):
@@ -641,8 +643,8 @@ class Network(Prototype):
                         index = len(operator.outputs) - 1
                         variadic_index += 1
                     result_name = operator.outputs[index].name + (f'_{variadic_index}' if variadic_index else '')
-                    o2x[output] = (nid, result_name, index)
                     results[result_name] = output
+                    o2x[output] = (nid, result_name, index)
 
                 node = Node(
                     operator_type=node.op_type,
@@ -670,13 +672,13 @@ class Network(Prototype):
 
                 operands = dict()
                 for index, input in enumerate(node.input):
-                    i2x[input] = (nid, input, index)
                     operands[input] = input
+                    i2x[input] = (nid, input, index)
 
                 results = dict()
                 for index, output in enumerate(node.output):
-                    o2x[output] = (nid, output, index)
                     results[output] = output
+                    o2x[output] = (nid, output, index)
 
                 node = Node(
                     operator_type=node.op_type,
@@ -755,14 +757,16 @@ class Network(Prototype):
                         all_extracted = list()
                         all_deep_extracted = list()
                         if deep_extract and attribute.type == ONNXAttributeType.GRAPH:
-                            submodel = infer_shapes(make_model(attribute.g))
-                            extracted, deep_extracted = cls.extract_from_gp(submodel.graph, fp_networks, deep_extract=deep_extract, is_sub=True)
+                            # submodel = infer_shapes(make_model(attribute.g))
+                            # extracted, deep_extracted = cls.extract_from_gp(submodel.graph, fp_networks, deep_extract=deep_extract, is_sub=True)
+                            extracted, deep_extracted = cls.extract_from_gp(attribute.g, fp_networks, deep_extract=deep_extract, is_sub=True)
                             all_extracted.append(extracted)
                             all_deep_extracted.extend(deep_extracted)
                         if deep_extract and attribute.type == ONNXAttributeType.GRAPHS:
                             for attribute_g in attribute.graphs:
-                                submodel = infer_shapes(make_model(attribute.g))
-                                extracted, deep_extracted = cls.extract_from_gp(submodel.graph, fp_networks, deep_extract=deep_extract, is_sub=True)
+                                # submodel = infer_shapes(make_model(attribute.g))
+                                # extracted, deep_extracted = cls.extract_from_gp(submodel.graph, fp_networks, deep_extract=deep_extract, is_sub=True)
+                                extracted, deep_extracted = cls.extract_from_gp(attribute_g, fp_networks, deep_extract=deep_extract, is_sub=True)
                                 all_extracted.append(extracted)
                                 all_deep_extracted.extend(deep_extracted)
                         attributes[attribute.name] = [extracted.identifier for extracted in all_extracted]
@@ -773,36 +777,42 @@ class Network(Prototype):
                 parameters = dict()
                 variadic_index = 0
                 for index, input in enumerate(node.input):
+                    if index >= len(operator.inputs) and operator.inputs[-1].option == operator.inputs[-1].option.Variadic.value:
+                        index = len(operator.inputs) - 1
+                        variadic_index += 1
+                    parameter_name = operator.inputs[index].name + (f'_{variadic_index}' if variadic_index else '')
                     if input in pm_info:
-                        if index >= len(operator.inputs) and operator.inputs[-1].option == operator.inputs[-1].option.Variadic.value:
-                            index = len(operator.inputs) - 1
-                            variadic_index += 1
-                        parameter_name = operator.inputs[index].name + (f'_{variadic_index}' if variadic_index else '')
                         parameters[parameter_name] = pm_info[input]
+                    else:
+                        parameters[parameter_name] = dict()
 
                 operands = dict()
                 variadic_index = 0
                 for index, input in enumerate(node.input):
-                    index = min(index, len(operator.inputs) - 1)
+                    # index = min(index, len(operator.inputs) - 1)
+                    if index >= len(operator.inputs) and operator.inputs[-1].option == operator.inputs[-1].option.Variadic.value:
+                        index = len(operator.inputs) - 1
+                        variadic_index += 1
+                    operand_name = operator.inputs[index].name + (f'_{variadic_index}' if variadic_index else '')
                     if input in io_info:
-                        if index >= len(operator.inputs) and operator.inputs[-1].option == operator.inputs[-1].option.Variadic.value:
-                            index = len(operator.inputs) - 1
-                            variadic_index += 1
-                        operand_name = operator.inputs[index].name + (f'_{variadic_index}' if variadic_index else '')
-                        i2x[input] = (nid, operand_name, index)
                         operands[operand_name] = io_info[input]
+                    else:
+                        operands[operand_name] = dict()
+                    i2x[input] = (nid, operand_name, index)
 
                 results = dict()
                 variadic_index = 0
                 for index, output in enumerate(node.output):
-                    index = min(index, len(operator.outputs) - 1)
+                    # index = min(index, len(operator.outputs) - 1)
+                    if index >= len(operator.outputs) and operator.outputs[-1].option == operator.outputs[-1].option.Variadic.value:
+                        index = len(operator.outputs) - 1
+                        variadic_index += 1
+                    result_name = operator.outputs[index].name + (f'_{variadic_index}' if variadic_index else '')
                     if output in io_info:
-                        if index >= len(operator.outputs) and operator.outputs[-1].option == operator.outputs[-1].option.Variadic.value:
-                            index = len(operator.outputs) - 1
-                            variadic_index += 1
-                        result_name = operator.outputs[index].name + (f'_{variadic_index}' if variadic_index else '')
-                        o2x[output] = (nid, result_name, index)
                         results[result_name] = io_info[output]
+                    else:
+                        results[result_name] = dict()
+                    o2x[output] = (nid, result_name, index)
 
                 node = Node(
                     operator_type=node.op_type,
@@ -828,14 +838,18 @@ class Network(Prototype):
                 operands = dict()
                 for index, input in enumerate(node.input):
                     if input in io_info:
-                        i2x[input] = (nid, input, index)
                         operands[input] = io_info[input]
+                    else:
+                        operands[input] = dict()
+                    i2x[input] = (nid, input, index)
 
                 results = dict()
                 for index, output in enumerate(node.output):
                     if output in io_info:
-                        o2x[output] = (nid, output, index)
                         results[output] = io_info[output]
+                    else:
+                        results[output] = dict()
+                    o2x[output] = (nid, output, index)
 
                 node = Node(
                     operator_type=node.op_type,
