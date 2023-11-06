@@ -11,10 +11,53 @@
 
 
 import onnx
+import semantic_version
 
-from youngbench.logging import logger
+from typing import List
+
+from youngbench.logging import logger, logging_level
 
 from youngbench.dataset.modules import Model, Prototype, Network, Instance, Dataset
+
+
+def check_dataset(dataset: Dataset, whole_check: bool = True) -> None:
+    dataset.check()
+
+    def check(acquired_dataset: Dataset) -> None:
+        dataset_stamp = max(acquired_dataset.stamps)
+        assert dataset_stamp.checksum == acquired_dataset.checksum, (
+            f'The \"Checksum={acquired_dataset.checksum}\" of \"Dataset\" (Version={dataset_stamp.version}) does not match \"Stamp={dataset_stamp.checksum}\"'
+        )
+        for acquired_instance_identifier in acquired_dataset.uniques:
+            acquired_instance = acquired_dataset.instances[acquired_instance_identifier]
+            instance_stamp = max(acquired_instance.stamps)
+            assert instance_stamp.checksum == acquired_instance.checksum, (
+                f'The \"Checksum={acquired_instance.checksum}\" of \"Instance\" (Version={instance_stamp.version}) does not match \"Stamp={instance_stamp.checksum}\"'
+            )
+            for acquired_network_identifier in acquired_instance.uniques:
+                acquired_network = acquired_instance.networks[acquired_network_identifier]
+                network_stamp = max(acquired_network.stamps)
+                assert network_stamp.checksum == acquired_network.checksum, (
+                    f'The \"Checksum={acquired_network.checksum}\" of \"Network\" (Version={network_stamp.version}) does not match \"Stamp={network_stamp.checksum}\"'
+                )
+
+    if whole_check:
+        stamps = sorted(list(dataset.stamps))
+        for index, stamp in enumerate(stamps):
+            logger.info(f' [YBD] -> No.{index} Checking Dataset Version=[{stamp.version}] ...')
+            org_logging_level = logger.level
+            mut_logging_level = logging_level['NOTSET']
+            logger.setLevel(mut_logging_level)
+            acquired_dataset = dataset.acquire(stamp.version)
+            logger.setLevel(org_logging_level)
+            check(acquired_dataset)
+            logger.info(f' [YBD] -> Pass!')
+    else:
+        logger.info(f' [YBD] -> Checking Dataset Latest Version=[{dataset.latest_version}] ...')
+        check(dataset)
+        logger.info(f' [YBD] -> Pass!')
+
+    return
 
 
 def is_model_in_dataset(model: Model, dataset: Dataset) -> bool:

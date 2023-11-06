@@ -97,7 +97,7 @@ class Instance(object):
         for identifier in self.uniques:
             network = self.networks[identifier]
             if network.is_release:
-                ids.append(network.checksum)
+                ids.append(network.identifier)
         return hash_strings(ids)
 
     @property
@@ -260,32 +260,25 @@ class Instance(object):
             network.save(network_dirpath)
         return
 
-    def acquire(self, version: semantic_version.Version, silence: bool = False) -> 'Instance':
+    def acquire(self, version: semantic_version.Version) -> 'Instance':
         if (self.meta.release and self.meta.release_version <= version) and (not self.meta.retired or version < self.meta.retired_version):
             instance = Instance()
             instance.setup_prototype(self.prototype)
             for index, identifier in enumerate(self._uniques):
-                network = self._networks[identifier].acquire(version, silence=silence)
+                network = self._networks[identifier].acquire(version)
                 if network is not None:
-                    if not silence:
-                        logger.info(f' = [YBD] = Acquired \u250c No.{index} Network: {identifier}')
+                    logger.info(f' = [YBD] = Acquired \u250c No.{index} Network: {identifier}')
                     instance._networks[identifier] = network
         else:
             instance = None
         return instance
 
     def check(self) -> None:
-        # Check Models
-        assert len(self.uniques) == len(self.networks), f'The number of \"Model\"s does not match the number of \"Unique\"s.'
+        assert len(self.uniques) == len(self.networks), f'The number of \"Network\"s does not match the number of \"Unique\"s.'
         for identifier in self.uniques:
             network = self.networks[identifier]
-            assert identifier == network.identifier, f'The \"Identifier={network.identifier}\" of \"Model\" does not match \"Unique={identifier}\" '
+            assert identifier == network.identifier, f'The \"Identifier={network.identifier}\" of \"Network\" does not match \"Unique={identifier}\" '
             network.check()
-        # Check Stamps
-        for stamp in self.stamps:
-            instance = self.acquire(stamp.version, silence=True)
-            instance.release(stamp.version)
-            assert stamp.checksum == instance.checksum, f'The \"Checksum={instance.checksum}\" of \"Instance\" (Version={stamp.version}) does not match \"Stamp={stamp.checksum}\"'
         return
 
     def setup_prototype(self, prototype: Prototype) -> bool:

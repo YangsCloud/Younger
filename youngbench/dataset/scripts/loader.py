@@ -15,6 +15,7 @@ import argparse
 import semantic_version
 
 from youngbench.dataset.modules import Dataset
+from youngbench.dataset.utils.management import check_dataset
 from youngbench.logging import logger
 
 
@@ -41,7 +42,7 @@ if __name__ == "__main__":
     logger.info(f' ^ Loaded. ')
 
     logger.info(f' v Checking Dataset {version}... ')
-    dataset.check()
+    check_dataset(dataset, whole_check=False)
     logger.info(f' ^ Checked. ')
 
     logger.info(f' v Getting Version {version} Dataset ... ')

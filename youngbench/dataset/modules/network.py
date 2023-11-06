@@ -480,16 +480,10 @@ class Network(Prototype):
         return network
 
     def check(self) -> None:
-        # Check Models
         assert len(self.uniques) == len(self.models), f'The number of \"Model\"s does not match the number of \"Unique\"s.'
         for identifier in self.uniques:
             model = self.models[identifier]
             assert identifier == model.identifier, f'The \"Identifier={model.identifier}\" of \"Model\" does not match \"Unique={identifier}\" '
-        # Check Stamps
-        for stamp in self.stamps:
-            network = self.acquire(stamp.version, silence=True)
-            network.release(stamp.version)
-            assert stamp.checksum == network.checksum, f'The \"Checksum={network.checksum}\" of \"Instance\" (Version={stamp.version}) does not match \"Stamp={stamp.checksum}\"'
         return
 
     def copy(self) -> 'Network':

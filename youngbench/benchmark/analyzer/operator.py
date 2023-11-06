@@ -18,25 +18,14 @@ from youngbench.dataset.modules import Dataset
 from youngbench.constants import ONNX
 
 
-def all_attribute_types
-
-
-def get_official_ops() -> Set[Tuple[str, str]]:
-    official_ops = set()
-    for op_schema in onnx.defs.get_all_schemas():
-        op_name = op_schema.name
-        op_domain = op_schema.domain or ONNX.OP_DOMAIN.value
-        official_ops.add((op_name, op_domain))
-
-    assert len(official_ops) == len(onnx.defs.get_all_schemas())
-    return official_ops
-
-
-def get_dataset_ops(dataset: Dataset) -> Dict[Tuple[str, str], int]:
+def get_operator_statistics(dataset: Dataset) -> Dict[Tuple[str, str], int]:
     # All Op and Each Op Num
-    dataset_ops = dict()
-    for network in dataset.networks:
-        for node_id in network.prototype.node_ids:
+    operator_statistics = dict()
+    for instance_identifier, instance in dataset.instances.items():
+        for nn_node_id, nn_node in instance.network.nn_nodes.items():
+            statistics = operator_statistics.get((nn_node.type, nn_node.domain), dict(number=0, nodes=set()))
+            statistics['number'] += 1
+            statistics['nodes'].add(nn_node)
             node = network.prototype.get_node(node_id)
             op = (node['op_type'], node['op_domain'])
             op_num = dataset_ops.get(op, 0)

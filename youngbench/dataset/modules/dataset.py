@@ -77,7 +77,7 @@ class Dataset(object):
         for identifier in self.uniques:
             instance = self.instances[identifier]
             if instance.is_release:
-                ids.append(instance.checksum)
+                ids.append(instance.identifier)
         return hash_strings(ids)
 
     def load(self, dataset_dirpath: pathlib.Path) -> None:
@@ -150,30 +150,23 @@ class Dataset(object):
             instance.save(instance_dirpath)
         return
 
-    def acquire(self, version: semantic_version.Version, silence: bool = False) -> 'Dataset':
-        if not silence:
-            logger.info(f' = [YBD] = Acquiring Dataset: version = {version}...')
+    def acquire(self, version: semantic_version.Version) -> 'Dataset':
+        logger.info(f' = [YBD] = Acquiring Dataset: version = {version}...')
         dataset = Dataset()
         for index, identifier in enumerate(self._uniques):
-            instance = self._instances[identifier].acquire(version, silence=silence)
+            instance = self._instances[identifier].acquire(version)
             if instance is not None:
-                if not silence:
-                    logger.info(f' = [YBD] = Acquired No.{index} Instance: {identifier}')
+                logger.info(f' = [YBD] = Acquired No.{index} Instance: {identifier}')
                 dataset._instances[identifier] = instance
         dataset.release(version=version)
         return dataset
 
     def check(self) -> None:
-        # Check Instances
         assert len(self.uniques) == len(self.instances), f'The number of \"Instance\"s does not match the number of \"Unique\"s.'
         for identifier in self.uniques:
             instance = self.instances[identifier]
             assert identifier == instance.identifier, f'The \"Identifier={instance.identifier}\" of \"Instance\" does not match \"Unique={identifier}\" '
             instance.check()
-        # Check Stamps
-        for stamp in self.stamps:
-            dataset = self.acquire(stamp.version, silence=True)
-            assert stamp.checksum == dataset.checksum, f'The \"Checksum={dataset.checksum}\" of \"Dataset\" (Version={stamp.version}) does not match \"Stamp={stamp.checksum}\"'
         return
 
     def size(self) -> Dict[str, int]:
