@@ -60,7 +60,7 @@ if __name__ == "__main__":
             logger.info(f' .   \u2514 - {network.nn_graph}')
             for model_index, (model_identifier, model) in enumerate(network.models.items()):
                 total_model += 1
-                logger.info(f' .   \u2514 No.{model_index} Model: {model_identifier}')
+                logger.info(f' .   \u2514 No.{model_index} Model: [= {model.name} (opset={model.opset}) =] {model_identifier}')
 
     logger.info(f' - Total Models: {total_model}')
     logger.info(f' - Total Networks: {total_network}')

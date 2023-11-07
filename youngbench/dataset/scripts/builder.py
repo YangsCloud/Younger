@@ -143,8 +143,9 @@ if __name__ == "__main__":
 
     logger.info(f'-> Dataset Creating ...')
     for index, (onnx_model_name, onnx_model) in enumerate(onnx_models):
-        logger.info(f' # {index+1}: Now processing the model: {onnx_model_name} (ONNX opset={get_opset_version(onnx_model)})')
-        enrich_dataset(onnx_model, dataset)
+        opset = get_opset_version(onnx_model)
+        logger.info(f' # {index+1}: Now processing the model: {onnx_model_name} (ONNX opset={opset})')
+        enrich_dataset(onnx_model, dataset, name=onnx_model_name, opset=opset)
     logger.info(f'-> Created.')
 
     logger.info(f'-> Dataset Releasing ...')

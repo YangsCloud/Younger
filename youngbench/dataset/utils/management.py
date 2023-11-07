@@ -135,10 +135,10 @@ def add_prototype_to_dataset(prototype: Prototype, dataset: Dataset) -> bool:
     return flag
 
 
-def enrich_dataset(onnx_model: onnx.ModelProto, dataset: Dataset) -> bool:
+def enrich_dataset(onnx_model: onnx.ModelProto, dataset: Dataset, **onnx_model_info) -> bool:
     flag = True
 
-    model = Model(onnx_model=onnx_model)
+    model = Model(onnx_model=onnx_model, **onnx_model_info)
     network, deep_networks = Network.extract_networks(model, deep_extract=True)
     flag &= add_network_to_dataset(network, dataset)
 

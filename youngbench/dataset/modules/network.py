@@ -450,10 +450,10 @@ class Network(Prototype):
             return
         assert models_dirpath.is_dir(), f'There is no \"Model\" can be loaded from the specified directory \"{models_dirpath.absolute()}\".'
         for index, identifier in enumerate(self._uniques):
-            logger.info(f' = [YBD] =   \u2514 No.{index} Model: {identifier}')
             model_dirpath = models_dirpath.joinpath(f'{index}-{identifier}')
             self._models[identifier] = Model()
             self._models[identifier].load(model_dirpath)
+            logger.info(f' = [YBD] =   \u2514 No.{index} Model: = {self._models[identifier].name} (opset={self._models[identifier].opset}) = {identifier}')
         return
 
     def _save_models(self, models_dirpath: pathlib.Path) -> None:
@@ -461,21 +461,20 @@ class Network(Prototype):
             return
         assert not models_dirpath.is_dir(), f'\"Model\"s can not be saved into the specified directory \"{models_dirpath.absolute()}\".'
         for index, identifier in enumerate(self._uniques):
-            logger.info(f' = [YBD] =   \u2514 No.{index} Model: {identifier}')
             model_dirpath = models_dirpath.joinpath(f'{index}-{identifier}')
             model = self._models[identifier]
             model.save(model_dirpath)
+            logger.info(f' = [YBD] =   \u2514 No.{index} Model: = {model.name} (opset={model.opset}) = {identifier}')
         return
 
-    def acquire(self, version: semantic_version.Version, silence: bool = False) -> 'Network':
+    def acquire(self, version: semantic_version.Version) -> 'Network':
         if (self.meta.release and self.meta.release_version <= version) and (not self.meta.retired or version < self.meta.retired_version):
             network = self.copy()
             for index, identifier in enumerate(self._uniques):
                 model = self._models[identifier].acquire(version)
                 if model is not None:
-                    if not silence:
-                        logger.info(f' = [YBD] = Acquired   \u250c No.{index} Model: {identifier}')
                     network._models[identifier] = model
+                    logger.info(f' = [YBD] = Acquired   \u250c No.{index} Model: = {model.name} = {identifier}')
         else:
             network = None
         return network

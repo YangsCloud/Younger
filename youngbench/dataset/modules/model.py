@@ -14,7 +14,7 @@ import onnx
 import pathlib
 import semantic_version
 
-from typing import Union
+from typing import Dict, Union
 
 from youngbench.dataset.modules.meta import Meta
 
@@ -23,13 +23,20 @@ from youngbench.dataset.utils.cache import get_cache_root
 
 
 class Model(object):
-    def __init__(self, onnx_model: Union[onnx.ModelProto, pathlib.Path] = None, version: semantic_version.Version = semantic_version.Version('0.0.0')) -> None:
+    def __init__(self, onnx_model: Union[onnx.ModelProto, pathlib.Path] = None, version: semantic_version.Version = semantic_version.Version('0.0.0'), **info) -> None:
         onnx_model = onnx_model or onnx.ModelProto()
         self._meta_filename = 'meta.json'
         self._meta = Meta()
 
+        self._info_filename = 'info.json'
+        self._info = dict()
+        self.set_info('name', str())
+        self.set_info('opset', int())
+        for key, value in info.items():
+            self.set_info(key, value)
+
         self._onnx_model_filename = 'model.onnx'
-        self._onnx_model_cache_filepath = ''
+        self._onnx_model_cache_filepath = str()
 
         self._identifier = str()
 
@@ -41,6 +48,18 @@ class Model(object):
     @property
     def meta(self) -> Meta:
         return self._meta
+
+    @property
+    def info(self) -> Dict:
+        return self._info
+
+    @property
+    def name(self) -> str:
+        return self._info['name']
+
+    @property
+    def opset(self) -> int:
+        return self._info['opset']
 
     @property
     def onnx_model(self) -> onnx.ModelProto:
@@ -103,6 +122,7 @@ class Model(object):
 
     def copy(self) -> 'Model':
         model = Model()
+        model._info = self._info
         model._onnx_model_cache_filepath = self._onnx_model_cache_filepath
         model._identifier = self._identifier
         return model
@@ -111,6 +131,8 @@ class Model(object):
         assert model_dirpath.is_dir(), f'There is no \"Model\" can be loaded from the specified directory \"{model_dirpath.absolute()}\".'
         meta_filepath = model_dirpath.joinpath(self._meta_filename)
         self._load_meta(meta_filepath)
+        info_filepath = model_dirpath.joinpath(self._info_filename)
+        self._load_info(info_filepath)
         onnx_model_filepath = model_dirpath.joinpath(self._onnx_model_filename)
         self._load_onnx_model(onnx_model_filepath)
         return
@@ -121,6 +143,8 @@ class Model(object):
         self._save_onnx_model(onnx_model_filepath)
         meta_filepath = model_dirpath.joinpath(self._meta_filename)
         self._save_meta(meta_filepath)
+        info_filepath = model_dirpath.joinpath(self._info_filename)
+        self._save_info(info_filepath)
         return
 
     def _load_meta(self, meta_filepath: pathlib.Path) -> None:
@@ -135,6 +159,16 @@ class Model(object):
         write_json(meta, meta_filepath)
         return
 
+    def _load_info(self, info_filepath: pathlib.Path) -> None:
+        assert info_filepath.is_file(), f'There is no \"Info\" can be loaded from the specified path \"{info_filepath.absolute()}\".'
+        self._info = read_json(info_filepath)
+        return
+
+    def _save_info(self, info_filepath: pathlib.Path) -> None:
+        assert not info_filepath.is_file(), f'\"Info\" can not be saved into the specified path \"{info_filepath.absolute()}\".'
+        write_json(self._info, info_filepath)
+        return
+
     def _load_onnx_model(self, onnx_model_filepath: pathlib.Path) -> None:
         assert onnx_model_filepath.is_file(), f'There is no \"ONNX Model\" can be loaded from the specified path \"{onnx_model_filepath.absolute()}\".'
         self._identifier = check_onnx_model(onnx_model_filepath)
@@ -146,11 +180,13 @@ class Model(object):
         save_onnx_model(self.onnx_model, onnx_model_filepath)
         return
 
+    def set_info(self, key: str, value) -> None:
+        self._info[key] = value
+        return
+
     def acquire(self, version: semantic_version.Version) -> 'Model':
         if (self.meta.release and self.meta.release_version <= version) and (not self.meta.retired or version < self.meta.retired_version):
-            model = Model()
-            model._identifier = self._identifier
-            model._onnx_model_cache_filepath = self._onnx_model_cache_filepath
+            model = self.copy()
         else:
             model = None
         return model
