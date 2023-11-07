@@ -597,8 +597,10 @@ class Network(Prototype):
 
         i2x = dict()
         o2x = dict()
+        nid2x = dict()
         for nid, node in enumerate(fp.node):
             nid = str(nid)
+            nid2x[nid] = dict()
             if node.domain in ONNXOperatorDomain:
                 operator = onnx.defs.get_schema(node.op_type, domain=node.domain)
 
@@ -610,15 +612,11 @@ class Network(Prototype):
                         all_extracted = list()
                         all_deep_extracted = list()
                         if deep_extract and attribute.type == ONNXAttributeType.GRAPH:
-                            # submodel = infer_shapes(make_model(attribute.g))
-                            # extracted, deep_extracted = cls.extract_from_gp(submodel.graph, fp_networks, deep_extract=deep_extract, is_sub=True)
                             extracted, deep_extracted = cls.extract_from_gp(attribute.g, fp_networks, deep_extract=deep_extract, is_sub=True)
                             all_extracted.append(extracted)
                             all_deep_extracted.extend(deep_extracted)
                         if deep_extract and attribute.type == ONNXAttributeType.GRAPHS:
                             for attribute_g in attribute.graphs:
-                                # submodel = infer_shapes(make_model(attribute_g))
-                                # extracted, deep_extracted = cls.extract_from_gp(submodel.graph, fp_networks, deep_extract=deep_extract, is_sub=True)
                                 extracted, deep_extracted = cls.extract_from_gp(attribute_g, fp_networks, deep_extract=deep_extract, is_sub=True)
                                 all_extracted.append(extracted)
                                 all_deep_extracted.extend(deep_extracted)
@@ -628,23 +626,34 @@ class Network(Prototype):
                         attributes[attribute.name] = json_format.MessageToDict(attribute)
 
                 operands = dict()
+                nid2x[nid]['input'] = dict()
                 variadic_index = 0
                 for index, input in enumerate(node.input):
+                    origin_index = index
                     if index >= len(operator.inputs) and operator.inputs[-1].option == operator.inputs[-1].option.Variadic.value:
                         index = len(operator.inputs) - 1
                         variadic_index += 1
                     operand_name = operator.inputs[index].name + (f'_{variadic_index}' if variadic_index else '')
                     operands[operand_name] = input
-                    i2x[input] = (nid, operand_name, index)
+                    i2x_this = i2x.get(input, list())
+                    i2x_this.append((nid, operand_name, index))
+                    i2x[input] = i2x_this
+                    nid2x[nid]['input'][origin_index] = operand_name
 
                 results = dict()
+                nid2x[nid]['output'] = dict()
+                variadic_index = 0
                 for index, output in enumerate(node.output):
+                    origin_index = index
                     if index >= len(operator.outputs) and operator.outputs[-1].option == operator.outputs[-1].option.Variadic.value:
                         index = len(operator.outputs) - 1
                         variadic_index += 1
                     result_name = operator.outputs[index].name + (f'_{variadic_index}' if variadic_index else '')
                     results[result_name] = output
-                    o2x[output] = (nid, result_name, index)
+                    o2x_this = o2x.get(output, list())
+                    o2x_this.append((nid, result_name, index))
+                    o2x[output] = o2x_this
+                    nid2x[nid]['output'][origin_index] = result_name
 
                 node = Node(
                     operator_type=node.op_type,
@@ -671,14 +680,22 @@ class Network(Prototype):
                     has_subgraph=False
 
                 operands = dict()
+                nid2x[nid]['input'] = dict()
                 for index, input in enumerate(node.input):
                     operands[input] = input
-                    i2x[input] = (nid, input, index)
+                    i2x_this = i2x.get(input, list())
+                    i2x_this.append((nid, input, index))
+                    i2x[input] = i2x_this
+                    nid2x[nid]['input'][index] = input
 
                 results = dict()
+                nid2x[nid]['output'] = dict()
                 for index, output in enumerate(node.output):
                     results[output] = output
-                    o2x[output] = (nid, output, index)
+                    o2x_this = o2x.get(output, list())
+                    o2x_this.append((nid, output, index))
+                    o2x[output] = o2x_this
+                    nid2x[nid]['output'][index] = output
 
                 node = Node(
                     operator_type=node.op_type,
@@ -698,18 +715,24 @@ class Network(Prototype):
         for nid, node in enumerate(fp.node):
             nid = str(nid)
 
-            for input in node.input:
-                if input in i2x and input in o2x:
-                    u_nid, u_opn, u_opi = o2x[input]
-                    v_nid, v_opn, v_opi = i2x[input]
-                    nn_graph.add_edge(u_nid, v_nid, u_opn=u_opn, v_opn=v_opn, u_opi=u_opi, v_opi=v_opi)
+            for index, input in enumerate(node.input):
+                v_nid = nid
+                v_opn = nid2x[nid]['input'][index]
+                v_opi = index
+                if input in o2x:
+                    for o2x_this in o2x[input]:
+                        u_nid, u_opn, u_opi = o2x_this
+                        nn_graph.add_edge(u_nid, v_nid, u_opn=u_opn, v_opn=v_opn, u_opi=u_opi, v_opi=v_opi)
 
-            for output in node.output:
-                if output in o2x and output in i2x:
-                    u_nid, u_opn, u_opi = o2x[output]
-                    v_nid, v_opn, v_opi = i2x[output]
-                    nn_graph.add_edge(u_nid, v_nid, u_opn=u_opn, v_opn=v_opn, u_opi=u_opi, v_opi=v_opi)
-            
+            for index, output in enumerate(node.output):
+                u_nid = nid
+                u_opn = nid2x[nid]['output'][index]
+                u_opi = index
+                if output in i2x:
+                    for i2x_this in i2x[output]:
+                        v_nid, v_opn, v_opi = i2x_this
+                        nn_graph.add_edge(u_nid, v_nid, u_opn=u_opn, v_opn=v_opn, u_opi=u_opi, v_opi=v_opi)
+
         assert networkx.is_directed_acyclic_graph(nn_graph), f'The \"Network\" converted from the \"ONNX Model\" (onnx_model) of Model() is not a Directed Acyclic Graph.'
 
         network = Network(nn_graph=nn_graph, nn_nodes=nn_nodes, nn_size=nn_size, is_sub=is_sub, is_fnc=True)
@@ -744,8 +767,10 @@ class Network(Prototype):
 
         i2x = dict()
         o2x = dict()
+        nid2x = dict()
         for nid, node in enumerate(gp.node):
             nid = str(nid)
+            nid2x[nid] = dict()
             if node.domain in ONNXOperatorDomain:
                 operator = onnx.defs.get_schema(node.op_type, domain=node.domain)
 
@@ -757,15 +782,11 @@ class Network(Prototype):
                         all_extracted = list()
                         all_deep_extracted = list()
                         if deep_extract and attribute.type == ONNXAttributeType.GRAPH:
-                            # submodel = infer_shapes(make_model(attribute.g))
-                            # extracted, deep_extracted = cls.extract_from_gp(submodel.graph, fp_networks, deep_extract=deep_extract, is_sub=True)
                             extracted, deep_extracted = cls.extract_from_gp(attribute.g, fp_networks, deep_extract=deep_extract, is_sub=True)
                             all_extracted.append(extracted)
                             all_deep_extracted.extend(deep_extracted)
                         if deep_extract and attribute.type == ONNXAttributeType.GRAPHS:
                             for attribute_g in attribute.graphs:
-                                # submodel = infer_shapes(make_model(attribute.g))
-                                # extracted, deep_extracted = cls.extract_from_gp(submodel.graph, fp_networks, deep_extract=deep_extract, is_sub=True)
                                 extracted, deep_extracted = cls.extract_from_gp(attribute_g, fp_networks, deep_extract=deep_extract, is_sub=True)
                                 all_extracted.append(extracted)
                                 all_deep_extracted.extend(deep_extracted)
@@ -787,9 +808,10 @@ class Network(Prototype):
                         parameters[parameter_name] = dict()
 
                 operands = dict()
+                nid2x[nid]['input'] = dict()
                 variadic_index = 0
                 for index, input in enumerate(node.input):
-                    # index = min(index, len(operator.inputs) - 1)
+                    origin_index = index
                     if index >= len(operator.inputs) and operator.inputs[-1].option == operator.inputs[-1].option.Variadic.value:
                         index = len(operator.inputs) - 1
                         variadic_index += 1
@@ -798,12 +820,16 @@ class Network(Prototype):
                         operands[operand_name] = io_info[input]
                     else:
                         operands[operand_name] = dict()
-                    i2x[input] = (nid, operand_name, index)
+                    i2x_this = i2x.get(input, list())
+                    i2x_this.append((nid, operand_name, index))
+                    i2x[input] = i2x_this
+                    nid2x[nid]['input'][origin_index] = operand_name
 
                 results = dict()
+                nid2x[nid]['output'] = dict()
                 variadic_index = 0
                 for index, output in enumerate(node.output):
-                    # index = min(index, len(operator.outputs) - 1)
+                    origin_index = index
                     if index >= len(operator.outputs) and operator.outputs[-1].option == operator.outputs[-1].option.Variadic.value:
                         index = len(operator.outputs) - 1
                         variadic_index += 1
@@ -812,7 +838,10 @@ class Network(Prototype):
                         results[result_name] = io_info[output]
                     else:
                         results[result_name] = dict()
-                    o2x[output] = (nid, result_name, index)
+                    o2x_this = o2x.get(output, list())
+                    o2x_this.append((nid, result_name, index))
+                    o2x[output] = o2x_this
+                    nid2x[nid]['output'][origin_index] = result_name
 
                 node = Node(
                     operator_type=node.op_type,
@@ -836,20 +865,28 @@ class Network(Prototype):
                     has_subgraph = True
 
                 operands = dict()
+                nid2x[nid]['input'] = dict()
                 for index, input in enumerate(node.input):
                     if input in io_info:
                         operands[input] = io_info[input]
                     else:
                         operands[input] = dict()
-                    i2x[input] = (nid, input, index)
+                    i2x_this = i2x.get(input, list())
+                    i2x_this.append((nid, input, index))
+                    i2x[input] = i2x_this
+                    nid2x[nid]['input'][index] = input
 
                 results = dict()
+                nid2x[nid]['output'] = dict()
                 for index, output in enumerate(node.output):
                     if output in io_info:
                         results[output] = io_info[output]
                     else:
                         results[output] = dict()
-                    o2x[output] = (nid, output, index)
+                    o2x_this = o2x.get(output, list())
+                    o2x_this.append((nid, output, index))
+                    o2x[output] = o2x_this
+                    nid2x[nid]['output'][index] = output
 
                 node = Node(
                     operator_type=node.op_type,
@@ -869,18 +906,25 @@ class Network(Prototype):
         for nid, node in enumerate(gp.node):
             nid = str(nid)
 
-            for input in node.input:
-                if input in i2x and input in o2x:
-                    u_nid, u_opn, u_opi = o2x[input]
-                    v_nid, v_opn, v_opi = i2x[input]
-                    nn_graph.add_edge(u_nid, v_nid, u_opn=u_opn, v_opn=v_opn, u_opi=u_opi, v_opi=v_opi)
+            for index, input in enumerate(node.input):
+                v_nid = nid
+                print(nid2x[nid])
+                v_opn = nid2x[nid]['input'][index]
+                v_opi = index
+                if input in o2x:
+                    for o2x_this in o2x[input]:
+                        u_nid, u_opn, u_opi = o2x_this
+                        nn_graph.add_edge(u_nid, v_nid, u_opn=u_opn, v_opn=v_opn, u_opi=u_opi, v_opi=v_opi)
 
-            for output in node.output:
-                if output in o2x and output in i2x:
-                    u_nid, u_opn, u_opi = o2x[output]
-                    v_nid, v_opn, v_opi = i2x[output]
-                    nn_graph.add_edge(u_nid, v_nid, u_opn=u_opn, v_opn=v_opn, u_opi=u_opi, v_opi=v_opi)
-            
+            for index, output in enumerate(node.output):
+                u_nid = nid
+                u_opn = nid2x[nid]['output'][index]
+                u_opi = index
+                if output in i2x:
+                    for i2x_this in i2x[output]:
+                        v_nid, v_opn, v_opi = i2x_this
+                        nn_graph.add_edge(u_nid, v_nid, u_opn=u_opn, v_opn=v_opn, u_opi=u_opi, v_opi=v_opi)
+
         assert networkx.is_directed_acyclic_graph(nn_graph), f'The \"Network\" converted from the \"ONNX Model\" (onnx_model) of Model() is not a Directed Acyclic Graph.'
 
         network = Network(nn_graph=nn_graph, nn_nodes=nn_nodes, nn_size=nn_size, is_sub=is_sub, is_fnc=False)
