@@ -908,7 +908,6 @@ class Network(Prototype):
 
             for index, input in enumerate(node.input):
                 v_nid = nid
-                print(nid2x[nid])
                 v_opn = nid2x[nid]['input'][index]
                 v_opi = index
                 if input in o2x:
