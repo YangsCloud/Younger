@@ -10,4 +10,5 @@
 # LICENSE file in the root directory of this source tree.
 
 
+from youngbench.benchmark.analyzer.network import *
 from youngbench.benchmark.analyzer.operator import *
