@@ -675,7 +675,7 @@ class Network(Prototype):
                         deep_networks.extend(fp_deep_networks)
                     else:
                         assert isinstance(fp_network, Network)
-                    attributes = dict(function=fp_network.identifier)
+                    attributes = dict(__YBD_function__=fp_network.identifier)
                     has_subgraph=False
 
                 operands = dict()
@@ -858,9 +858,9 @@ class Network(Prototype):
                     has_subgraph=False
                 else:
                     if isinstance(fp_network, Network):
-                        attributes = dict(function=fp_network.identifier)
+                        attributes = dict(__YBD_function__=fp_network.identifier)
                     else:
-                        attributes = dict(function=str())
+                        attributes = dict(__YBD_function__=str())
                     has_subgraph = True
 
                 operands = dict()

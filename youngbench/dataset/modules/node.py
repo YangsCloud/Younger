@@ -63,7 +63,10 @@ class Node(object):
     def quasi_dict(self) -> Dict:
         quasi_dict = self.dict
         if self.is_custom:
-            quasi_dict['attributes'] = dict()
+            if '__YBD_function__' in quasi_dict['attributes']:
+                quasi_dict['attributes'] = dict(__YBD_function__='')
+            else:
+                quasi_dict['attributes'] = dict()
         else:
             for attribute_name, attribute_value in quasi_dict['attributes'].items():
                 if isinstance(attribute_value, list):
