@@ -39,8 +39,8 @@ if __name__ == "__main__":
     assert dataset_path.is_dir(), f'Directory does not exist at the specified \"Dataset Path\": {dataset_path}.'
 
     save_dirpath = pathlib.Path(args.save_dirpath)
-    opstats_of_dataset_json = save_dirpath.joinpath('opstat_d.json')
-    opstats_per_model_json = save_dirpath.joinpath('opstat_m.json')
+    opstats_of_dataset_json = save_dirpath.joinpath('opstats_dataset.json')
+    opstats_per_model_json = save_dirpath.joinpath('opstats_per_model.json')
 
     assert semantic_version.validate(args.version), f'The version provided must follow the SemVer 2.0.0 Specification.'
     version = semantic_version.Version(args.version)
@@ -62,7 +62,7 @@ if __name__ == "__main__":
     opstats_of_dataset = sorted(list(opstats_of_dataset.items()), key=lambda x: (~x[1]['cus'], x[1]['num']))
     stats_str = str()
     for op, opstat_of_dataset in opstats_of_dataset:
-        stats_str += f'{str(op):<36} \t {str(opstat_of_dataset['num']):<10} \t {str(opstat_of_dataset['cus']):<10}\n'
+        stats_str += f'{str(op):<36} \t {str(opstat_of_dataset["num"]):<10} \t {str(opstat_of_dataset["cus"]):<10}\n'
     logger.info(f'Below is statistics of Datset:\n{stats_str}')
 
     with open(opstats_of_dataset_json, 'w') as f:
@@ -77,7 +77,7 @@ if __name__ == "__main__":
         stats_str += f'{model_id}:\n'
         opstat_per_model = sorted(list(opstat_per_model.items()), key=lambda x: (~x[1]['cus'], x[1]['num']))
         for op, opstat in opstat_per_model:
-            stats_str += f'{str(op):<36} \t {str(opstat['num']):<10} \t {str(opstat['cus']):<10}\n'
+            stats_str += f'{str(op):<36} \t {str(opstat["num"]):<10} \t {str(opstat["cus"]):<10}\n'
     logger.info(f'Below is statistics per Model:\n{stats_str}')
 
     with open(opstats_per_model_json, 'w') as f:
