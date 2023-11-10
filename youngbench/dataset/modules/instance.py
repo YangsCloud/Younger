@@ -13,7 +13,7 @@
 import pathlib
 import semantic_version
 
-from typing import Set, List, Dict
+from typing import Set, List, Dict, Optional
 
 from youngbench.dataset.modules.meta import Meta
 from youngbench.dataset.modules.network import Prototype, Network
@@ -24,7 +24,12 @@ from youngbench.logging import logger
 
 
 class Instance(object):
-    def __init__(self, prototype: Prototype = None, networks: List[Network] = None, version: semantic_version.Version = semantic_version.Version('0.0.0')) -> None:
+    def __init__(
+            self,
+            prototype: Optional[Prototype] = None,
+            networks: Optional[List[Network]] = None,
+            version: semantic_version.Version = semantic_version.Version('0.0.0')
+    ) -> None:
         prototype = prototype or Prototype()
         networks = networks or list()
 

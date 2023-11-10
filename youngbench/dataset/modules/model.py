@@ -14,7 +14,7 @@ import onnx
 import pathlib
 import semantic_version
 
-from typing import Dict, Union
+from typing import Dict, Union, Optional
 
 from youngbench.dataset.modules.meta import Meta
 
@@ -23,7 +23,12 @@ from youngbench.dataset.utils.cache import get_cache_root
 
 
 class Model(object):
-    def __init__(self, onnx_model: Union[onnx.ModelProto, pathlib.Path] = None, version: semantic_version.Version = semantic_version.Version('0.0.0'), **info) -> None:
+    def __init__(
+            self,
+            onnx_model: Optional[Union[onnx.ModelProto, pathlib.Path]] = None,
+            version: semantic_version.Version = semantic_version.Version('0.0.0'),
+            **info
+    ) -> None:
         onnx_model = onnx_model or onnx.ModelProto()
         self._meta_filename = 'meta.json'
         self._meta = Meta()

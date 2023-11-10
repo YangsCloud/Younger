@@ -14,15 +14,16 @@ from typing import Dict
 
 
 class Node(object):
-    def __init__(self,
-        operator_type: str,
-        operator_domain: str,
-        attributes: Dict,
-        parameters: Dict,
-        operands: Dict,
-        results: Dict,
-        is_custom: bool = False,
-        has_subgraph: bool = False,
+    def __init__(
+            self,
+            operator_type: str,
+            operator_domain: str,
+            attributes: Dict,
+            parameters: Dict,
+            operands: Dict,
+            results: Dict,
+            is_custom: bool = False,
+            has_subgraph: bool = False,
     ) -> None:
         self._type = operator_type
         self._domain = operator_domain

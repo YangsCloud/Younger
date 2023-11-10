@@ -16,7 +16,7 @@ import pathlib
 import networkx
 import semantic_version
 
-from typing import Set, List, Dict, Tuple, Generator
+from typing import Set, List, Dict, Tuple, Optional, Generator
 from onnx.shape_inference import infer_shapes
 from onnx.helper import make_model
 from google.protobuf import json_format
@@ -32,7 +32,13 @@ from youngbench.constants import ONNXOperatorDomain, ONNXAttributeType
 
 
 class Prototype(object):
-    def __init__(self, nn_graph: networkx.DiGraph = None, nn_size: int = 0, is_sub: bool = False, is_fnc: bool = False) -> None:
+    def __init__(
+            self,
+            nn_graph: Optional[networkx.DiGraph] = None,
+            nn_size: int = 0,
+            is_sub: bool = False,
+            is_fnc: bool = False
+    ) -> None:
         nn_graph = nn_graph or networkx.DiGraph()
 
         assert len(nn_graph) == nn_size
@@ -181,14 +187,15 @@ class Prototype(object):
 
 
 class Network(Prototype):
-    def __init__(self,
-        nn_graph: networkx.DiGraph = None,
-        nn_nodes: Dict[str, Node] = None,
-        nn_size: int = 0,
-        is_sub: bool = False,
-        is_fnc: bool = False,
-        models: List[Model] = None,
-        version: semantic_version.Version = semantic_version.Version('0.0.0')
+    def __init__(
+            self,
+            nn_graph: Optional[networkx.DiGraph] = None,
+            nn_nodes: Optional[Dict[str, Node]] = None,
+            nn_size: int = 0,
+            is_sub: bool = False,
+            is_fnc: bool = False,
+            models: Optional[List[Model]] = None,
+            version: semantic_version.Version = semantic_version.Version('0.0.0')
     ) -> None:
         super(Network, self).__init__(nn_graph, nn_size, is_sub, is_fnc)
         nn_nodes = nn_nodes or dict()
@@ -588,7 +595,13 @@ class Network(Prototype):
         return network, deep_networks
 
     @classmethod
-    def extract_from_fp(cls, fp: onnx.FunctionProto, fp_networks: Dict[Tuple[str, str], 'Network'], deep_extract: bool = False, is_sub: bool = False) -> Tuple['Network', List['Network']]:
+    def extract_from_fp(
+        cls,
+        fp: onnx.FunctionProto,
+        fp_networks: Dict[Tuple[str, str], 'Network'],
+        deep_extract: bool = False,
+        is_sub: bool = False
+    ) -> Tuple['Network', List['Network']]:
         nn_graph = networkx.DiGraph()
         nn_nodes = dict()
         nn_size = 0
@@ -739,7 +752,13 @@ class Network(Prototype):
         return network, deep_networks
 
     @classmethod
-    def extract_from_gp(cls, gp: onnx.GraphProto, fp_networks: Dict[Tuple[str, str], 'Network'], deep_extract: bool = False, is_sub: bool = False) -> Tuple['Network', List['Network']]:
+    def extract_from_gp(
+            cls,
+            gp: onnx.GraphProto,
+            fp_networks: Dict[Tuple[str, str], 'Network'],
+            deep_extract: bool = False,
+            is_sub: bool = False
+    ) -> Tuple['Network', List['Network']]:
         assert isinstance(gp, onnx.GraphProto)
         nn_graph = networkx.DiGraph()
         nn_nodes = dict()

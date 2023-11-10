@@ -13,7 +13,7 @@
 import pathlib
 import semantic_version
 
-from typing import Set, List, Dict
+from typing import Set, List, Dict, Optional
 
 from youngbench.dataset.modules.stamp import Stamp
 from youngbench.dataset.modules.instance import Instance
@@ -23,7 +23,7 @@ from youngbench.logging import logger
 
 
 class Dataset(object):
-    def __init__(self, instances: List[Instance] = None, version: semantic_version.Version = semantic_version.Version('0.0.0')) -> None:
+    def __init__(self, instances: Optional[List[Instance]] = None, version: semantic_version.Version = semantic_version.Version('0.0.0')) -> None:
         instances = instances or list()
 
         self._stamps_filename = 'stamps.json'

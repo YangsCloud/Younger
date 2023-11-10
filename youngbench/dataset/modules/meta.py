@@ -18,13 +18,14 @@ from youngbench.dataset.utils.io import hash_string
 
 
 class Meta(object):
-    def __init__(self,
-        private: bool = False,
-        release: bool = False,
-        retired: bool = False,
-        release_version: str = None,
-        retired_version: str = None,
-        **metrics
+    def __init__(
+            self,
+            private: bool = False,
+            release: bool = False,
+            retired: bool = False,
+            release_version: str = None,
+            retired_version: str = None,
+            **metrics
     ) -> None:
         if release:
             assert semantic_version.validate(release_version), f'The release version provided must follow the SemVer 2.0.0 Specification.'
