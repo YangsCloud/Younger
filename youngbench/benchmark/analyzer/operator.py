@@ -42,7 +42,7 @@ def get_opstats_of_dataset(dataset: Dataset, count_model: bool = True) -> Dict[T
         opstats_of_net = get_opstats_of_prototype(network)
         for op, opstat_of_pt in opstats_of_net.items():
             opstat = opstats.get(op, dict(num=0, cus=False))
-            opstat['num'] += opstat_of_pt['num'] * (len(network.models) if count_model else 1)
+            opstat['num'] += opstat_of_pt['num'] * (max(1, len(network.models)) if count_model else 1)
             opstat['cus'] |= opstat_of_pt['cus']
             opstats[op] = opstat
 
