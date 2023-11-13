@@ -15,11 +15,11 @@ import pathlib
 import argparse
 import semantic_version
 
-from youngbench.benchmark.analyzer import get_opstats_of_dataset, get_opstats_per_model
+from youngbench.benchmark.analyzer import get_opstats_of_dataset, get_opstats_per_model, get_opstats_of_xput
 
 from youngbench.dataset.modules import Dataset
 from youngbench.dataset.utils.management import check_dataset
-from youngbench.logging import logger
+from youngbench.logging import set_logger, logger
 
 
 if __name__ == "__main__":
@@ -29,6 +29,7 @@ if __name__ == "__main__":
     parser.add_argument('-p', '--dataset-path', type=str, required=True)
 
     parser.add_argument('-n', '--save-dirpath', type=str, default='')
+    parser.add_argument('-l', '--logging-path', type=str, default='')
 
     # Dataset Release Version.
     parser.add_argument('--version', type=str, default='')
@@ -41,9 +42,12 @@ if __name__ == "__main__":
     save_dirpath = pathlib.Path(args.save_dirpath)
     opstats_of_dataset_json = save_dirpath.joinpath('opstats_dataset.json')
     opstats_per_model_json = save_dirpath.joinpath('opstats_per_model.json')
+    opstats_of_xput_json = save_dirpath.joinpath('opstats_of_xput.json')
 
     assert semantic_version.validate(args.version), f'The version provided must follow the SemVer 2.0.0 Specification.'
     version = semantic_version.Version(args.version)
+
+    set_logger(path=args.logging_path)
 
     dataset = Dataset()
     logger.info(f' v Loading Dataset ... ')
@@ -59,32 +63,43 @@ if __name__ == "__main__":
     logger.info(f' ^ Got. ')
 
     opstats_of_dataset = get_opstats_of_dataset(dataset)
-    opstats_of_dataset = sorted(list(opstats_of_dataset.items()), key=lambda x: (~x[1]['cus'], x[1]['num']))
+    opstats_of_dataset = sorted(list(opstats_of_dataset.items()), key=lambda x: (not x[1]['cus'], x[1]['num']))
     stats_str = str()
     for op, opstat_of_dataset in opstats_of_dataset:
-        stats_str += f'{str(op):<36} \t {str(opstat_of_dataset["num"]):<10} \t {str(opstat_of_dataset["cus"]):<10}\n'
+        stats_str += f'{op:<36} \t {str(opstat_of_dataset["num"]):<10} \t {str(opstat_of_dataset["cus"]):<10}\n'
     logger.info(f'Below is statistics of Datset:\n{stats_str}')
 
     with open(opstats_of_dataset_json, 'w') as f:
-        to_dump = dict()
-        for k, v in opstats_of_dataset:
-            to_dump[str(k)] = v
-        json.dump(to_dump, f, indent=2)
+        json.dump(opstat_of_dataset, f, indent=2)
 
     opstats_per_model = get_opstats_per_model(dataset)
     stats_str = str()
     for model_id, opstat_per_model in opstats_per_model.items():
         stats_str += f'{model_id}:\n'
-        opstat_per_model = sorted(list(opstat_per_model.items()), key=lambda x: (~x[1]['cus'], x[1]['num']))
+        opstat_per_model = sorted(list(opstat_per_model.items()), key=lambda x: (not x[1]['cus'], x[1]['num']))
+        opstats_per_model[model_id] = opstats_per_model
         for op, opstat in opstat_per_model:
-            stats_str += f'{str(op):<36} \t {str(opstat["num"]):<10} \t {str(opstat["cus"]):<10}\n'
+            stats_str += f'{op:<36} \t {str(opstat["num"]):<10} \t {str(opstat["cus"]):<10}\n'
     logger.info(f'Below is statistics per Model:\n{stats_str}')
 
     with open(opstats_per_model_json, 'w') as f:
-        to_dump = dict()
-        for k, v in opstats_per_model.items():
-            toto_dump = dict()
-            for ki, vi in v.items():
-                toto_dump[str(ki)] = vi
-            to_dump[k] = toto_dump
-        json.dump(to_dump, f, indent=2)
+        json.dump(opstat_per_model, f, indent=2)
+
+    opstats_of_xput = get_opstats_of_xput(dataset)
+    def xput_stats_str(kind):
+        opstats_of_xput[kind] = sorted(list(opstats_of_xput[kind].items()), key=lambda x: sum(x[1].values()))
+        stats_str = str()
+        for op, opstats in opstats_of_xput[kind]:
+            total = sum(opstats.values())
+            stats_str += f'{op} total={total}:\n'
+            opstats = sorted(list(opstats.items()), key=lambda x: (x[0][0], x[0][1]))
+            opstats_of_xput[op] = opstats
+            for op_xput_num, opstat in opstats:
+                stats_str += f'{op_xput_num:<10} {str(opstat):<10}\n'
+
+        return stats_str
+    logger.info(f'Below is statistics of Input:\n{xput_stats_str("input")}')
+    logger.info(f'Below is statistics of Output:\n{xput_stats_str("output")}')
+
+    with open(opstats_of_xput_json, 'w') as f:
+        json.dump(opstats_of_xput, f, indent=2)
