@@ -22,6 +22,8 @@ class Node(object):
             parameters: Dict,
             operands: Dict,
             results: Dict,
+            is_first: bool = False,
+            is_last: bool = False,
             is_custom: bool = False,
             has_subgraph: bool = False,
     ) -> None:
@@ -32,6 +34,9 @@ class Node(object):
         self._parameters = parameters
         self._operands = operands
         self._results = results
+        self._is_first = is_first
+        self._is_last = is_last
+
         self._is_custom = is_custom
         self._has_subgraph = has_subgraph
 
@@ -42,6 +47,8 @@ class Node(object):
             domain = self._domain,
             in_number = len(self._operands),
             out_number = len(self._results),
+            is_first = self._is_first,
+            is_last = self._is_last,
             is_custom = self._is_custom,
             has_subgraph = self._has_subgraph,
         )
@@ -56,6 +63,8 @@ class Node(object):
             parameters = self._parameters,
             operands = self._operands,
             results = self._results,
+            is_first = self._is_first,
+            is_last = self._is_last,
             is_custom = self._is_custom,
             has_subgraph = self._has_subgraph,
         )
@@ -97,6 +106,14 @@ class Node(object):
     @property
     def results(self) -> Dict:
         return self._results
+
+    @property
+    def is_first(self) -> bool:
+        return self._is_first
+
+    @property
+    def is_last(self) -> bool:
+        return self._is_last
 
     @property
     def is_custom(self) -> bool:

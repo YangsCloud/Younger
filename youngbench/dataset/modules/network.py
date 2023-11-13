@@ -114,7 +114,7 @@ class Prototype(object):
         layer_strings = list()
         for index, bfs_layer in enumerate(self.bfs_layers):
             bfs_layer = [self.nn_graph.nodes[str(node_id)] for node_id in bfs_layer]
-            bfs_layer = sorted(bfs_layer, key=lambda x: (x['is_custom'], x['has_subgraph'], x['type'], x['domain'], x['in_number'], x['out_number']))
+            bfs_layer = sorted(bfs_layer, key=lambda x: (x['is_first'], x['is_last'], x['is_custom'], x['has_subgraph'], x['type'], x['domain'], x['in_number'], x['out_number']))
             layer_string = f'[{index}:'
             for i, node in enumerate(bfs_layer):
                 layer_string = layer_string + f'={i}'
@@ -280,7 +280,7 @@ class Network(Prototype):
         layer_strings = list()
         for index, bfs_layer in enumerate(self.bfs_layers):
             bfs_layer = [(node_id, self.nn_graph.nodes[str(node_id)]) for node_id in bfs_layer]
-            bfs_layer = sorted(bfs_layer, key=lambda x: (x[1]['is_custom'], x[1]['has_subgraph'], x[1]['type'], x[1]['domain'], x[1]['in_number'], x[1]['out_number']))
+            bfs_layer = sorted(bfs_layer, key=lambda x: (x[1]['is_first'], x[1]['is_last'], x[1]['is_custom'], x[1]['has_subgraph'], x[1]['type'], x[1]['domain'], x[1]['in_number'], x[1]['out_number']))
             layer_string = f'[{index}:'
             for i, (node_id, node) in enumerate(bfs_layer):
                 layer_string += f'={i}'
@@ -776,12 +776,16 @@ class Network(Prototype):
 
         # Input & Output
         io_info = dict()
+        inputs = set()
+        outputs = set()
         for input in gp.input:
             io_info[input.name] = json_format.MessageToDict(input.type)
+            inputs.add(input.name)
         for value in gp.value_info:
             io_info[value.name] = json_format.MessageToDict(value.type)
         for output in gp.output:
             io_info[output.name] = json_format.MessageToDict(output.type)
+            outputs.add(output.name)
 
         i2x = dict()
         o2x = dict()
@@ -825,6 +829,7 @@ class Network(Prototype):
                     else:
                         parameters[parameter_name] = dict()
 
+                is_first = False
                 operands = dict()
                 nid2x[nid]['input'] = dict()
                 variadic_index = 0
@@ -842,7 +847,9 @@ class Network(Prototype):
                     i2x_this.append((nid, operand_name, index))
                     i2x[input] = i2x_this
                     nid2x[nid]['input'][origin_index] = operand_name
+                    is_first |= input in inputs
 
+                is_last = False
                 results = dict()
                 nid2x[nid]['output'] = dict()
                 variadic_index = 0
@@ -860,6 +867,7 @@ class Network(Prototype):
                     o2x_this.append((nid, result_name, index))
                     o2x[output] = o2x_this
                     nid2x[nid]['output'][origin_index] = result_name
+                    is_last |= output in outputs
 
                 node = Node(
                     operator_type=node.op_type,
@@ -867,6 +875,8 @@ class Network(Prototype):
                     attributes=attributes,
                     parameters=parameters,
                     operands=operands,
+                    is_first=is_first,
+                    is_last=is_last,
                     results=results,
                     has_subgraph=has_subgraph,
                 )
