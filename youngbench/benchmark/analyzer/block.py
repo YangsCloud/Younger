@@ -12,10 +12,13 @@
 
 import networkx
 
-from typing import List
+from typing import List, Dict, Tuple
 
 from youngbench.dataset.modules import Dataset, Prototype
 
 
-def get_blocks(prototype: Prototype) -> List:
+def get_blocks_of_prototype(prototype: Prototype, before: int, after: int) -> List[Dict[str, Tuple[Prototype, ]]]:
     pass
+    x = networkx.DiGraph()
+    i  = x.nodes[1]
+    i.d
