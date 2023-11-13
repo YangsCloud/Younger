@@ -18,7 +18,7 @@ import itertools
 from typing import Dict, Literal, Iterable, Optional
 from huggingface_hub import utils, snapshot_download
 
-from youngbench.logging import logger
+from youngbench.logging import set_logger, logger
 
 
 def paginate(hf_path: str, params: Dict, headers: Dict) -> Iterable[Dict]:
@@ -79,7 +79,11 @@ if __name__ == '__main__':
     # Cache Dir
     parser.add_argument('--cache-dir', type=str, default=None)
 
+    parser.add_argument('--logging-path', type=str, default='')
+
     args = parser.parse_args()
+
+    set_logger(path=args.logging_path)
 
     assert 0 < args.top
 

@@ -16,7 +16,7 @@ import semantic_version
 
 from youngbench.dataset.modules import Dataset
 from youngbench.dataset.utils.management import check_dataset
-from youngbench.logging import logger
+from youngbench.logging import set_logger, logger
 
 
 if __name__ == "__main__":
@@ -24,6 +24,8 @@ if __name__ == "__main__":
 
     # Dataset Save/Load Path.
     parser.add_argument('-p', '--dataset-path', type=str, required=True)
+
+    parser.add_argument('-l', '--logging-path', type=str, default='')
 
     # Dataset Release Version.
     parser.add_argument('--version', type=str, default='')
@@ -35,6 +37,8 @@ if __name__ == "__main__":
 
     assert semantic_version.validate(args.version), f'The version provided must follow the SemVer 2.0.0 Specification.'
     version = semantic_version.Version(args.version)
+
+    set_logger(path=args.logging_path)
 
     dataset = Dataset()
     logger.info(f' v Loading Dataset ... ')

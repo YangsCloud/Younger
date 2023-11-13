@@ -23,7 +23,7 @@ from youngbench.dataset.modules import Dataset
 from youngbench.dataset.utils.io import load_onnx_model
 from youngbench.dataset.utils.cache import set_cache_root, get_cache_root
 from youngbench.dataset.utils.management import enrich_dataset
-from youngbench.logging import logger
+from youngbench.logging import set_logger, logger
 
 
 def get_onnx_official_onnx_models() -> Generator[Tuple[str, onnx.ModelProto], None, None]:
@@ -85,6 +85,8 @@ if __name__ == "__main__":
     parser.add_argument('--save-path', type=str, default='')
     parser.add_argument('--cache-dir', type=str, default='')
 
+    parser.add_argument('--logging-path', type=str, default='')
+
     # Mode - Create / Update
     parser.add_argument('--mode', type=str, default='Update', choices=['Update', 'Create'])
 
@@ -92,6 +94,8 @@ if __name__ == "__main__":
 
     assert semantic_version.validate(args.version), f'The version provided must follow the SemVer 2.0.0 Specification.'
     version = semantic_version.Version(args.version)
+
+    set_logger(path=args.logging_path)
 
     if args.cache_dir == '':
         pass
