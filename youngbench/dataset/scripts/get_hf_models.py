@@ -9,12 +9,16 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import json
+import pathlib
 import requests
 import argparse
 import itertools
 
 from typing import Dict, Literal, Iterable, Optional
 from huggingface_hub import utils, snapshot_download
+
+from youngbench.logging import logger
 
 
 def paginate(hf_path: str, params: Dict, headers: Dict) -> Iterable[Dict]:
@@ -42,7 +46,7 @@ def get_model_infos(
 ) -> Iterable[Dict]:
 
     hf_path = 'https://huggingface.co/api/models'
-    params = dict(library='pytorch')
+    params = dict()
     if full is not None:
         params['full'] = full
     if limit is not None:
@@ -66,13 +70,63 @@ def get_model_infos(
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Create/Update The Young Neural Network Architecture Dataset (YoungBench - Dataset).")
 
+    # Top Number
+    parser.add_argument('--top', type=int, default=100)
+
+    # Model Info Dir
+    parser.add_argument('--infos-dir', type=str, default='.')
+
     # Cache Dir
     parser.add_argument('--cache-dir', type=str, default=None)
 
     args = parser.parse_args()
 
-    top100_downloads_model_infos = get_model_infos(full=True, limit=10, config=True, sort='downloads', direction=-1)
+    assert 0 < args.top
 
-    for index, model_info in enumerate(top100_downloads_model_infos):
-        print(f' # {index}: {model_info["id"]}')
-        snapshot_download(repo_id=model_info['id'], resume_download=True, cache_dir=args.cache_dir)
+    infos_dirpath = pathlib.Path(args.infos_dir)
+    infos_dirpath.mkdir(parents=True, exist_ok=True)
+    dl_filepath = infos_dirpath.joinpath(f'top{args.top}_dl.json')
+    lk_filepath = infos_dirpath.joinpath(f'top{args.top}_lk.json')
+
+    if dl_filepath.is_file():
+        with open(dl_filepath, 'r') as f:
+            downloads_top_model_infos = json.load(f)
+    else:
+        downloads_top_model_infos = list()
+
+    if len(downloads_top_model_infos) != args.top:
+        logger.info(f' = Fetching Top{args.top} Downloads Models\' Info ... ')
+        downloads_top_model_infos = get_model_infos(full=True, limit=args.top, config=True, sort='downloads', direction=-1)
+        with open(dl_filepath, 'w') as f:
+            downloads_top_model_infos = list(downloads_top_model_infos)
+            json.dump(downloads_top_model_infos, f, indent=2)
+        logger.info(f' - Top{args.top} Downloads Models\' Info are saved into: {dl_filepath.absolute()}')
+
+    if lk_filepath.is_file():
+        with open(lk_filepath, 'r') as f:
+            likes_top_model_infos = json.load(f)
+    else:
+        likes_top_model_infos = list()
+
+    if len(likes_top_model_infos) != args.top:
+        logger.info(f' = Fetching Top{args.top} Likes Models\' Info ... ')
+        likes_top_model_infos = get_model_infos(full=True, limit=args.top, config=True, sort='likes', direction=-1)
+        with open(lk_filepath, 'w') as f:
+            likes_top_model_infos = list(likes_top_model_infos)
+            json.dump(likes_top_model_infos, f, indent=2)
+        logger.info(f' - Top{args.top} Likes Models\' Info are saved into: {lk_filepath.absolute()}')
+
+
+    cache_dirpath = pathlib.Path(args.cache_dir)
+    cache_dirpath.mkdir(parents=True, exist_ok=True)
+    logger.info(f' v Now Download Top Downloads Models')
+    for index, model_info in enumerate(downloads_top_model_infos):
+        print(f' # {index} (Downloads): {model_info["id"]}')
+        snapshot_download(repo_id=model_info['id'], resume_download=True, cache_dir=cache_dirpath.joinpath('DL'))
+    logger.info(f' ^ Finished')
+
+    logger.info(f' v Now Download Top Likes Models')
+    for index, model_info in enumerate(downloads_top_model_infos):
+        print(f' # {index} (Likes): {model_info["id"]}')
+        snapshot_download(repo_id=model_info['id'], resume_download=True, cache_dir=cache_dirpath.joinpath('LK'))
+    logger.info(f' ^ Finished')
