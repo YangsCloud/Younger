@@ -71,7 +71,7 @@ if __name__ == "__main__":
     stats_str = str()
     for (u_op, v_op), egstat_of_dataset in egstats_of_dataset:
         eg = f'{u_op} -> {v_op}'
-        stats_str += f'{eg:<66} \t {str(egstat_of_dataset):<10}\n'
+        stats_str += f'{eg:<80} \t {str(egstat_of_dataset):<10}\n'
     logger.info(f'Below is edge statistics of Datset:\n{stats_str}')
 
     with open(egstats_of_dataset_json, 'w') as f:

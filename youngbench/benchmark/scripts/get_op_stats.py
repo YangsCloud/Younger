@@ -73,7 +73,7 @@ if __name__ == "__main__":
     opstats_of_dataset = sorted(list(opstats_of_dataset.items()), key=lambda x: (not x[1]['cus'], x[1]['num']))
     stats_str = str()
     for op, opstat_of_dataset in opstats_of_dataset:
-        stats_str += f'{str(op):<36} \t {str(opstat_of_dataset["num"]):<10} \t {str(opstat_of_dataset["cus"]):<10}\n'
+        stats_str += f'{str(op):<50} \t {str(opstat_of_dataset["num"]):<10} \t {str(opstat_of_dataset["cus"]):<10}\n'
     logger.info(f'Below is operator statistics of Datset:\n{stats_str}')
 
     with open(opstats_of_dataset_json, 'w') as f:
@@ -89,7 +89,7 @@ if __name__ == "__main__":
         opstat_per_model = sorted(list(opstat_per_model.items()), key=lambda x: (not x[1]['cus'], x[1]['num']))
         opstats_per_model[model_id] = opstat_per_model
         for op, opstat in opstat_per_model:
-            stats_str += f'{str(op):<36} \t {str(opstat["num"]):<10} \t {str(opstat["cus"]):<10}\n'
+            stats_str += f'{str(op):<50} \t {str(opstat["num"]):<10} \t {str(opstat["cus"]):<10}\n'
     logger.info(f'Below is operator statistics per Model:\n{stats_str}')
 
     with open(opstats_per_model_json, 'w') as f:
