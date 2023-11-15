@@ -17,7 +17,7 @@ from youngbench.dataset.modules import Dataset, Prototype
 from youngbench.constants import ONNXOperandType
 
 
-def get_opstats_of_prototype(prototype: Prototype) -> Dict[str, Dict[str, Union[int, bool, Dict[str, str]]]]:
+def get_opstats_of_prototype(prototype: Prototype) -> Dict[Tuple[str, str], Dict[str, Union[int, bool, Dict[Tuple[int, int], int]]]]:
     # dict{
     #   tuple(op_type, op_domain): dict{num: int, cus: bool, degree: {(ind, outd): int}}
     # }
@@ -25,8 +25,8 @@ def get_opstats_of_prototype(prototype: Prototype) -> Dict[str, Dict[str, Union[
     for nid, node in prototype.nn_graph.nodes.items():
         ind = prototype.nn_graph.in_degree(nid)
         outd = prototype.nn_graph.out_degree(nid)
-        xd = str((ind, outd))
-        op = str((node['type'], node['domain']))
+        xd = (ind, outd)
+        op = (node['type'], node['domain'])
         opstat = opstats.get(op, dict(num=0, cus=False, degree=dict()))
         opstat['num'] += 1
         opstat['cus'] |= bool(node['is_custom'])
@@ -38,7 +38,7 @@ def get_opstats_of_prototype(prototype: Prototype) -> Dict[str, Dict[str, Union[
     return opstats
 
 
-def get_opstats_of_dataset(dataset: Dataset, count_model: bool = True) -> Dict[str, Dict[str, Union[int, bool, Dict[str, str]]]]:
+def get_opstats_of_dataset(dataset: Dataset, count_model: bool = True) -> Dict[Tuple[str, str], Dict[str, Union[int, bool, Dict[Tuple[int, int], int]]]]:
     # dict{
     #   tuple(op_type, op_domain): dict{num: int, cus: bool, degree: {(ind, outd): int}}
     # }
@@ -59,7 +59,7 @@ def get_opstats_of_dataset(dataset: Dataset, count_model: bool = True) -> Dict[s
     return opstats
 
 
-def get_opstats_per_model(dataset: Dataset) -> Dict[str, Dict[str, Dict[str, Union[int, bool, Dict[str, str]]]]]:
+def get_opstats_per_model(dataset: Dataset) -> Dict[str, Dict[Tuple[str, str], Dict[str, Union[int, bool, Dict[Tuple[int, int], int]]]]]:
     # dict{
     #   model_identifier: dict{
     #     tuple(op_type, op_domain): dict{num: int, cus: bool, degree: {(ind, outd): int}}
@@ -87,7 +87,7 @@ def get_opstats_per_model(dataset: Dataset) -> Dict[str, Dict[str, Dict[str, Uni
     return opstats
 
 
-def get_opstats_of_xput(dataset: Dataset) -> Dict[str, Dict[str, int]]:
+def get_opstats_of_xput(dataset: Dataset) -> Dict[str, Dict[Tuple[str, str], Dict[Tuple[int, int], int]]]:
     # dict{
     #   input/output: dict{
     #     tuple(op_type, op_domain): dict{(input_num, output_num): int}
@@ -98,7 +98,7 @@ def get_opstats_of_xput(dataset: Dataset) -> Dict[str, Dict[str, int]]:
     opstats = dict(input=dict(), output=dict())
     for network in networks_have_model.values():
         for nid, node in network.nn_graph.nodes.items():
-            op = str((node['type'], node['domain']))
+            op = (node['type'], node['domain'])
             ind = network.nn_graph.in_degree(nid)
             outd = network.nn_graph.out_degree(nid)
             if ind == 0 or outd == 0:
@@ -109,7 +109,7 @@ def get_opstats_of_xput(dataset: Dataset) -> Dict[str, Dict[str, int]]:
                 op_input_num = len(network.nn_nodes[str(nid)].operands)
                 op_output_num = len(network.nn_nodes[str(nid)].results)
                 opstat = opstats[kind].get(op, dict())
-                op_xput_num = str((op_input_num, op_output_num))
+                op_xput_num = (op_input_num, op_output_num)
                 xput_stat = opstat.get(op_xput_num, 0)
                 xput_stat += 1
                 opstat[op_xput_num] = xput_stat
