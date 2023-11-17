@@ -42,7 +42,7 @@ if __name__ == "__main__":
     assert dataset_path.is_dir(), f'Directory does not exist at the specified \"Dataset Path\": {dataset_path}.'
 
     save_dirpath = pathlib.Path(args.save_dirpath)
-    egstats_of_dataset_json = save_dirpath.joinpath('egstats_dataset.json')
+    egstats_of_dataset_json = save_dirpath.joinpath('egstats_dataset.txt')
     egstats_of_dataset_pkl = save_dirpath.joinpath('egstats_dataset.pkl')
 
     assert semantic_version.validate(args.version), f'The version provided must follow the SemVer 2.0.0 Specification.'

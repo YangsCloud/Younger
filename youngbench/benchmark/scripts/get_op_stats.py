@@ -41,11 +41,11 @@ if __name__ == "__main__":
     assert dataset_path.is_dir(), f'Directory does not exist at the specified \"Dataset Path\": {dataset_path}.'
 
     save_dirpath = pathlib.Path(args.save_dirpath)
-    opstats_of_dataset_json = save_dirpath.joinpath('opstats_dataset.json')
+    opstats_of_dataset_json = save_dirpath.joinpath('opstats_dataset.txt')
     opstats_of_dataset_pkl = save_dirpath.joinpath('opstats_dataset.pkl')
-    opstats_per_model_json = save_dirpath.joinpath('opstats_per_model.json')
+    opstats_per_model_json = save_dirpath.joinpath('opstats_per_model.txt')
     opstats_per_model_pkl = save_dirpath.joinpath('opstats_per_model.pkl')
-    opstats_of_xput_json = save_dirpath.joinpath('opstats_of_xput.json')
+    opstats_of_xput_json = save_dirpath.joinpath('opstats_of_xput.txt')
     opstats_of_xput_pkl = save_dirpath.joinpath('opstats_of_xput.pkl')
 
     assert semantic_version.validate(args.version), f'The version provided must follow the SemVer 2.0.0 Specification.'
