@@ -12,6 +12,8 @@
 
 import onnx
 
+from typing import List
+
 
 class Constant(object):
     def __setattr__(self, attribute_name, attribute_value):
@@ -21,6 +23,14 @@ class Constant(object):
 
     def __contains__(self, attribute_value):
         return attribute_value in self._values_
+
+    @property
+    def attributes(self) -> List:
+        attributes = list()
+        for key in self.__dict__.keys():
+            if key != '_values_':
+                attributes.append(key)
+        return attributes
 
     def freeze(self):
         values = set()
