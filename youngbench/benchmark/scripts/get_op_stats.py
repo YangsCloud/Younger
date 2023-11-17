@@ -29,7 +29,7 @@ if __name__ == "__main__":
     # Dataset Save/Load Path.
     parser.add_argument('-p', '--dataset-path', type=str, required=True)
 
-    parser.add_argument('-n', '--save-dirpath', type=str, default='')
+    parser.add_argument('-s', '--save-dirpath', type=str, default='')
     parser.add_argument('-l', '--logging-path', type=str, default='')
 
     # Dataset Release Version.

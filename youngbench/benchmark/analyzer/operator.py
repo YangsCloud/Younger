@@ -14,7 +14,18 @@ from typing import Set, List, Dict, Union, Tuple
 
 from youngbench.benchmark.analyzer.network import get_networks, get_networks_have_model, get_networks_with_subnetworks
 from youngbench.dataset.modules import Dataset, Prototype
-from youngbench.constants import ONNXOperandType
+from youngbench.constants import ONNXOperandType, ONNXOperatorType, ONNXOperatorDomain
+
+
+def get_onnx_operators() -> Set[Tuple[str, str]]:
+    onnx_operators = set()
+    def get_operators(domain: str) -> List:
+        for op_type in getattr(ONNXOperatorType, domain):
+            onnx_operators.add((op_type, getattr(ONNXOperatorDomain, domain)))
+        
+    for domain in ONNXOperatorType.attributes:
+        get_operators(domain)
+    return onnx_operators
 
 
 def get_opstats_of_prototype(prototype: Prototype) -> Dict[Tuple[str, str], Dict[str, Union[int, bool, Dict[Tuple[int, int], int]]]]:

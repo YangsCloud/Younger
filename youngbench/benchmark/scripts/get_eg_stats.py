@@ -30,7 +30,7 @@ if __name__ == "__main__":
     # Dataset Save/Load Path.
     parser.add_argument('-p', '--dataset-path', type=str, required=True)
 
-    parser.add_argument('-n', '--save-dirpath', type=str, default='')
+    parser.add_argument('-s', '--save-dirpath', type=str, default='')
     parser.add_argument('-l', '--logging-path', type=str, default='')
 
     # Dataset Release Version.
@@ -67,11 +67,11 @@ if __name__ == "__main__":
     with open(egstats_of_dataset_pkl, 'wb') as f:
         pickle.dump(egstats_of_dataset, f)
 
-    egstats_of_dataset = sorted(list(egstats_of_dataset.items()), key=lambda x: x[1])
+    egstats_of_dataset = sorted(list(egstats_of_dataset.items()), key=lambda x: x[1]['num'])
     stats_str = str()
     for (u_op, v_op), egstat_of_dataset in egstats_of_dataset:
         eg = f'{u_op} -> {v_op}'
-        stats_str += f'{eg:<80} \t {str(egstat_of_dataset)}\n'
+        stats_str += f'{eg:<80} \t {str(egstat_of_dataset["num"])}\n'
     logger.info(f'Below is edge statistics of Datset:\n{stats_str}')
 
     with open(egstats_of_dataset_json, 'w') as f:

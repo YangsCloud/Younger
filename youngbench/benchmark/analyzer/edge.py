@@ -17,12 +17,15 @@ from youngbench.dataset.modules import Dataset, Prototype
 from youngbench.constants import ONNXOperandType
 
 
-def get_egstats_of_prototype(prototype: Prototype) -> Dict[Tuple[Tuple[str, str], Tuple[str, str]], int]:
+def get_egstats_of_prototype(prototype: Prototype) -> Dict[Tuple[Tuple[str, str], Tuple[str, str]], Dict[str, Union[int, List[Dict[str, Union[int, str]]]]]]:
     # dict{
     #   tuple(
     #       tuple(op_type, op_domain),
     #       tuple(op_type, op_domain)
-    #   ): num: int
+    #   ): dict(
+    #       num: int
+    #       nis: list(tuple(str, str, int, int))
+    #      )
     # }
     egstats = dict()
     for (u_nid, v_nid), edge in prototype.nn_graph.edges.items():
@@ -31,27 +34,32 @@ def get_egstats_of_prototype(prototype: Prototype) -> Dict[Tuple[Tuple[str, str]
         u_op = (u_node['type'], u_node['domain'])
         v_op = (v_node['type'], v_node['domain'])
         eg = (u_op, v_op)
-        egstat = egstats.get(eg, 0)
-        egstat += 1
+        egstat = egstats.get(eg, dict(num=0, nis=list()))
+        egstat['num'] += 1
+        egstat['nis'].append(edge)
         egstats[eg] = egstat
 
     return egstats
 
 
-def get_egstats_of_dataset(dataset: Dataset, count_model: bool = True) -> Dict[str, int]:
+def get_egstats_of_dataset(dataset: Dataset, count_model: bool = True) -> Dict[Tuple[Tuple[str, str], Tuple[str, str]], Dict[str, Union[int, List[Tuple[str, str, int, int]]]]]:
     # dict{
     #   tuple(
     #       tuple(op_type, op_domain),
     #       tuple(op_type, op_domain)
-    #   ): num: int
+    #   ): dict(
+    #       num: int
+    #       nis: list(tuple(str, str, int, int))
+    #      )
     # }
     all_networks = get_networks(dataset)
     egstats = dict()
     for network in all_networks.values():
         egstats_of_net = get_egstats_of_prototype(network)
         for eg, egstat_of_pt in egstats_of_net.items():
-            egstat = egstats.get(eg, 0)
-            egstat += egstat_of_pt * (max(1, len(network.models)) if count_model else 1)
+            egstat = egstats.get(eg, dict(num=0, nis=list()))
+            egstat['num'] += egstat_of_pt['num'] * (max(1, len(network.models)) if count_model else 1)
+            egstat['nis'].extend(egstat_of_pt['nis'])
             egstats[eg] = egstat
 
     return egstats
