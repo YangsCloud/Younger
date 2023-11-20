@@ -13,16 +13,35 @@
 import networkx
 import itertools
 
-from typing import Any, Set, List, Generator
+from typing import Any, Set, List, Tuple, Union, Optional, Generator
 
 
-def get_connected_subgraphs(size: int, graph: networkx.Graph) -> Set[Set[Any]]:
+def shallow_copy_of_graph(graph: Union[networkx.Graph, networkx.DiGraph], node_attribute: bool = False, edge_attribute: bool = False) -> Union[networkx.Graph, networkx.DiGraph]:
+    copied_graph = graph.__class__()
+    copied_graph.add_nodes_from(graph.nodes(data=node_attribute))
+    copied_graph.add_edges_from(graph.edges(data=edge_attribute))
+    return copied_graph
+
+
+def get_weakly_connected_subgraphs(size: int, directed_graph: networkx.DiGraph, detail: bool = False) -> Union[Set[Set[Any]], List[networkx.DiGraph]]:
+    assert isinstance(directed_graph, networkx.DiGraph)
+    graph = directed_graph.to_undirected(as_view=True)
+    all_combinations = get_connected_subgraphs(size, graph)
+
+    if detail:
+        subgraphs = list()
+        for combination in all_combinations:
+            subgraph = directed_graph.subgraph(combination)
+            subgraphs.append(subgraph)
+        return subgraphs
+    else:
+        return all_combinations
+
+
+def get_connected_subgraphs(size: int, graph: networkx.Graph, detail: bool = False) -> Union[Set[Set[Any]], List[networkx.Graph]]:
     # Karakashian, Shant Kirakos et al. “An Algorithm for Generating All Connected Subgraphs with k Vertices of a Graph.” (2013).
-    #assert isinstance(graph, networkx.Graph)
-    copy_graph = graph.__class__()
-    copy_graph.add_nodes_from(graph.nodes)
-    copy_graph.add_edges_from(graph.edges)
-    graph = copy_graph
+    assert isinstance(graph, networkx.Graph)
+    graph = shallow_copy_of_graph(graph)
     vertices = list()
     for node in graph.nodes:
         vertices.append(node)
@@ -32,7 +51,15 @@ def get_connected_subgraphs(size: int, graph: networkx.Graph) -> Set[Set[Any]]:
         combinations = get_combinations_with_v(vertex, size, graph)
         all_combinations |= combinations
         graph.remove_node(vertex)
-    return all_combinations
+    
+    if detail:
+        subgraphs = list()
+        for combination in all_combinations:
+            subgraph = graph.subgraph(combination)
+            subgraphs.append(subgraph)
+        return subgraphs
+    else:
+        return all_combinations
 
 
 def get_combinations_with_v(vertex: Any, size: int, graph: networkx.Graph) -> Set[Set[Any]]:
