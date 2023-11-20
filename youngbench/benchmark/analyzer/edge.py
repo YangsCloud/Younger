@@ -12,9 +12,8 @@
 
 from typing import Set, List, Dict, Union, Tuple
 
-from youngbench.benchmark.analyzer.network import get_networks, get_networks_have_model, get_networks_with_subnetworks
+from youngbench.benchmark.analyzer.network import get_networks
 from youngbench.dataset.modules import Dataset, Prototype
-from youngbench.constants import ONNXOperandType
 
 
 def get_egstats_of_prototype(prototype: Prototype) -> Dict[Tuple[Tuple[str, str], Tuple[str, str]], Dict[str, Union[int, List[Dict[str, Union[int, str]]]]]]:
