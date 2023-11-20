@@ -13,3 +13,4 @@
 from youngbench.benchmark.analyzer.edge import *
 from youngbench.benchmark.analyzer.network import *
 from youngbench.benchmark.analyzer.operator import *
+from youngbench.benchmark.analyzer.subgraph import *
