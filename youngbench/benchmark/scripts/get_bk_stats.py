@@ -20,7 +20,7 @@ import semantic_version
 
 import matplotlib.pyplot as plt
 
-from youngbench.benchmark.analyzer import get_networks, get_blocks_of_prototype
+from youngbench.benchmark.analyzer import save_bkstats_of_dataset, load_bkstats_of_dataset, get_bkstats_of_dataset
 
 from youngbench.dataset.modules import Dataset
 from youngbench.dataset.utils.management import check_dataset
@@ -35,6 +35,7 @@ if __name__ == "__main__":
 
     parser.add_argument('-s', '--save-dirpath', type=str, default='')
     parser.add_argument('-l', '--logging-path', type=str, default='')
+    parser.add_argument('-b', '--block-sizes', nargs='+', type=int, default=[3,])
 
     # Dataset Release Version.
     parser.add_argument('--version', type=str, default='')
@@ -46,7 +47,7 @@ if __name__ == "__main__":
 
     save_dirpath = pathlib.Path(args.save_dirpath)
     bkstats_of_dataset_json = save_dirpath.joinpath('bkstats_dataset.txt')
-    bkstats_of_dataset_pkl = save_dirpath.joinpath('bkstats_dataset.pkl')
+    bkstats_of_dataset_dir = save_dirpath.joinpath('bkstats_dataset')
 
     assert semantic_version.validate(args.version), f'The version provided must follow the SemVer 2.0.0 Specification.'
     version = semantic_version.Version(args.version)
@@ -66,19 +67,20 @@ if __name__ == "__main__":
     dataset = dataset.acquire(version)
     logger.info(f' ^ Got. ')
 
-    for index, network in enumerate(get_networks(dataset).values()):
-        print(get_blocks_of_prototype(network, [3, 4, 5]))
 
-    # egstats_of_dataset = get_egstats_of_dataset(dataset)
-    # with open(bkstats_of_dataset_pkl, 'wb') as f:
-    #     pickle.dump(bkstats_of_dataset, f)
+    bkstats_of_dataset = get_bkstats_of_dataset(dataset, args.block_sizes)
+    save_bkstats_of_dataset(bkstats_of_dataset, bkstats_of_dataset_dir)
 
-    # egstats_of_dataset = sorted(list(egstats_of_dataset.items()), key=lambda x: x[1]['num'])
-    # stats_str = str()
-    # for (u_op, v_op), egstat_of_dataset in egstats_of_dataset:
-    #     eg = f'{u_op} -> {v_op}'
-    #     stats_str += f'{eg:<80} \t {str(egstat_of_dataset["num"])}\n'
-    # logger.info(f'Below is edge statistics of Datset:\n{stats_str}')
+    overall_stats_str = str()
+    for block_size, bkstats_of_dataset_at_size in sorted(bkstats_of_dataset.items(), key=lambda x: x[0]):
+        bkstats_of_dataset_at_size = sorted(list(bkstats_of_dataset_at_size.items()), key=lambda x: x[1]['num'])
+        stats_str = str()
+        for wl_hash, bkstat in bkstats_of_dataset_at_size:
+            stats_str += f'{str(block_size):<6} {wl_hash:<38} {str(bkstat["num"])}\n'
+            for (u_nid, v_nid) in bkstat['absbk'].edges:
+                stats_str += f'    {bkstat["absbk"].nodes[u_nid]["op"]} -> {bkstat["absbk"].nodes[v_nid]["op"]}\n'
+        overall_stats_str += stats_str
+    logger.info(f'Below is block statistics of Datset:\n{overall_stats_str}')
 
-    # with open(egstats_of_dataset_json, 'w') as f:
-    #     f.writelines(stats_str)
+    with open(bkstats_of_dataset_json, 'w') as f:
+        f.writelines(overall_stats_str)
