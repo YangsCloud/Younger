@@ -650,7 +650,7 @@ class Network(Prototype):
                     i2x_this = i2x.get(input, list())
                     i2x_this.append((nid, operand_name, index))
                     i2x[input] = i2x_this
-                    nid2x[nid]['input'][origin_index] = operand_name
+                    nid2x[nid]['input'][origin_index] = (operand_name, index)
 
                 results = dict()
                 nid2x[nid]['output'] = dict()
@@ -665,7 +665,7 @@ class Network(Prototype):
                     o2x_this = o2x.get(output, list())
                     o2x_this.append((nid, result_name, index))
                     o2x[output] = o2x_this
-                    nid2x[nid]['output'][origin_index] = result_name
+                    nid2x[nid]['output'][origin_index] = (result_name, index)
 
                 node = Node(
                     operator_type=node.op_type,
@@ -698,7 +698,7 @@ class Network(Prototype):
                     i2x_this = i2x.get(input, list())
                     i2x_this.append((nid, input, index))
                     i2x[input] = i2x_this
-                    nid2x[nid]['input'][index] = input
+                    nid2x[nid]['input'][index] = (input, index)
 
                 results = dict()
                 nid2x[nid]['output'] = dict()
@@ -707,7 +707,7 @@ class Network(Prototype):
                     o2x_this = o2x.get(output, list())
                     o2x_this.append((nid, output, index))
                     o2x[output] = o2x_this
-                    nid2x[nid]['output'][index] = output
+                    nid2x[nid]['output'][index] = (output, index)
 
                 node = Node(
                     operator_type=node.op_type,
@@ -729,8 +729,7 @@ class Network(Prototype):
 
             for index, input in enumerate(node.input):
                 v_nid = nid
-                v_opn = nid2x[nid]['input'][index]
-                v_opi = index
+                (v_opn, v_opi) = nid2x[nid]['input'][index]
                 if input in o2x:
                     for o2x_this in o2x[input]:
                         u_nid, u_opn, u_opi = o2x_this
@@ -738,8 +737,7 @@ class Network(Prototype):
 
             for index, output in enumerate(node.output):
                 u_nid = nid
-                u_opn = nid2x[nid]['output'][index]
-                u_opi = index
+                (u_opn, u_opi) = nid2x[nid]['output'][index]
                 if output in i2x:
                     for i2x_this in i2x[output]:
                         v_nid, v_opn, v_opi = i2x_this
@@ -846,7 +844,7 @@ class Network(Prototype):
                     i2x_this = i2x.get(input, list())
                     i2x_this.append((nid, operand_name, index))
                     i2x[input] = i2x_this
-                    nid2x[nid]['input'][origin_index] = operand_name
+                    nid2x[nid]['input'][origin_index] = (operand_name, index)
                     is_first |= input in inputs
 
                 is_last = False
@@ -866,7 +864,7 @@ class Network(Prototype):
                     o2x_this = o2x.get(output, list())
                     o2x_this.append((nid, result_name, index))
                     o2x[output] = o2x_this
-                    nid2x[nid]['output'][origin_index] = result_name
+                    nid2x[nid]['output'][origin_index] = (result_name, index)
                     is_last |= output in outputs
 
                 node = Node(
@@ -902,7 +900,7 @@ class Network(Prototype):
                     i2x_this = i2x.get(input, list())
                     i2x_this.append((nid, input, index))
                     i2x[input] = i2x_this
-                    nid2x[nid]['input'][index] = input
+                    nid2x[nid]['input'][index] = (input, index)
 
                 results = dict()
                 nid2x[nid]['output'] = dict()
@@ -914,7 +912,7 @@ class Network(Prototype):
                     o2x_this = o2x.get(output, list())
                     o2x_this.append((nid, output, index))
                     o2x[output] = o2x_this
-                    nid2x[nid]['output'][index] = output
+                    nid2x[nid]['output'][index] = (output, index)
 
                 node = Node(
                     operator_type=node.op_type,
@@ -936,8 +934,7 @@ class Network(Prototype):
 
             for index, input in enumerate(node.input):
                 v_nid = nid
-                v_opn = nid2x[nid]['input'][index]
-                v_opi = index
+                v_opn, v_opi = nid2x[nid]['input'][index]
                 if input in o2x:
                     for o2x_this in o2x[input]:
                         u_nid, u_opn, u_opi = o2x_this
@@ -945,8 +942,7 @@ class Network(Prototype):
 
             for index, output in enumerate(node.output):
                 u_nid = nid
-                u_opn = nid2x[nid]['output'][index]
-                u_opi = index
+                u_opn, u_opi = nid2x[nid]['output'][index]
                 if output in i2x:
                     for i2x_this in i2x[output]:
                         v_nid, v_opn, v_opi = i2x_this
