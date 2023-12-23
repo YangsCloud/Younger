@@ -13,11 +13,12 @@
 import sys
 import onnx
 import json
+import pickle
 import hashlib
 import pathlib
 
 from onnx import version_converter
-from typing import List, Dict, Union
+from typing import List, Union, Optional
 
 from youngbench.logging import logger
 from youngbench.constants import ONNX
@@ -67,62 +68,93 @@ def create_dir(dirpath: pathlib.Path) -> None:
     return
 
 
-def read_json(filepath: pathlib.Path) -> object:
+def load_json(filepath: pathlib.Path) -> object:
     try:
         with open(filepath, 'r') as file:
             serializable_object = json.load(file)
     except Exception as e:
-        logger.error(f'An Error occurred while reading serializable object from the file: {str(e)}')
+        logger.error(f'An Error occurred while reading serializable object from the \'json\' file: {str(e)}')
         sys.exit(1)
 
     return serializable_object
 
 
-def write_json(serializable_object: object, filepath: pathlib.Path) -> None:
+def save_json(serializable_object: object, filepath: pathlib.Path) -> None:
     try:
         create_dir(filepath.parent)
         with open(filepath, 'w') as file:
             json.dump(serializable_object, file)
     except Exception as e:
-        logger.error(f'An Error occurred while writing serializable object into the file: {str(e)}')
+        logger.error(f'An Error occurred while writing serializable object into the \'json\' file: {str(e)}')
         sys.exit(1)
 
     return
 
 
-def check_onnx_model(onnx_model_handler: Union[onnx.ModelProto, pathlib.Path]) -> str:
-    assert isinstance(onnx_model_handler, onnx.ModelProto) or isinstance(onnx_model_handler, pathlib.Path)
-    if isinstance(onnx_model_handler, onnx.ModelProto):
-        onnx_model = onnx_model_handler
-    if isinstance(onnx_model_handler, pathlib.Path):
-        onnx_model = onnx.load(str(onnx_model_handler))
+def load_pickle(filepath: pathlib.Path) -> object:
     try:
-        if len(onnx_model.graph.node) == 0:
-            check_result = str()
+        with open(filepath, 'rb') as file:
+            safety_data = pickle.load(file)
+        
+        assert hash_bytes(safety_data['main']) == safety_data['checksum']
+        serializable_object = pickle.loads(safety_data['main'])
+    except Exception as e:
+        logger.error(f'An Error occurred while reading serializable object from the \'pickle\' file: {str(e)}')
+        sys.exit(1)
+
+    return serializable_object
+
+
+def save_pickle(serializable_object: object, filepath: pathlib.Path) -> None:
+    # try:
+    create_dir(filepath.parent)
+    serialized_object = pickle.dumps(serializable_object)
+    safety_data = dict(
+        main=serialized_object,
+        checksum=hash_bytes(serialized_object)
+    )
+    with open(filepath, 'wb') as file:
+        pickle.dump(safety_data, file)
+    # except Exception as e:
+    #     logger.error(f'An Error occurred while writing serializable object into the \'pickle\' file: {str(e)}')
+    #     sys.exit(1)
+
+    return
+
+
+def check_model(model_handler: Union[onnx.ModelProto, pathlib.Path]) -> Optional[str]:
+    assert isinstance(model_handler, onnx.ModelProto) or isinstance(model_handler, pathlib.Path)
+    if isinstance(model_handler, onnx.ModelProto):
+        model = model_handler
+    if isinstance(model_handler, pathlib.Path):
+        model = onnx.load(str(model_handler))
+    try:
+        if len(model.graph.node) == 0:
+            check_result = None
         else:
-            onnx_model = onnx_model.SerializeToString()
-            onnx.checker.check_model(onnx_model)
-            check_result = hash_bytes(onnx_model)
+            model = model.SerializeToString()
+            onnx.checker.check_model(model)
+            check_result = hash_bytes(model)
     except onnx.checker.ValidationError as check_error:
         logger.warn(f'The ONNX Model is invalid: {check_error}')
-        check_result = str()
+        check_result = None
     except Exception as error:
         logger.error(f'An error occurred while checking the ONNX model: {error}')
         sys.exit(1)
     return check_result
 
 
-def load_onnx_model(model_filepath: pathlib.Path) -> onnx.ModelProto:
+def load_model(model_filepath: pathlib.Path) -> onnx.ModelProto:
     model = onnx.load(model_filepath)
     return model
 
 
-def save_onnx_model(onnx_model: onnx.ModelProto, model_filepath: pathlib.Path) -> None:
+def save_model(model: onnx.ModelProto, model_filepath: pathlib.Path) -> None:
     create_dir(model_filepath.parent)
-    onnx.save(onnx_model, model_filepath)
+    onnx.save(model, model_filepath)
     return
 
 
-def clean_onnx_model(onnx_model: onnx.ModelProto) -> onnx.ModelProto:
-    onnx_model = version_converter.convert_version(onnx_model, ONNX.OPSetVersions[-1])
-    return onnx_model
+def clean_model(model: onnx.ModelProto) -> onnx.ModelProto:
+    model = version_converter.convert_version(model, ONNX.OPSetVersions[-1])
+    return model
