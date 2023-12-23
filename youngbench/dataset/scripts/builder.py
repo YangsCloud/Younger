@@ -19,10 +19,10 @@ from onnx import hub
 from typing import Generator, Tuple
 
 from youngbench.dataset.modules import Dataset
+from youngbench.dataset.modules import Instance
 
-from youngbench.dataset.utils.io import load_onnx_model
+from youngbench.dataset.utils.io import load_model
 from youngbench.dataset.utils.cache import set_cache_root, get_cache_root
-from youngbench.dataset.utils.management import enrich_dataset
 from youngbench.logging import set_logger, logger
 
 
@@ -59,7 +59,7 @@ def get_official_onnx_models(onnx: bool = False, pytorch: bool = False, tensorfl
 
 def get_provided_onnx_models(onnx_path: pathlib.Path) -> Generator[Tuple[str, onnx.ModelProto], None, None]:
     for filepath in onnx_path.iterdir():
-        onnx_model = load_onnx_model(filepath)
+        onnx_model = load_model(filepath)
         yield (filepath.stem, onnx_model)
 
 
@@ -78,7 +78,7 @@ if __name__ == "__main__":
     parser.add_argument('--version', type=str, required=True)
 
     # ONNX Models' Dir
-    parser.add_argument('--onnx-path', type=str, default='')
+    parser.add_argument('--onnx-hub-path', type=str, default='')
 
     # Dataset Save/Load Path.
     parser.add_argument('--load-path', type=str, default='')
@@ -110,12 +110,12 @@ if __name__ == "__main__":
     dataset = Dataset()
 
     if args.mode == 'Create':
-        if len(args.onnx_path) == 0:
+        if len(args.onnx_hub_path) == 0:
             logger.info(f'Using default ONNX Hub cache location.')
         else:
-            onnx_path = pathlib.Path(args.onnx_path)
-            assert onnx_path.is_dir(), f'Directory does not exists at the specified \"ONNX Path\": {onnx_path}.'
-            hub.set_dir(str(onnx_path.absolute()))
+            onnx_hub_path = pathlib.Path(args.onnx_hub_path)
+            assert onnx_hub_path.is_dir(), f'Directory does not exists at the specified \"ONNX Path\": {onnx_hub_path}.'
+            hub.set_dir(str(onnx_hub_path.absolute()))
             logger.info(f'ONNX Hub cache location is set to: {hub.get_dir()}')
 
         save_path = pathlib.Path(args.save_path)
@@ -124,8 +124,8 @@ if __name__ == "__main__":
         onnx_models = get_official_onnx_models(onnx=True, pytorch=False, tensorflow=False)
 
     if args.mode == 'Update':
-        onnx_path = pathlib.Path(args.onnx_path)
-        assert onnx_path.is_dir(), f'Directory does not exists at the specified \"ONNX Path\": {onnx_path}.'
+        onnx_hub_path = pathlib.Path(args.onnx_hub_path)
+        assert onnx_hub_path.is_dir(), f'Directory does not exists at the specified \"ONNX Path\": {onnx_hub_path}.'
 
         if args.load_path == '':
             load_path = pathlib.Path('.')
@@ -141,7 +141,7 @@ if __name__ == "__main__":
 
         dataset.load(load_path)
 
-        onnx_models = get_provided_onnx_models(onnx_path)
+        onnx_models = get_provided_onnx_models(onnx_hub_path)
 
     logger.info(f'-> Dataset Initialized.')
 
@@ -149,7 +149,9 @@ if __name__ == "__main__":
     for index, (onnx_model_name, onnx_model) in enumerate(onnx_models):
         opset = get_opset_version(onnx_model)
         logger.info(f' # {index+1}: Now processing the model: {onnx_model_name} (ONNX opset={opset})')
-        enrich_dataset(onnx_model, dataset, name=onnx_model_name, opset=opset)
+        dataset.insert(Instance(model=onnx_model, labels=dict(name=onnx_model_name)))
+        if (index+1) % 1 == 0:
+            break
     logger.info(f'-> Created.')
 
     logger.info(f'-> Dataset Releasing ...')

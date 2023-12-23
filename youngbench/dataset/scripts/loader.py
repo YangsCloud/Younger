@@ -15,8 +15,8 @@ import argparse
 import semantic_version
 
 from youngbench.dataset.modules import Dataset
-from youngbench.dataset.utils.management import check_dataset
 from youngbench.logging import set_logger, logger
+from youngbench.constants import InstanceLabelName
 
 
 if __name__ == "__main__":
@@ -46,7 +46,7 @@ if __name__ == "__main__":
     logger.info(f' ^ Loaded. ')
 
     logger.info(f' v Checking Dataset {version}... ')
-    check_dataset(dataset, whole_check=False)
+    dataset.check()
     logger.info(f' ^ Checked. ')
 
     logger.info(f' v Getting Version {version} Dataset ... ')
@@ -58,13 +58,11 @@ if __name__ == "__main__":
     total_network = 0
     for index, (instance_identifier, instance) in enumerate(dataset.instances.items()):
         logger.info(f' . No.{index} Instance: {instance_identifier}')
-        for network_index, (network_identifier, network) in enumerate(instance.networks.items()):
-            total_network += 1
-            logger.info(f' . \u2514 No.{network_index} Network: {network_identifier}')
-            logger.info(f' .   \u2514 - {network.nn_graph}')
-            for model_index, (model_identifier, model) in enumerate(network.models.items()):
-                total_model += 1
-                logger.info(f' .   \u2514 No.{model_index} Model: [= {model.name} (opset={model.opset}) =] {model_identifier}')
+        logger.info(f' . \u2514 Network: {instance.network.hash}')
+        logger.info(f' .   \u2514 Simplified Graph: {len(instance.network.simplified_graph)}')
+        logger.info(f' . \u2514 Model: Name - {instance.labels[InstanceLabelName.Name]}')
+        total_model += 1
+        total_network += len(instance.network.simplified_graph)
 
     logger.info(f' - Total Models: {total_model}')
     logger.info(f' - Total Networks: {total_network}')
