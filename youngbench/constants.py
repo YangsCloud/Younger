@@ -148,5 +148,24 @@ ONNXAttributeType = ONNX_ATTRIBUTE_TYPE()
 ONNXAttributeType.initialize()
 ONNXAttributeType.freeze()
 
+
+class INSTANCE_LABEL_NAME(Constant):
+    def initialize(self) -> None:
+        label_names = dict(
+            Name = 'name',
+            Framework = 'framework',
+            Download = 'download',
+            Like = 'like',
+        )
+        for name, value in label_names.items():
+            setattr(self, name, value)
+        return
+
+
+InstanceLabelName = INSTANCE_LABEL_NAME()
+InstanceLabelName.initialize()
+InstanceLabelName.freeze()
+
+
 ONNX = Constant()
 ONNX.OPSetVersions = sorted(set(schema.since_version for schema in onnx.defs.get_all_schemas_with_history()))
