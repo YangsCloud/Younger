@@ -10,10 +10,8 @@
 # LICENSE file in the root directory of this source tree.
 
 
-from youngbench.dataset.modules.meta import Meta
-from youngbench.dataset.modules.stamp import Stamp
 from youngbench.dataset.modules.dataset import Dataset
 from youngbench.dataset.modules.instance import Instance
-from youngbench.dataset.modules.network import Prototype, Network
-from youngbench.dataset.modules.model import Model
-from youngbench.dataset.modules.node import Node
+from youngbench.dataset.modules.network import Network
+from youngbench.dataset.modules.stamp import Stamp
+from youngbench.dataset.modules.meta import Meta
