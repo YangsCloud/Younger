@@ -747,7 +747,7 @@ def trans_model_proto(model: onnx.ModelProto) -> networkx.DiGraph:
 
     producer_name: str = model.producer_name
     producer_version: str = model.producer_version
-    domain: str = model.domain,
+    domain: str = model.domain
     model_version: int = model.model_version
     doc_string: str = model.doc_string
 

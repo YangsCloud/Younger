@@ -150,8 +150,6 @@ if __name__ == "__main__":
         opset = get_opset_version(onnx_model)
         logger.info(f' # {index+1}: Now processing the model: {onnx_model_name} (ONNX opset={opset})')
         dataset.insert(Instance(model=onnx_model, labels=dict(name=onnx_model_name)))
-        if (index+1) % 1 == 0:
-            break
     logger.info(f'-> Created.')
 
     logger.info(f'-> Dataset Releasing ...')
