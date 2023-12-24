@@ -14,7 +14,7 @@ import onnx
 import pathlib
 import networkx
 
-from typing import List, Dict, Union, Optional
+from typing import Any, List, Dict, Union, Optional
 
 from youngbench.dataset.utils.io import load_json, save_json, load_pickle, save_pickle, create_dir
 
@@ -128,7 +128,7 @@ class Network(object):
         self._simplified_graph = list()
         for hash_string in hash_strings:
             simplified_graph_filepath = simplified_graph_dirpath.joinpath(f'{hash_string}.gml')
-            self._simplified_graph.append(networkx.read_gml(simplified_graph_filepath))
+            self._simplified_graph.append(networkx.read_gml(simplified_graph_filepath, destringizer=self.__class__.destringizer))
         return
 
     def _save_simplified_graph(self, simplified_graph_dirpath: pathlib.Path) -> None:
@@ -139,7 +139,7 @@ class Network(object):
         for simplified_graph in self._simplified_graph:
             hash_string = networkx.weisfeiler_lehman_graph_hash(simplified_graph)
             simplified_graph_filepath = simplified_graph_dirpath.joinpath(f'{hash_string}.gml')
-            networkx.write_gml(simplified_graph, simplified_graph_filepath)
+            networkx.write_gml(simplified_graph, simplified_graph_filepath, stringizer=self.__class__.stringizer)
             hash_strings.append(hash_string)
         save_pickle(hash_strings, simplified_graph_hash_filepath)
         return
@@ -153,6 +153,20 @@ class Network(object):
         assert not info_filepath.is_file(), f'\"INFO\" can not be saved into the specified path \"{info_filepath.absolute()}\".'
         save_json(self._info, info_filepath)
         return
+
+    @classmethod
+    def destringizer(cls, tobe_loaded: str) -> Any:
+        if tobe_loaded == '_YoungBench_None_':
+            return None
+        else:
+            return tobe_loaded
+
+    @classmethod
+    def stringizer(cls, tobe_saved: Any) -> str:
+        if tobe_saved == None:
+            return '_YoungBench_None_'
+        else:
+            return tobe_saved
 
     @classmethod
     def simplify(cls, graph: networkx.DiGraph) -> List[networkx.DiGraph]:
