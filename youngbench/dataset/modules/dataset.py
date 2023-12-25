@@ -131,7 +131,7 @@ class Dataset(object):
         assert not instances_dirpath.is_dir(), f'\"Instance\"s can not be saved into the specified directory \"{instances_dirpath.absolute()}\".'
         logger.info(f' = [YBD] = Saving Instances ...')
         for index, unique in enumerate(self._uniques):
-            logger.info(f' = [YBD] = No.{index} Instance: {unique}')
+            logger.info(f' = [YBD] = No.{index+1} Instance: {unique}')
             instance_dirpath = instances_dirpath.joinpath(f'{index}-{unique}')
             instance = self._instances[unique]
             instance.save(instance_dirpath)
@@ -143,7 +143,7 @@ class Dataset(object):
         for index, unique in enumerate(self._uniques):
             instance = self._instances[unique]
             if (instance.meta.release and instance.meta.release_version <= version) and (not instance.meta.retired or version < instance.meta.retired_version):
-                logger.info(f' = [YBD] = Acquired No.{index} Instance: {unique}')
+                logger.info(f' = [YBD] = Acquired No.{index+1} Instance: {unique}')
                 dataset.insert(instance)
         dataset.release(version=version)
         return dataset
