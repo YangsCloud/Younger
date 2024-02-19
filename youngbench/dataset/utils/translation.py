@@ -14,9 +14,12 @@ import sys
 import onnx
 import networkx
 
-from typing import Any, Set, List, Dict, Tuple, Union, Callable
+from typing import Any, Set, List, Dict, Tuple, Union, Optional, Callable
+from functools import partial
 from onnx.shape_inference import infer_shapes
 from onnx.inliner import inline_local_functions
+
+from youngbench.constants import ONNXOperatorDomain
 
 
 def trans_string_string_entry_proto(string_string_entry_proto: onnx.StringStringEntryProto) -> Dict:
@@ -138,6 +141,8 @@ def trans_type_proto(type_proto: onnx.TypeProto) -> Dict:
                 print(f'Support for handling other field ({type_name}) functionality is not yet available.')
                 raise NotImplementedError
             break
+        else:
+            type_proto_dict = dict()
     return type_proto_dict
 
 
@@ -271,7 +276,7 @@ def trans_sparse_tensor_proto(sparse_tensor_proto: onnx.SparseTensorProto) -> Di
     return sparse_tensor_proto_dict
 
 
-def trans_attribute_proto(attribute_proto: onnx.AttributeProto, trans_graph_proto_method: Callable[[onnx.GraphProto], Any]) -> Dict:
+def trans_attribute_proto(attribute_proto: onnx.AttributeProto, trans_graph_proto_method: Callable[[onnx.GraphProto, ], Any]) -> Dict:
     # Collect arguments that are used in onnx.helper.make_attribute(key: str, value: Any, doc_string: str | None = None, attr_type: int | None = None) → AttributeProto
     # 1. A named attribute containing either singular float, integer, string, graph, and tensor values, or repeated float, integer, string, graph, and tensor values.
     # 2. An AttributeProto MUST contain the name field, and *only one* of the following content fields, effectively enforcing a C/C++ union equivalent.
@@ -392,9 +397,33 @@ def trans_attribute_proto(attribute_proto: onnx.AttributeProto, trans_graph_prot
     return attribute_proto_dict
 
 
-def trans_node_proto(node_proto: onnx.NodeProto) -> Dict:
+def trans_node_io(node_proto: onnx.NodeProto) -> Tuple[Dict[str, int], Dict[str, int]]:
+    # Process inputs
+    # An input of a node specifies a Tail endpoint of a Hidden edge.
+    operands: Dict[str, int] = dict()
+    for node_input_index, node_input in enumerate(node_proto.input):
+        if node_input == '':
+            continue
+        else:
+            operands[node_input] = node_input_index
+
+    # Process outputs
+    # An output of a node specifies a Head endpoint of a Hidden edge.
+    results: Dict[str, int] = dict()
+    for node_output_index, node_output in enumerate(node_proto.output):
+        if node_output == '':
+            raise onnx.defs.SchemaError
+        else:
+            results[node_output] = node_output_index
+
+    return (operands, results)
+
+
+def trans_node_proto(node_proto: onnx.NodeProto, trans_graph_proto_method: Callable[[onnx.GraphProto, ], Any]) -> Dict:
     # TODO: Code ignores the processing of all third-party operators, excluding those defined by the official ONNX specification and user-defined functions.
     # TODO: In the future, functionality to handle these third-party operators will need to be added.
+    # NOTE: A node input in a nested subgraph MAY refer to names introduced in outer graphs (as node outputs, graph inputs, or graph initializers).
+    # NOTE: In the case of a nested subgraph, a node output name MUST be distinct from the names from the outer scopes that are visible in the nested subgraph.
     # Collect arguments that are used in onnx.helper.make_node(op_type: str, inputs: Sequence[str], outputs: Sequence[str], name: str | None = None, doc_string: str | None = None, domain: str | None = None, **kwargs: Any) → NodeProto
     # message NodeProto {
     #   repeated string input = 1;    // namespace Value
@@ -463,29 +492,13 @@ def trans_node_proto(node_proto: onnx.NodeProto) -> Dict:
             if last_output.option.value == last_output.option.Variadic.value:
                 assert len(node_proto.input) >= len(schema.inputs) - 1
 
-    # Process inputs
-    # An input of a node specifies a Tail endpoint of a Hidden edge.
-    operands: Dict[str, int] = dict()
-    for node_input_index, node_input in enumerate(node_proto.input):
-        if node_input == '':
-            continue
-        else:
-            operands[node_input] = node_input_index
-
-    # Process outputs
-    # An output of a node specifies a Head endpoint of a Hidden edge.
-    results: Dict[str, int] = dict()
-    for node_output_index, node_output in enumerate(node_proto.output):
-        if node_output == '':
-            raise onnx.defs.SchemaError
-        else:
-            results[node_output] = node_output_index
+    (operands, results) = trans_node_io(node_proto)
 
     # Process attributes
     # Record whether there is a subgraph
     node_proto_attributes: Dict[str, Dict] = dict()
     for node_proto_attribute in node_proto.attribute:
-        node_proto_attribute = trans_attribute_proto(node_proto_attribute, trans_graph_proto_method=trans_graph_proto)
+        node_proto_attribute = trans_attribute_proto(node_proto_attribute, trans_graph_proto_method=trans_graph_proto_method)
         key = node_proto_attribute.pop('key')
         node_proto_attributes[key] = node_proto_attribute
 
@@ -500,11 +513,20 @@ def trans_node_proto(node_proto: onnx.NodeProto) -> Dict:
     return node_proto_dict
 
 
-def trans_graph_proto(ox_graph: onnx.GraphProto) -> networkx.DiGraph:
+def trans_graph_proto(ox_graph: onnx.GraphProto, outer_dataflow2source: Optional[Dict[str, Tuple[int, int]]] = None, verbose: bool = False) -> networkx.DiGraph:
+    # TODO: Some `value_info` may not be inferred by the `onnx.shape_inference.infer_shapes` method.
+    # TODO: This is because there are operators outside the official ONNX domain in the graph.
+    # TODO: Support for this part will need to be added in the future.
+    outer_dataflow2source = outer_dataflow2source or dict()
     nx_graph = networkx.DiGraph()
 
-    def get_complete_node_attributes(node_type: str, node_attributes: Dict) -> Dict:
-        assert node_type in {'input', 'output', 'constant', 'operator'}
+    def get_complete_node_attributes(node_type: str, node_attributes: Dict = None) -> Dict:
+        assert node_type in {'outer', 'input', 'output', 'constant', 'operator'}
+        node_attributes = node_attributes or dict()
+
+        outer_attributes = dict(
+            outer_names = None,
+        )
         input_attributes = dict(
             graph_inputs = None,
         )
@@ -523,6 +545,8 @@ def trans_graph_proto(ox_graph: onnx.GraphProto) -> networkx.DiGraph:
             attributes = None,
         )
 
+        if node_type == 'outer':
+            specific_attributes = outer_attributes
         if node_type == 'input':
             specific_attributes = input_attributes
         if node_type == 'output':
@@ -537,6 +561,7 @@ def trans_graph_proto(ox_graph: onnx.GraphProto) -> networkx.DiGraph:
                 specific_attributes[node_attribute_key] = node_attribute_value
 
         complete_node_attributes = dict(type=node_type)
+        complete_node_attributes.update(outer_attributes)
         complete_node_attributes.update(input_attributes)
         complete_node_attributes.update(output_attributes)
         complete_node_attributes.update(constant_attributes)
@@ -615,8 +640,8 @@ def trans_graph_proto(ox_graph: onnx.GraphProto) -> networkx.DiGraph:
     # For the infomation about relationship between 'input,' 'output,' 'value_info,' and 'initializer', see ONNX Official Doc: https://onnx.ai/onnx/repo-docs/IR.html#graphs & https://onnx.ai/onnx/repo-docs/IR.html#names-within-a-graph
 
     # Process Dataflow
-    dataflows: Dict[str, Dict] = dict() # Key: Name in Value namespace; Value: node inputs & outputs, tensor values (if named), graph inputs, outputs.
-    default_values: Dict[str, Dict] = dict() # Key: Name in Value namespace; Value: tensor of inputs or constants.
+    dataflows: Dict[str, Dict] = dict() # Key: Name in Value namespace; Value: node inputs & outputs, tensor values (if named), graph inputs, outputs. - All is ValueInfo
+    default_values: Dict[str, Dict] = dict() # Key: Name in Value namespace; Value: tensor of inputs or constants. - All is Tensor
 
     graph_inputs: Dict[str, int] = dict()
     graph_outputs: Dict[str, int] = dict()
@@ -647,49 +672,79 @@ def trans_graph_proto(ox_graph: onnx.GraphProto) -> networkx.DiGraph:
     #       Names of constants that are not meant to be overridden by the caller should appear only in the initializer list and not in the graph input list.
     #   See more details at ONNX Official Doc: https://onnx.ai/onnx/repo-docs/IR.html#graphs & https://onnx.ai/onnx/repo-docs/IR.html#nodes
 
+    non_constants = set() # initializer is not belong to graph inputs & node outputs (dataflow definitions)
+    for input_value_info in ox_graph.input:
+        non_constants.add(input_value_info.name)
+
+    for node in ox_graph.node:
+        for node_output in node.output:
+            non_constants.add(node_output)
+
     for graph_initializer in ox_graph.initializer:
         graph_initializer = trans_tensor_proto(graph_initializer)
         name = graph_initializer.pop('name')
         default_values[name] = graph_initializer
-        if name not in dataflows:
+        if name not in non_constants:
             graph_constants[name] = len(graph_constants)
 
     for graph_sparse_initializer in ox_graph.sparse_initializer:
         graph_sparse_initializer = trans_sparse_tensor_proto(graph_sparse_initializer)
         name = graph_sparse_initializer.pop('name')
         default_values[name] = graph_sparse_initializer
-        if name not in dataflows:
+        if name not in non_constants:
             graph_constants[name] = len(graph_constants)
 
     # all ox_graph.input are saved in input node
     # all ox_graph.output are saved in output node
+    # operator node index of nx_graph = index of ox_graph.node
     # input node index of nx_graph = len(ox_graph.node) + 0
     # output node index of nx_graph = len(ox_graph.node) + 1
     # constant node index of nx_graph = len(ox_graph.node) + 2
+    # outer node index of nx_graph = len(ox_graph.node) + 3
+
+    def check_official_io(io_name: str):
+        if verbose and io_name not in dataflows:
+            print(
+                f'Please check the onnx model, \"{io_name}\" is certain to appear in the \"dataflow\", it MAY be an unofficial ONNX Operator.'
+                f'This MAY be because there are operators outside the official ONNX domain in the graph.'
+                f'OR it is an input_name that in a nested subgraph which refer to names introduced in outer graphs'
+            )
+
+    input_node_index = f'{len(ox_graph.node) + 0}'
+    output_node_index = f'{len(ox_graph.node) + 1}'
+    constant_node_index = f'{len(ox_graph.node) + 2}'
+    outer_node_index = f'{len(ox_graph.node) + 3}'
+
+    # Map names introduced in graphs to its tail_index node and emit_index output.
+    dataflow2source: Dict[str, Tuple[int, int]] = dict()
+    for node_index, node in enumerate(ox_graph.node):
+        node_index = f'{node_index}'
+        (_, results) = trans_node_io(node)
+        for result_name, result_index in results.items():
+            dataflow2source[result_name] = (node_index, result_index)
+            check_official_io(result_name)
+
+    for input_name, input_index in graph_inputs.items():
+        dataflow2source[input_name] = (input_node_index, input_index)
+        check_official_io(input_name)
+
+    for constant_name, constant_index in graph_constants.items():
+        dataflow2source[constant_name] = (constant_node_index, constant_index)
+        check_official_io(constant_name)
 
     # Add nx_graph nodes
     for node in ox_graph.node:
-        node = trans_node_proto(node)
+        all_outer_dataflow2source = dict()
+        all_outer_dataflow2source.update(dataflow2source)
+        all_outer_dataflow2source.update(outer_dataflow2source)
+        trans_graph_proto_method = partial(trans_graph_proto, outer_dataflow2source=all_outer_dataflow2source, verbose=verbose)
+        node = trans_node_proto(node, trans_graph_proto_method)
         nx_graph.add_node(f'{len(nx_graph)}', **get_complete_node_attributes('operator', node))
 
-    nx_graph.add_node(f'{len(nx_graph)}', **get_complete_node_attributes('input', dict(graph_inputs=graph_inputs)))
-    nx_graph.add_node(f'{len(nx_graph)}', **get_complete_node_attributes('output', dict(graph_outputs=graph_outputs)))
-    nx_graph.add_node(f'{len(nx_graph)}', **get_complete_node_attributes('constant', dict(graph_constants=graph_constants)))
-
-    # Map nx_graph edge to source
-    dataflow2source: Dict[str, Tuple[int, int]] = dict()
-    for node_index, node in nx_graph.nodes.items():
-        if node['results'] is not None:
-            outputs_key = 'results'
-        elif node['graph_inputs'] is not None:
-            outputs_key = 'graph_inputs'
-        elif node['graph_constants'] is not None:
-            outputs_key = 'graph_constants'
-        else:
-            continue
-        for output_name, output_index in node[outputs_key].items():
-            assert output_name in dataflows, f'Please check the onnx model, \"output_name\"({output_name}) is certain to appear in the \"dataflow\".'
-            dataflow2source[output_name] = (node_index, output_index)
+    nx_graph.add_node(input_node_index, **get_complete_node_attributes('input', dict(graph_inputs=graph_inputs)))
+    nx_graph.add_node(output_node_index, **get_complete_node_attributes('output', dict(graph_outputs=graph_outputs)))
+    nx_graph.add_node(constant_node_index, **get_complete_node_attributes('constant', dict(graph_constants=graph_constants)))
+    nx_graph.add_node(outer_node_index, **get_complete_node_attributes('outer'))
 
     # Add nx_graph edges
     for node_index, node in nx_graph.nodes.items():
@@ -700,20 +755,31 @@ def trans_graph_proto(ox_graph: onnx.GraphProto) -> networkx.DiGraph:
         else:
             continue
         for input_name, input_index in node[inputs_key].items():
-            assert input_name in dataflows, f'Please check the onnx model, \"input_name\"({input_name}) is certain to appear in the \"dataflow\".'
-            (tail_index, emit_index) = dataflow2source[input_name]
+            check_official_io(input_name)
             (head_index, trap_index) = (node_index, input_index)
-            attributes = dict(
-                connection=dict(emit_index=emit_index, trap_index=trap_index),
-                default_value = default_values.get(input_name, None),
-                dataflow = dataflows.get(input_name, None),
-            )
+            if input_name in dataflow2source:
+                (tail_index, emit_index) = dataflow2source[input_name]
+                attributes = dict(
+                    connection=dict(emit_index=emit_index, trap_index=trap_index),
+                    default_value = default_values.get(input_name, None),
+                    dataflow = dataflows.get(input_name, None),
+                )
+            elif input_name in outer_dataflow2source:
+                tail_index = outer_node_index
+                attributes = dict(
+                    connection=dict(emit_index=None, trap_index=trap_index),
+                    default_value = None,
+                    dataflow = None,
+                )
+            else:
+                print(f'{input_name} not defined!')
+                raise KeyError
             nx_graph.add_edge(tail_index, head_index, **attributes)
 
     return nx_graph
 
 
-def trans_model_proto(model: onnx.ModelProto) -> networkx.DiGraph:
+def trans_model_proto(model: onnx.ModelProto, verbose: bool = False) -> networkx.DiGraph:
     # Tranlating components of ModelProto into DiGraph attributes.
     # It is a detailed version of the 'trans_model_proto'
     # ModelProto provides more metadata than GraphProto
@@ -761,7 +827,7 @@ def trans_model_proto(model: onnx.ModelProto) -> networkx.DiGraph:
         ox_model_metadata_props: Dict[str, str] = trans_string_string_entry_proto(ox_model_metadata_props)
         metadata_props.append(ox_model_metadata_props)
 
-    graph: networkx.DiGraph = trans_graph_proto(model.graph)
+    graph: networkx.DiGraph = trans_graph_proto(model.graph, verbose=verbose)
 
     graph_attributes = dict(
         ir_version = ir_version,
