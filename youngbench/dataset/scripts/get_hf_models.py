@@ -9,14 +9,19 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import os
 import json
 import pathlib
 import requests
 import argparse
 import itertools
 
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
+PROXIES = {'https': 'http://127.0.0.1:12345'}
+TOKEN = 'hf_abcde'
+
 from typing import Dict, Literal, Iterable, Optional
-from huggingface_hub import utils, snapshot_download
+from huggingface_hub import utils, snapshot_download, login
 
 from youngbench.logging import set_logger, logger
 
@@ -46,7 +51,7 @@ def get_model_infos(
 ) -> Iterable[Dict]:
 
     hf_path = 'https://huggingface.co/api/models'
-    params = dict()
+    params = dict(filter=('onnx'))
     if full is not None:
         params['full'] = full
     if limit is not None:
@@ -58,7 +63,7 @@ def get_model_infos(
     if direction is not None:
         params['direction'] = direction
 
-    headers = utils.build_hf_headers()
+    headers = utils.build_hf_headers(token=TOKEN)
 
     model_infos = paginate(hf_path, params=params, headers=headers)
 
@@ -79,6 +84,8 @@ if __name__ == '__main__':
     # Cache Dir
     parser.add_argument('--cache-dir', type=str, default=None)
 
+    parser.add_argument('--force-reload', type=bool, default=False)
+
     parser.add_argument('--logging-path', type=str, default='')
 
     args = parser.parse_args()
@@ -87,12 +94,14 @@ if __name__ == '__main__':
 
     assert 0 < args.top
 
+    login(token=TOKEN)
+
     infos_dirpath = pathlib.Path(args.infos_dir)
     infos_dirpath.mkdir(parents=True, exist_ok=True)
     dl_filepath = infos_dirpath.joinpath(f'top{args.top}_dl.json')
     lk_filepath = infos_dirpath.joinpath(f'top{args.top}_lk.json')
 
-    if dl_filepath.is_file():
+    if not args.force_reload and dl_filepath.is_file():
         with open(dl_filepath, 'r') as f:
             downloads_top_model_infos = json.load(f)
     else:
@@ -106,7 +115,7 @@ if __name__ == '__main__':
             json.dump(downloads_top_model_infos, f, indent=2)
         logger.info(f' - Top{args.top} Downloads Models\' Info are saved into: {dl_filepath.absolute()}')
 
-    if lk_filepath.is_file():
+    if not args.force_reload and lk_filepath.is_file():
         with open(lk_filepath, 'r') as f:
             likes_top_model_infos = json.load(f)
     else:
@@ -126,11 +135,11 @@ if __name__ == '__main__':
     logger.info(f' v Now Download Top Downloads Models')
     for index, model_info in enumerate(downloads_top_model_infos):
         print(f' # {index} (Downloads): {model_info["id"]}')
-        snapshot_download(repo_id=model_info['id'], resume_download=True, cache_dir=cache_dirpath.joinpath('DL'))
+        snapshot_download(repo_id=model_info['id'], resume_download=True, cache_dir=cache_dirpath.joinpath('DL'), proxies=PROXIES)
     logger.info(f' ^ Finished')
 
     logger.info(f' v Now Download Top Likes Models')
     for index, model_info in enumerate(downloads_top_model_infos):
         print(f' # {index} (Likes): {model_info["id"]}')
-        snapshot_download(repo_id=model_info['id'], resume_download=True, cache_dir=cache_dirpath.joinpath('LK'))
+        snapshot_download(repo_id=model_info['id'], resume_download=True, cache_dir=cache_dirpath.joinpath('LK'), proxies=PROXIES)
     logger.info(f' ^ Finished')
