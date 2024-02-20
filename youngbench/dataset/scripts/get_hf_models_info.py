@@ -17,8 +17,6 @@ import argparse
 import itertools
 
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
-PROXIES = {'https': 'http://127.0.0.1:12345'}
-TOKEN = None
 
 from typing import Dict, List, Literal, Iterable, Optional
 from huggingface_hub import utils, snapshot_download, login
@@ -50,6 +48,7 @@ def get_model_infos(
     config: Optional[bool] = None,
     sort: Optional[str] = None,
     direction: Optional[Literal[-1]] = None,
+    token: Optional[str] = None,
 ) -> Iterable[Dict]:
     # [NOTE] The Code are modified based on the official Hugging Face Hub source codes. (https://github.com/huggingface/huggingface_hub/blob/main/src/huggingface_hub/hf_api.py#L1378)
 
@@ -59,15 +58,9 @@ def get_model_infos(
     # See details at https://github.com/huggingface/huggingface_hub/blob/main/src/huggingface_hub/hf_api.py#L1514
     if filter_list is not None:
         params['filter'] = tuple(filter_list)
-    # Whether to fetch all model data, including the `last_modified`, the `sha`, the files and the `tags`.
-    if full is not None:
-        params['full'] = full
     # The limit on the number of models fetched. Leaving this option to `None` fetches all models.
     if limit is not None:
         params['limit'] = limit
-    # Whether to fetch the model configs as well. This is not included in `full` due to its size.
-    if config is not None:
-        params['config'] = config
     # The key with which to sort the resulting models. Possible values are the str values of the filter_list.
     if sort is not None:
         params['sort'] = sort
@@ -75,7 +68,14 @@ def get_model_infos(
     if direction is not None:
         params['direction'] = direction
 
-    headers = utils.build_hf_headers(token=TOKEN)
+    # Whether to fetch all model data, including the `last_modified`, the `sha`, the files and the `tags`.
+    if full:
+        params['full'] = full
+    # Whether to fetch the model configs as well. This is not included in `full` due to its size.
+    if config:
+        params['config'] = config
+
+    headers = utils.build_hf_headers(token=token)
 
     model_infos = paginate(hf_path, params=params, headers=headers)
 
@@ -88,19 +88,30 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="LoadCreate/Update The Young Neural Network Architecture Dataset (YoungBench - Dataset).")
 
     # Model Info Dir
-    parser.add_argument('--num', type=int, default=100)
+    parser.add_argument('--num', type=int, default=None)
+    parser.add_argument('--full', type=bool, default=False)
+
     parser.add_argument('--sort', type=bool, default=False)
     parser.add_argument('--sortby', type=str, default=None)
     parser.add_argument('--ascend', type=bool, default=False)
+
+    parser.add_argument('--config', type=bool, default=False)
+
     parser.add_argument('--filter', type=str, default=['onnx'], nargs='+')
-    parser.add_argument('--save-path', type=str, default='./model_infos.json')
-    parser.add_argument('--logging-path', type=str, default='./get_model_infos.log')
+
+    parser.add_argument('--part-size', type=int, default=1000)
+    parser.add_argument('--save-dirpath', type=str, default='./')
+    parser.add_argument('--logging-path', type=str, default=None)
+
+    parser.add_argument('--api-token', type=str, default=None)
 
     args = parser.parse_args()
 
-    set_logger(path=args.logging_path)
+    if args.logging_path:
+        set_logger(path=args.logging_path)
 
-    assert 0 < args.num
+    if args.num:
+        assert 0 < args.num
 
     if args.sort:
         sort_key = args.sortby
@@ -109,14 +120,38 @@ if __name__ == '__main__':
         sort_key = None
         direction = None
 
-    login(token=TOKEN)
+    if args.api_token is not None:
+        login(token=args.api_token)
 
-    save_path = pathlib.Path(args.save_path)
-    save_path.parent.mkdir(parents=True, exist_ok=True)
+    save_dirpath = pathlib.Path(args.save_dirpath)
+    save_dirpath = save_dirpath.joinpath('model_infos')
+    save_dirpath.mkdir(parents=True, exist_ok=True)
 
     logger.info(f' = Fetching {args.num} Models\' Info (Sort={args.sort}, Ascend={args.ascend}) ... ')
-    model_infos = get_model_infos(filter_list=args.filter, full=True, limit=args.num, config=True, sort=sort_key, direction=direction)
-    with open(save_path, 'w') as f:
-        model_infos = list(model_infos)
-        json.dump(model_infos, f, indent=2)
-    logger.info(f' - Models\' Info are saved into: {save_path.absolute()}')
+    model_infos = get_model_infos(filter_list=args.filter, full=args.full, limit=args.num, config=args.config, sort=sort_key, direction=direction, token=args.api_token)
+
+    def save_part_model_infos(part_model_infos, part_index, save_dirpath):
+        save_path = save_dirpath.joinpath(f'part_{part_index}.json')
+        with open(save_path, 'w') as f:
+            json.dump(part_model_infos, f, indent=2)
+        logger.info(f' - | No.{part_index} Part of Models\' Info are saved into: {save_path.absolute()}')
+
+    total_info_number = 0
+    part_index = 0
+    part_model_infos = list()
+    for model_info in model_infos:
+        part_model_infos.append(model_info)
+        if len(part_model_infos) == args.part_size:
+            total_info_number += len(part_model_infos)
+            save_part_model_infos(part_model_infos, part_index, save_dirpath)
+            part_index += 1
+            part_model_infos = list()
+
+    if len(part_model_infos) != 0:
+        total_info_number += len(part_model_infos)
+        save_part_model_infos(part_model_infos, part_index, save_dirpath)
+        part_index += 1
+        part_model_infos = list()
+
+    logger.info(f' - Total {part_index} Part')
+    logger.info(f' - Total {total_info_number} Models\' Info')
