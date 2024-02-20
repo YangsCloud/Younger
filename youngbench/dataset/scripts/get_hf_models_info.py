@@ -85,65 +85,38 @@ def get_model_infos(
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Create/Update The Young Neural Network Architecture Dataset (YoungBench - Dataset).")
+    parser = argparse.ArgumentParser(description="LoadCreate/Update The Young Neural Network Architecture Dataset (YoungBench - Dataset).")
 
     # Model Info Dir
-    parser.add_argument('--infos-dir', type=str, default='.')
-
-    parser.add_argument('--logging-path', type=str, default='')
+    parser.add_argument('--num', type=int, default=100)
+    parser.add_argument('--sort', type=bool, default=False)
+    parser.add_argument('--sortby', type=str, default=None)
+    parser.add_argument('--ascend', type=bool, default=False)
+    parser.add_argument('--filter', type=str, default=['onnx'], nargs='+')
+    parser.add_argument('--save-path', type=str, default='./model_infos.json')
+    parser.add_argument('--logging-path', type=str, default='./get_model_infos.log')
 
     args = parser.parse_args()
 
     set_logger(path=args.logging_path)
 
-    assert 0 < args.top
+    assert 0 < args.num
+
+    if args.sort:
+        sort_key = args.sortby
+        direction = args.ascend - 1
+    else:
+        sort_key = None
+        direction = None
 
     login(token=TOKEN)
 
-    infos_dirpath = pathlib.Path(args.infos_dir)
-    infos_dirpath.mkdir(parents=True, exist_ok=True)
-    dl_filepath = infos_dirpath.joinpath(f'top{args.top}_dl.json')
-    lk_filepath = infos_dirpath.joinpath(f'top{args.top}_lk.json')
+    save_path = pathlib.Path(args.save_path)
+    save_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if not args.force_reload and dl_filepath.is_file():
-        with open(dl_filepath, 'r') as f:
-            downloads_top_model_infos = json.load(f)
-    else:
-        downloads_top_model_infos = list()
-
-    if len(downloads_top_model_infos) != args.top:
-        logger.info(f' = Fetching Top{args.top} Downloads Models\' Info ... ')
-        downloads_top_model_infos = get_model_infos(full=True, limit=args.top, config=True, sort='downloads', direction=-1)
-        with open(dl_filepath, 'w') as f:
-            downloads_top_model_infos = list(downloads_top_model_infos)
-            json.dump(downloads_top_model_infos, f, indent=2)
-        logger.info(f' - Top{args.top} Downloads Models\' Info are saved into: {dl_filepath.absolute()}')
-
-    if not args.force_reload and lk_filepath.is_file():
-        with open(lk_filepath, 'r') as f:
-            likes_top_model_infos = json.load(f)
-    else:
-        likes_top_model_infos = list()
-
-    if len(likes_top_model_infos) != args.top:
-        logger.info(f' = Fetching Top{args.top} Likes Models\' Info ... ')
-        likes_top_model_infos = get_model_infos(full=True, limit=args.top, config=True, sort='likes', direction=-1)
-        with open(lk_filepath, 'w') as f:
-            likes_top_model_infos = list(likes_top_model_infos)
-            json.dump(likes_top_model_infos, f, indent=2)
-        logger.info(f' - Top{args.top} Likes Models\' Info are saved into: {lk_filepath.absolute()}')
-
-
-    cache_dirpath = pathlib.Path(args.cache_dir)
-    cache_dirpath.mkdir(parents=True, exist_ok=True)
-    logger.info(f' v Now Download Top Downloads Models')
-    for index, model_info in enumerate(downloads_top_model_infos):
-        print(f' # {index} (Downloads): {model_info["id"]}')
-        snapshot_download(repo_id=model_info['id'], resume_download=True, cache_dir=cache_dirpath.joinpath('DL'), proxies=PROXIES)
-    logger.info(f' ^ Finished')
-
-    logger.info(f' v Now Download Top Likes Models')
-    for index, model_info in enumerate(downloads_top_model_infos):
-        print(f' # {index} (Likes): {model_info["id"]}')
-        snapshot_download(repo_id=model_info['id'], resume_download=True, cache_dir=cache_dirpath.joinpath('LK'), proxies=PROXIES)
-    logger.info(f' ^ Finished')
+    logger.info(f' = Fetching {args.num} Models\' Info (Sort={args.sort}, Ascend={args.ascend}) ... ')
+    model_infos = get_model_infos(filter_list=args.filter, full=True, limit=args.num, config=True, sort=sort_key, direction=direction)
+    with open(save_path, 'w') as f:
+        model_infos = list(model_infos)
+        json.dump(model_infos, f, indent=2)
+    logger.info(f' - Models\' Info are saved into: {save_path.absolute()}')
