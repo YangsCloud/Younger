@@ -19,7 +19,7 @@ import itertools
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
 
 from typing import Dict, List, Literal, Iterable, Optional
-from huggingface_hub import utils, snapshot_download, login
+from huggingface_hub import utils, login
 
 from youngbench.logging import set_logger, logger
 
@@ -89,13 +89,13 @@ if __name__ == '__main__':
 
     # Model Info Dir
     parser.add_argument('--num', type=int, default=None)
-    parser.add_argument('--full', type=bool, default=False)
+    parser.add_argument('--full', action='store_true')
 
-    parser.add_argument('--sort', type=bool, default=False)
+    parser.add_argument('--sort', action='store_true')
     parser.add_argument('--sortby', type=str, default=None)
-    parser.add_argument('--ascend', type=bool, default=False)
+    parser.add_argument('--ascend', action='store_true')
 
-    parser.add_argument('--config', type=bool, default=False)
+    parser.add_argument('--config', action='store_true')
 
     parser.add_argument('--filter', type=str, default=['onnx'], nargs='+')
 
@@ -107,10 +107,13 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    if args.logging_path:
+    if args.api_token is not None:
+        login(token=args.api_token)
+
+    if args.logging_path is not None:
         set_logger(path=args.logging_path)
 
-    if args.num:
+    if args.num is not None:
         assert 0 < args.num
 
     if args.sort:
@@ -120,18 +123,16 @@ if __name__ == '__main__':
         sort_key = None
         direction = None
 
-    if args.api_token is not None:
-        login(token=args.api_token)
-
     save_dirpath = pathlib.Path(args.save_dirpath)
     save_dirpath = save_dirpath.joinpath('model_infos')
     save_dirpath.mkdir(parents=True, exist_ok=True)
 
-    logger.info(f' = Fetching {args.num} Models\' Info (Sort={args.sort}, Ascend={args.ascend}) ... ')
+    logger.info(f' = Fetching {args.num} Models\' Info (Sort={args.sort}, Key={sort_key}, Ascend={args.ascend}) ... ')
     model_infos = get_model_infos(filter_list=args.filter, full=args.full, limit=args.num, config=args.config, sort=sort_key, direction=direction, token=args.api_token)
 
+    suffix = f"-{sort_key}" if sort_key else f""
     def save_part_model_infos(part_model_infos, part_index, save_dirpath):
-        save_path = save_dirpath.joinpath(f'part_{part_index}.json')
+        save_path = save_dirpath.joinpath(f'part_{part_index}{suffix}.json')
         with open(save_path, 'w') as f:
             json.dump(part_model_infos, f, indent=2)
         logger.info(f' - | No.{part_index} Part of Models\' Info are saved into: {save_path.absolute()}')
