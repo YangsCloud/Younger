@@ -282,6 +282,8 @@ def cache_model_from_task(
         assert model_class_names[0] == 'create_model'
         timm_cache_model(f"hf_hub:{model_id}", pretrained=True, exportable=True)
     elif library_name == "sentence_transformers":
+        assert len(model_class_names) == 1
+        assert model_class_names[0] == 'SentenceTransformer'
         cache_folder = model_kwargs.pop("cache_folder", None)
         use_auth_token = model_kwargs.pop("use_auth_token", None)
         model = model_class(
