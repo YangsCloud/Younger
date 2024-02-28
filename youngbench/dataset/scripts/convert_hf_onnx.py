@@ -20,6 +20,7 @@ from optimum.exporters.tasks import TasksManager
 from optimum.utils import DEFAULT_DUMMY_SHAPES
 from optimum.exporters.onnx.convert import onnx_export_from_model
 from optimum.utils.save_utils import maybe_load_preprocessors
+from transformers import AutoTokenizer
 
 from youngbench.logging import set_logger, logger
 
@@ -54,6 +55,9 @@ def mine_export(model_id, output, cache_dir, model_args_dict):
     no_dynamic_axes=model_args_dict['no_dynamic_axes']
     do_constant_folding=model_args_dict['do_constant_folding']
 
+    custom_architecture=model_args_dict['custom_architecture']
+    original_task=model_args_dict['original_task']
+
     model = TasksManager.get_model_from_task(
         task,
         model_id,
@@ -70,6 +74,52 @@ def mine_export(model_id, output, cache_dir, model_args_dict):
         library_name=library_name,
         **loading_kwargs,
     )
+
+    needs_pad_token_id = task == "text-classification" and getattr(model.config, "pad_token_id", None) is None
+
+    if needs_pad_token_id:
+        if pad_token_id is not None:
+            model.config.pad_token_id = pad_token_id
+        else:
+            tok = AutoTokenizer.from_pretrained(model_id)
+            pad_token_id = getattr(tok, "pad_token_id", None)
+            if pad_token_id is None:
+                raise ValueError(
+                    "Could not infer the pad token id, which is needed in this case, please provide it with the --pad_token_id argument"
+                )
+            model.config.pad_token_id = pad_token_id
+
+    if "stable-diffusion" in task:
+        model_type = "stable-diffusion"
+    elif hasattr(model.config, "export_model_type"):
+        model_type = model.config.export_model_type.replace("_", "-")
+    else:
+        model_type = model.config.model_type.replace("_", "-")
+
+    if (
+        not custom_architecture
+        and library_name != "diffusers"
+        and task + "-with-past"
+        in TasksManager.get_supported_tasks_for_model_type(model_type, "onnx", library_name=library_name)
+    ):
+        # Make -with-past the default if --task was not explicitely specified
+        if original_task == "auto" and not monolith:
+            task = task + "-with-past"
+        else:
+            logger.info(
+                f"The task `{task}` was manually specified, and past key values will not be reused in the decoding."
+                f" if needed, please pass `--task {task}-with-past` to export using the past key values."
+            )
+            model.config.use_cache = False
+    
+    if original_task == "auto":
+        synonyms_for_task = sorted(TasksManager.synonyms_for_task(task))
+        if synonyms_for_task:
+            synonyms_for_task = ", ".join(synonyms_for_task)
+            possible_synonyms = f" (possible synonyms are: {synonyms_for_task})"
+        else:
+            possible_synonyms = ""
+        logger.info(f"Automatic task detection to {task}{possible_synonyms}.")
 
     input_shapes = {}
     for input_name in DEFAULT_DUMMY_SHAPES.keys():

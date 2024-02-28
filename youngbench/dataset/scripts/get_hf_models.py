@@ -9,23 +9,317 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import os
 import sys
 import json
 import torch
 import pathlib
 import argparse
+import importlib
+import dataclasses
 
-from typing import Dict
+from functools import partial
+from typing import List, Dict, Type, Tuple, Optional
 from packaging import version
-from huggingface_hub import login
+from urllib.parse import urlsplit
+from requests.exceptions import ConnectionError as RequestsConnectionError
+
+from huggingface_hub import login, hf_hub_download
+from huggingface_hub.utils import EntryNotFoundError
+
 from optimum.exporters.tasks import TasksManager
 from optimum.configuration_utils import _transformers_version
 from optimum.exporters.onnx.constants import SDPA_ARCHS_ONNX_EXPORT_NOT_SUPPORTED
 
-from requests.exceptions import ConnectionError as RequestsConnectionError
-from transformers import AutoConfig, AutoTokenizer
+from timm import __version__
+from timm.models import load_model_config_from_hf, is_model
+from timm.layers import set_layer_config
+from timm.models._pretrained import PretrainedCfg
+from timm.models._builder import _resolve_pretrained_source
+from timm.models._hub import _get_safe_alternatives
+
+from transformers import AutoConfig
 
 from youngbench.logging import set_logger, logger
+
+try:
+    import safetensors.torch
+    _has_safetensors = True
+except ImportError:
+    _has_safetensors = False
+
+
+HF_WEIGHTS_NAME = "pytorch_model.bin"  # default pytorch pkl
+
+
+def timm_hf_split(hf_id: str):
+    # FIXME I may change @ -> # and be parsed as fragment in a URI model name scheme
+    rev_split = hf_id.split('@')
+    assert 0 < len(rev_split) <= 2, 'hf_hub id should only contain one @ character to identify revision.'
+    hf_model_id = rev_split[0]
+    hf_revision = rev_split[-1] if len(rev_split) > 1 else None
+    return hf_model_id, hf_revision
+
+
+def timm_load_state_dict_from_hf(model_id: str, filename: str = HF_WEIGHTS_NAME):
+    # Modified from sources: timm.load_state_dict_from_hf
+    hf_model_id, hf_revision = timm_hf_split(model_id)
+
+    # Look for .safetensors alternatives and load from it if it exists
+    if _has_safetensors:
+        for safe_filename in _get_safe_alternatives(filename):
+            try:
+                hf_hub_download = partial(hf_hub_download, library_name="timm", library_version=__version__)
+                cached_safe_file = hf_hub_download(repo_id=hf_model_id, filename=safe_filename, revision=hf_revision)
+                logger.info(
+                    f"[{model_id}] Safe alternative available for '{filename}' "
+                    f"(as '{safe_filename}'). Loading weights using safetensors.")
+                return safetensors.torch.load_file(cached_safe_file, device="cpu")
+            except EntryNotFoundError:
+                pass
+
+    # Otherwise, load using pytorch.load
+    hf_hub_download(hf_model_id, filename=filename, revision=hf_revision)
+    logger.debug(f"[{model_id}] Safe alternative not found for '{filename}'. Loading weights using default pytorch.")
+    return
+
+
+def timm_parse_model_name(model_name: str):
+    # Modified from sources: timm.parse_model_name
+    if model_name.startswith('hf_hub'):
+        # NOTE for backwards compat, deprecate hf_hub use
+        model_name = model_name.replace('hf_hub', 'hf-hub')
+    parsed = urlsplit(model_name)
+    assert parsed.scheme == 'hf-hub'
+    return (parsed.scheme, parsed.path)
+
+
+def timm_cache_model(
+    model_name: str,
+    pretrained: bool = False,
+    pretrained_cfg = None,
+    pretrained_cfg_overlay = None,
+    scriptable: Optional[bool] = None,
+    exportable: Optional[bool] = None,
+    no_jit: Optional[bool] = None,
+    **kwargs,
+):
+    # Modified from sources: timm.create_model
+
+    # Parameters that aren't supported by all models or are intended to only override model defaults if set
+    # should default to None in command line args/cfg. Remove them if they are present and not set so that
+    # non-supporting models don't break and default args remain in effect.
+    kwargs = {k: v for k, v in kwargs.items() if v is not None}
+
+    model_source, model_name = timm_parse_model_name(model_name)
+    assert model_source == 'hf-hub'
+    assert not pretrained_cfg, 'pretrained_cfg should not be set when sourcing model from Hugging Face Hub.'
+    # For model names specified in the form `hf-hub:path/architecture_name@revision`,
+    # load model weights + pretrained_cfg from Hugging Face hub.
+    pretrained_cfg, model_name, model_args = load_model_config_from_hf(model_name)
+    if model_args:
+        for k, v in model_args.items():
+            kwargs.setdefault(k, v)
+
+    if not is_model(model_name):
+        raise RuntimeError('Unknown model (%s)' % model_name)
+
+    with set_layer_config(scriptable=scriptable, exportable=exportable, no_jit=no_jit):
+        assert isinstance(pretrained_cfg, dict)
+        pretrained_cfg = PretrainedCfg(**pretrained_cfg)
+        pretrained_cfg_overlay = pretrained_cfg_overlay or {}
+        assert pretrained_cfg.architecture
+        pretrained_cfg = dataclasses.replace(pretrained_cfg, **pretrained_cfg_overlay)
+        pretrained_cfg = pretrained_cfg.to_dict()
+        load_from, pretrained_loc = _resolve_pretrained_source(pretrained_cfg)
+        assert load_from == 'hf-hub'
+        logger.info(f'Loading pretrained weights from Hugging Face hub ({pretrained_loc})')
+        if isinstance(pretrained_loc, (list, tuple)):
+            timm_load_state_dict_from_hf(*pretrained_loc)
+        else:
+            timm_load_state_dict_from_hf(pretrained_loc)
+
+    return
+
+
+def get_model_class_for_task(
+    task: str,
+    framework: str = "pt",
+    model_type: Optional[str] = None,
+    model_class_name: Optional[str] = None,
+    library: str = "transformers",
+) -> Tuple[List[str], Type]:
+    # Modified from sources: TasksManager.get_model_class_from_task
+    """
+    Attempts to retrieve an AutoModel class from a task name.
+
+    Args:
+        task (`str`):
+            The task required.
+        framework (`str`, defaults to `"pt"`):
+            The framework to use for the export.
+        model_type (`Optional[str]`, defaults to `None`):
+            The model type to retrieve the model class for. Some architectures need a custom class to be loaded,
+            and can not be loaded from auto class.
+        model_class_name (`Optional[str]`, defaults to `None`):
+            A model class name, allowing to override the default class that would be detected for the task. This
+            parameter is useful for example for "automatic-speech-recognition", that may map to
+            AutoModelForSpeechSeq2Seq or to AutoModelForCTC.
+        library (`str`, defaults to `transformers`):
+                The library name of the model.
+
+    Returns:
+        The AutoModel class corresponding to the task.
+    """
+    task = task.replace("-with-past", "")
+    task = TasksManager.map_from_synonym(task)
+
+    TasksManager._validate_framework_choice(framework)
+
+    if (framework, model_type, task) in TasksManager._CUSTOM_CLASSES:
+        library, class_name = TasksManager._CUSTOM_CLASSES[(framework, model_type, task)]
+        loaded_library = importlib.import_module(library)
+
+        return getattr(loaded_library, class_name)
+    else:
+        if framework == "pt":
+            tasks_to_model_loader = TasksManager._LIBRARY_TO_TASKS_TO_MODEL_LOADER_MAP[library]
+        else:
+            tasks_to_model_loader = TasksManager._LIBRARY_TO_TF_TASKS_TO_MODEL_LOADER_MAP[library]
+
+        loaded_library = importlib.import_module(library)
+
+        model_class_names = list()
+        if model_class_name is None:
+            if task not in tasks_to_model_loader:
+                raise KeyError(
+                    f"Unknown task: {task}. Possible values are: "
+                    + ", ".join([f"`{key}` for {tasks_to_model_loader[key]}" for key in tasks_to_model_loader])
+                )
+
+            if isinstance(tasks_to_model_loader[task], str):
+                model_class_name = tasks_to_model_loader[task]
+                model_class_names.append(model_class_name)
+            else:
+                # automatic-speech-recognition case, which may map to several auto class
+                if library == "transformers":
+                    if model_type is None:
+                        logger.warning(
+                            f"No model type passed for the task {task}, that may be mapped to several loading"
+                            f" classes ({tasks_to_model_loader[task]}). Defaulting to {tasks_to_model_loader[task][0]}"
+                            " to load the model."
+                        )
+                        model_class_names.extend(list(tasks_to_model_loader[task]))
+                    else:
+                        for autoclass_name in tasks_to_model_loader[task]:
+                            module = getattr(loaded_library, autoclass_name)
+                            # TODO: we must really get rid of this - and _ mess
+                            if (
+                                model_type in module._model_mapping._model_mapping
+                                or model_type.replace("-", "_") in module._model_mapping._model_mapping
+                            ):
+                                model_class_names.append(autoclass_name)
+
+                        if len(model_class_names) == 0:
+                            raise ValueError(
+                                f"Unrecognized configuration classes {tasks_to_model_loader[task]} do not match"
+                                f" with the model type {model_type} and task {task}."
+                            )
+                else:
+                    raise NotImplementedError(
+                        "For library other than transformers, the _TASKS_TO_MODEL_LOADER mapping should be one to one."
+                    )
+        else:
+            model_class_names.append(model_class_name)
+
+        return model_class_names, loaded_library
+
+def cache_model_from_task(
+    task,
+    model_id,
+    subfolder,
+    revision,
+    cache_dir,
+    framework,
+    torch_dtype,
+    device,
+    library_name,
+    **model_kwargs,
+):
+    # Sources from TasksManager.get_model_from_task
+
+    framework = TasksManager.determine_framework(model_id, subfolder=subfolder, framework=framework)
+
+    original_task = task
+    if task == "auto":
+        task = TasksManager.infer_task_from_model(model_id, subfolder=subfolder, revision=revision)
+
+    library_name = TasksManager.infer_library_from_model(
+        model_id, subfolder, revision, cache_dir, library_name
+    )
+
+    model_type = None
+    model_class_name = None
+    kwargs = {"subfolder": subfolder, "revision": revision, "cache_dir": cache_dir, **model_kwargs}
+
+    if library_name == "transformers":
+        config = AutoConfig.from_pretrained(model_id, **kwargs)
+        model_type = config.model_type.replace("_", "-")
+        # TODO: if automatic-speech-recognition is passed as task, it may map to several
+        # different auto class (AutoModelForSpeechSeq2Seq or AutoModelForCTC),
+        # depending on the model type
+        # if original_task in ["auto", "automatic-speech-recognition"]:
+        if original_task == "automatic-speech-recognition" or task == "automatic-speech-recognition":
+            if original_task == "auto" and config.architectures is not None:
+                model_class_name = config.architectures[0]
+
+    model_class_names, loaded_library = get_model_class_for_task(
+        task, framework, model_type=model_type, model_class_name=model_class_name, library=library_name
+    )
+
+    if library_name == "timm":
+        assert len(model_class_names) == 1
+        assert model_class_names[0] == 'create_model'
+        timm_cache_model(f"hf_hub:{model_id}", pretrained=True, exportable=True)
+    elif library_name == "sentence_transformers":
+        cache_folder = model_kwargs.pop("cache_folder", None)
+        use_auth_token = model_kwargs.pop("use_auth_token", None)
+        model = model_class(
+            model_id, device=device, cache_folder=cache_folder, use_auth_token=use_auth_token
+        )
+    else:
+        try:
+            if framework == "pt":
+                kwargs["torch_dtype"] = torch_dtype
+
+                if isinstance(device, str):
+                    device = torch.device(device)
+                elif device is None:
+                    device = torch.device("cpu")
+
+                # TODO : fix EulerDiscreteScheduler loading to enable for SD models
+                if version.parse(torch.__version__) >= version.parse("2.0") and library_name != "diffusers":
+                    with device:
+                        # Initialize directly in the requested device, to save allocation time. Especially useful for large
+                        # models to initialize on cuda device.
+                        model = model_class.from_pretrained(model_id, **kwargs)
+                else:
+                    model = model_class.from_pretrained(model_id, **kwargs).to(device)
+            else:
+                model = model_class.from_pretrained(model_id, **kwargs)
+        except OSError:
+            if framework == "pt":
+                logger.info("Loading TensorFlow model in PyTorch before exporting.")
+                kwargs["from_tf"] = True
+                model = model_class.from_pretrained(model_id, **kwargs)
+            else:
+                logger.info("Loading PyTorch model in TensorFlow before exporting.")
+                kwargs["from_pt"] = True
+                model = model_class.from_pretrained(model_id, **kwargs)
+
+    TasksManager.standardize_model_attributes(
+        model_id, model, subfolder, revision, cache_dir, library_name
+    )
 
 
 def cache_model(model_id, cache_dir, monolith) -> Dict:
@@ -98,7 +392,7 @@ def cache_model(model_id, cache_dir, monolith) -> Dict:
         if model_type in SDPA_ARCHS_ONNX_EXPORT_NOT_SUPPORTED and _transformers_version >= version.parse("4.35.99"):
             loading_kwargs["attn_implementation"] = "eager"
 
-    model = TasksManager.get_model_from_task(
+    cache_model_from_task(
         task,
         model_id,
         subfolder=subfolder,
@@ -114,53 +408,6 @@ def cache_model(model_id, cache_dir, monolith) -> Dict:
         library_name=library_name,
         **loading_kwargs,
     )
-
-
-    needs_pad_token_id = task == "text-classification" and getattr(model.config, "pad_token_id", None) is None
-
-    if needs_pad_token_id:
-        if pad_token_id is not None:
-            model.config.pad_token_id = pad_token_id
-        else:
-            tok = AutoTokenizer.from_pretrained(model_id)
-            pad_token_id = getattr(tok, "pad_token_id", None)
-            if pad_token_id is None:
-                raise ValueError(
-                    "Could not infer the pad token id, which is needed in this case, please provide it with the --pad_token_id argument"
-                )
-            model.config.pad_token_id = pad_token_id
-
-    if "stable-diffusion" in task:
-        model_type = "stable-diffusion"
-    elif hasattr(model.config, "export_model_type"):
-        model_type = model.config.export_model_type.replace("_", "-")
-    else:
-        model_type = model.config.model_type.replace("_", "-")
-
-    if (
-        not custom_architecture
-        and library_name != "diffusers"
-        and task + "-with-past"
-        in TasksManager.get_supported_tasks_for_model_type(model_type, "onnx", library_name=library_name)
-    ):
-        # Make -with-past the default if --task was not explicitely specified
-        if original_task == "auto" and not monolith:
-            task = task + "-with-past"
-        else:
-            logger.info(
-                f"The task `{task}` was manually specified, and past key values will not be reused in the decoding."
-                f" if needed, please pass `--task {task}-with-past` to export using the past key values."
-            )
-            model.config.use_cache = False
-    
-    if original_task == "auto":
-        synonyms_for_task = sorted(TasksManager.synonyms_for_task(task))
-        if synonyms_for_task:
-            synonyms_for_task = ", ".join(synonyms_for_task)
-            possible_synonyms = f" (possible synonyms are: {synonyms_for_task})"
-        else:
-            possible_synonyms = ""
-        logger.info(f"Automatic task detection to {task}{possible_synonyms}.")
 
     cache_args_dict = dict(
         task=task,
@@ -191,6 +438,8 @@ def cache_model(model_id, cache_dir, monolith) -> Dict:
         trust_remote_code=trust_remote_code,
         no_dynamic_axes=False,
         do_constant_folding=True,
+        custom_architecture=custom_architecture,
+        original_task=original_task
     )
 
     return cache_args_dict
