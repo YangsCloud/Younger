@@ -12,14 +12,17 @@
 import os
 import sys
 import json
+import copy
 import torch
+import inspect
 import pathlib
 import argparse
 import importlib
 import dataclasses
 
+from safetensors import safe_open
 from functools import partial
-from typing import List, Dict, Type, Tuple, Optional
+from typing import List, Dict, Type, Union, Tuple, Optional
 from packaging import version
 from urllib.parse import urlsplit
 from requests.exceptions import ConnectionError as RequestsConnectionError
@@ -31,14 +34,22 @@ from optimum.exporters.tasks import TasksManager
 from optimum.configuration_utils import _transformers_version
 from optimum.exporters.onnx.constants import SDPA_ARCHS_ONNX_EXPORT_NOT_SUPPORTED
 
-from timm import __version__
+from timm import __version__ as timm_version
 from timm.models import load_model_config_from_hf, is_model
 from timm.layers import set_layer_config
 from timm.models._pretrained import PretrainedCfg
 from timm.models._builder import _resolve_pretrained_source
 from timm.models._hub import _get_safe_alternatives
 
-from transformers import AutoConfig
+from transformers import AutoConfig, T5Config, MT5Config, PretrainedConfig, BitsAndBytesConfig
+from transformers.utils import cached_file, CONFIG_NAME, extract_commit_hash, is_peft_available, find_adapter_config_file, is_safetensors_available, TF_WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF2_WEIGHTS_INDEX_NAME, FLAX_WEIGHTS_NAME, SAFE_WEIGHTS_NAME, SAFE_WEIGHTS_INDEX_NAME, WEIGHTS_NAME, WEIGHTS_INDEX_NAME, has_file, get_check
+from transformers.utils.hub import get_checkpoint_shard_files
+from transformers.modeling_utils import _add_variant
+from transformers.safetensors_conversion import auto_conversion
+
+from sentence_transformers.models import Transformer, Normalize
+from sentence_transformers.util import is_sentence_transformer_model, load_dir_path, load_file_path, import_from_string
+from sentence_transformers import __version__ as stfs_version
 
 from youngbench.logging import set_logger, logger
 
@@ -50,6 +61,7 @@ except ImportError:
 
 
 HF_WEIGHTS_NAME = "pytorch_model.bin"  # default pytorch pkl
+__MODEL_HUB_ORGANIZATION__ = "sentence-transformers"
 
 
 def timm_hf_split(hf_id: str):
@@ -69,7 +81,7 @@ def timm_load_state_dict_from_hf(model_id: str, filename: str = HF_WEIGHTS_NAME)
     if _has_safetensors:
         for safe_filename in _get_safe_alternatives(filename):
             try:
-                hf_hub_download = partial(hf_hub_download, library_name="timm", library_version=__version__)
+                hf_hub_download = partial(hf_hub_download, library_name="timm", library_version=timm_version)
                 cached_safe_file = hf_hub_download(repo_id=hf_model_id, filename=safe_filename, revision=hf_revision)
                 logger.info(
                     f"[{model_id}] Safe alternative available for '{filename}' "
@@ -139,6 +151,742 @@ def timm_cache_model(
         else:
             timm_load_state_dict_from_hf(pretrained_loc)
 
+    return
+
+
+def get_transformer_model(
+    model_id: str,
+    model_args: Dict = {},
+    cache_dir: Optional[str] = None,
+    tokenizer_args: Dict = {},
+    tokenizer_name_or_path: str = None,
+):
+    config = AutoConfig.from_pretrained(model_id, **model_args, cache_dir=cache_dir)
+    if isinstance(config, T5Config):
+        load_t5_model(model_id, config, cache_dir, **model_args)
+    elif isinstance(config, MT5Config):
+        load_mt5_model(model_id, config, cache_dir, **model_args)
+    else:
+        AutoModel.from_pretrained(
+            model_id, config=config, cache_dir=cache_dir, **model_args
+        )
+    AutoTokenizer.from_pretrained(
+        tokenizer_name_or_path if tokenizer_name_or_path is not None else model_id,
+        cache_dir=cache_dir,
+        **tokenizer_args,
+    )
+
+
+def stfs_load_auto_model(
+    model_id: str,
+    token: Optional[Union[bool, str]],
+    cache_folder: Optional[str],
+    revision: Optional[str] = None,
+    trust_remote_code: bool = False,
+):
+    """
+    Creates a simple Transformer + Mean Pooling model and returns the modules
+    """
+    logger.warning(
+        "No sentence-transformers model found with name {}. Creating a new one with MEAN pooling.".format(
+            id
+        )
+    )
+
+    get_transformer_model(
+        model_id,
+        cache_dir=cache_folder,
+        model_args={"token": token, "trust_remote_code": trust_remote_code, "revision": revision},
+        tokenizer_args={"token": token, "trust_remote_code": trust_remote_code, "revision": revision},
+    )
+
+    return
+
+def stfs_load_sbert_model(
+    model_id: str,
+    token: Optional[Union[bool, str]],
+    cache_folder: Optional[str],
+    revision: Optional[str] = None,
+    trust_remote_code: bool = False,
+):
+    """
+    Loads a full sentence-transformers model
+    """
+    # Check if the config_sentence_transformers.json file exists (exists since v2 of the framework)
+    config_sentence_transformers_json_path = load_file_path(
+        model_id,
+        "config_sentence_transformers.json",
+        token=token,
+        cache_folder=cache_folder,
+        revision=revision,
+    )
+    if config_sentence_transformers_json_path is not None:
+        with open(config_sentence_transformers_json_path) as fIn:
+            model_config = json.load(fIn)
+
+        if (
+            "__version__" in model_config
+            and "sentence_transformers" in model_config["__version__"]
+            and model_config["__version__"]["sentence_transformers"] > stfs_version
+        ):
+            logger.warning(
+                "You try to use a model that was created with version {}, however, your version is {}. This might cause unexpected behavior or errors. In that case, try to update to the latest version.\n\n\n".format(
+                    model_config["__version__"]["sentence_transformers"], stfs_version
+                )
+            )
+
+    # Load the modules of sentence transformer
+    modules_json_path = load_file_path(
+        model_id, "modules.json", token=token, cache_folder=cache_folder, revision=revision
+    )
+    with open(modules_json_path) as fIn:
+        modules_config = json.load(fIn)
+
+    for module_config in modules_config:
+        module_class = import_from_string(module_config["type"])
+        # For Transformer, don't load the full directory, rely on `transformers` instead
+        # But, do load the config file first.
+        if module_class == Transformer and module_config["path"] == "":
+            kwargs = {}
+            for config_name in [
+                "sentence_bert_config.json",
+                "sentence_roberta_config.json",
+                "sentence_distilbert_config.json",
+                "sentence_camembert_config.json",
+                "sentence_albert_config.json",
+                "sentence_xlm-roberta_config.json",
+                "sentence_xlnet_config.json",
+            ]:
+                config_path = load_file_path(
+                    model_id, config_name, token=token, cache_folder=cache_folder, revision=revision
+                )
+                if config_path is not None:
+                    with open(config_path) as fIn:
+                        kwargs = json.load(fIn)
+                    break
+            hub_kwargs = {"token": token, "trust_remote_code": trust_remote_code, "revision": revision}
+            if "model_args" in kwargs:
+                kwargs["model_args"].update(hub_kwargs)
+            else:
+                kwargs["model_args"] = hub_kwargs
+            if "tokenizer_args" in kwargs:
+                kwargs["tokenizer_args"].update(hub_kwargs)
+            else:
+                kwargs["tokenizer_args"] = hub_kwargs
+            get_transformer_model(model_id, cache_dir=cache_folder, **kwargs)
+        else:
+            # Normalize does not require any files to be loaded
+            if module_class != Normalize:
+                load_dir_path(
+                    model_id,
+                    module_config["path"],
+                    token=token,
+                    cache_folder=cache_folder,
+                    revision=revision,
+                )
+
+    return
+
+
+def stfs_cache_model(model_id, cache_folder=None, use_auth_token=None):
+    token = use_auth_token
+    if cache_folder is None:
+        cache_folder = os.getenv("SENTENCE_TRANSFORMERS_HOME")
+    if model_id is not None and model_id != "":
+        logger.info("Load pretrained SentenceTransformer: {}".format(model_id))
+
+        # Old models that don't belong to any organization
+        basic_transformer_models = [
+            "albert-base-v1",
+            "albert-base-v2",
+            "albert-large-v1",
+            "albert-large-v2",
+            "albert-xlarge-v1",
+            "albert-xlarge-v2",
+            "albert-xxlarge-v1",
+            "albert-xxlarge-v2",
+            "bert-base-cased-finetuned-mrpc",
+            "bert-base-cased",
+            "bert-base-chinese",
+            "bert-base-german-cased",
+            "bert-base-german-dbmdz-cased",
+            "bert-base-german-dbmdz-uncased",
+            "bert-base-multilingual-cased",
+            "bert-base-multilingual-uncased",
+            "bert-base-uncased",
+            "bert-large-cased-whole-word-masking-finetuned-squad",
+            "bert-large-cased-whole-word-masking",
+            "bert-large-cased",
+            "bert-large-uncased-whole-word-masking-finetuned-squad",
+            "bert-large-uncased-whole-word-masking",
+            "bert-large-uncased",
+            "camembert-base",
+            "ctrl",
+            "distilbert-base-cased-distilled-squad",
+            "distilbert-base-cased",
+            "distilbert-base-german-cased",
+            "distilbert-base-multilingual-cased",
+            "distilbert-base-uncased-distilled-squad",
+            "distilbert-base-uncased-finetuned-sst-2-english",
+            "distilbert-base-uncased",
+            "distilgpt2",
+            "distilroberta-base",
+            "gpt2-large",
+            "gpt2-medium",
+            "gpt2-xl",
+            "gpt2",
+            "openai-gpt",
+            "roberta-base-openai-detector",
+            "roberta-base",
+            "roberta-large-mnli",
+            "roberta-large-openai-detector",
+            "roberta-large",
+            "t5-11b",
+            "t5-3b",
+            "t5-base",
+            "t5-large",
+            "t5-small",
+            "transfo-xl-wt103",
+            "xlm-clm-ende-1024",
+            "xlm-clm-enfr-1024",
+            "xlm-mlm-100-1280",
+            "xlm-mlm-17-1280",
+            "xlm-mlm-en-2048",
+            "xlm-mlm-ende-1024",
+            "xlm-mlm-enfr-1024",
+            "xlm-mlm-enro-1024",
+            "xlm-mlm-tlm-xnli15-1024",
+            "xlm-mlm-xnli15-1024",
+            "xlm-roberta-base",
+            "xlm-roberta-large-finetuned-conll02-dutch",
+            "xlm-roberta-large-finetuned-conll02-spanish",
+            "xlm-roberta-large-finetuned-conll03-english",
+            "xlm-roberta-large-finetuned-conll03-german",
+            "xlm-roberta-large",
+            "xlnet-base-cased",
+            "xlnet-large-cased",
+        ]
+    if not os.path.exists(model_id):
+    # Not a path, load from hub
+        if "\\" in model_id or model_id.count("/") > 1:
+            raise ValueError("Path {} not found".format(model_id))
+
+        if "/" not in model_id and model_id.lower() not in basic_transformer_models:
+            # A model from sentence-transformers
+            model_id = __MODEL_HUB_ORGANIZATION__ + "/" + model_id
+
+    if is_sentence_transformer_model(model_id, token, cache_folder=cache_folder, revision=None):
+        stfs_load_sbert_model(
+            model_id,
+            token=token,
+            cache_folder=cache_folder,
+            revision=None,
+            trust_remote_code=False,
+        )
+    else:
+        stfs_load_auto_model(
+            model_id,
+            token=token,
+            cache_folder=cache_folder,
+            revision=None,
+            trust_remote_code=False,
+        )
+
+
+def fs_cache_model(library_name, model_class_names, model_id, **kwargs):
+    # Diffusers & Transformers Cache Model
+
+    if library_name == "diffusers":
+        assert len(model_class_names) == 1
+        fs_diffusers_cache_model(model_class_names[0], model_id, **kwargs)
+    if library_name == "transformers":
+        for model_class_name in model_class_names:
+            fs_transformers_cache_model(model_class_name, model_id, **kwargs)
+
+
+def fs_diffusers_cache_model(model_class_name, model_id, **kwargs):
+    pass
+
+
+def fs_transformers_cache_model(model_class_name: str, model_id, **kwargs):
+
+    assert model_class_name.startswith("AutoModel") or model_class_name.startswith("TFAutoModel")
+    if model_class_name.startswith("AutoModel"):
+        fs_pt_tfs_cache_model(model_id, **kwargs)
+    if model_class_name.startswith("TFAutoModel"):
+        fs_tf_tfs_cache_model(model_id, **kwargs)
+
+
+def fs_pt_tfs_cache_model(model_id, **kwargs):
+    config: Optional[Union[PretrainedConfig, str, os.PathLike]] = None
+    cache_dir: Optional[Union[str, os.PathLike]] = None
+    force_download = False
+    local_files_only = False
+    token = None
+    revision = "main"
+    use_safetensors = None
+
+    from_tf = kwargs.pop("from_tf", False)
+    from_flax = kwargs.pop("from_flax", False)
+    resume_download = kwargs.pop("resume_download", False)
+    proxies = kwargs.pop("proxies", None)
+    use_auth_token = kwargs.pop("use_auth_token", None)
+    trust_remote_code = kwargs.pop("trust_remote_code", None)
+    _ = kwargs.pop("mirror", None)
+    from_pipeline = kwargs.pop("_from_pipeline", None)
+    from_auto_class = kwargs.pop("_from_auto", False)
+    load_in_8bit = kwargs.pop("load_in_8bit", False)
+    load_in_4bit = kwargs.pop("load_in_4bit", False)
+    quantization_config = kwargs.pop("quantization_config", None)
+    subfolder = kwargs.pop("subfolder", "")
+    commit_hash = kwargs.pop("_commit_hash", None)
+    variant = kwargs.pop("variant", None)
+    adapter_kwargs = kwargs.pop("adapter_kwargs", {})
+
+    if use_auth_token is not None:
+        if token is not None:
+            raise ValueError(
+                "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+            )
+        token = use_auth_token
+
+    if token is not None and adapter_kwargs is not None and "token" not in adapter_kwargs:
+        adapter_kwargs["token"] = token
+
+    if use_safetensors is None and not is_safetensors_available():
+        use_safetensors = False
+    if trust_remote_code is True:
+        logger.warning(
+            "The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is"
+            " ignored."
+        )
+
+    if commit_hash is None:
+        if not isinstance(config, PretrainedConfig):
+            # We make a call to the config file first (which may be absent) to get the commit hash as soon as possible
+            resolved_config_file = cached_file(
+                model_id,
+                CONFIG_NAME,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                resume_download=resume_download,
+                proxies=proxies,
+                local_files_only=local_files_only,
+                token=token,
+                revision=revision,
+                subfolder=subfolder,
+                _raise_exceptions_for_gated_repo=False,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+            )
+            commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
+        else:
+            commit_hash = getattr(config, "_commit_hash", None)
+
+    if is_peft_available():
+        _adapter_model_path = adapter_kwargs.pop("_adapter_model_path", None)
+
+        if _adapter_model_path is None:
+            _adapter_model_path = find_adapter_config_file(
+                model_id,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                resume_download=resume_download,
+                proxies=proxies,
+                local_files_only=local_files_only,
+                _commit_hash=commit_hash,
+                **adapter_kwargs,
+            )
+        if _adapter_model_path is not None and os.path.isfile(_adapter_model_path):
+            with open(_adapter_model_path, "r", encoding="utf-8") as f:
+                _adapter_model_path = model_id
+                model_id = json.load(f)["base_model_name_or_path"]
+    else:
+        _adapter_model_path = None
+    # handling bnb config from kwargs, remove after `load_in_{4/8}bit` deprecation.
+    if load_in_4bit or load_in_8bit:
+        if quantization_config is not None:
+            raise ValueError(
+                "You can't pass `load_in_4bit`or `load_in_8bit` as a kwarg when passing "
+                "`quantization_config` argument at the same time."
+            )
+
+        # preparing BitsAndBytesConfig from kwargs
+        config_dict = {k: v for k, v in kwargs.items() if k in inspect.signature(BitsAndBytesConfig).parameters}
+        config_dict = {**config_dict, "load_in_4bit": load_in_4bit, "load_in_8bit": load_in_8bit}
+        quantization_config, kwargs = BitsAndBytesConfig.from_dict(
+            config_dict=config_dict, return_unused_kwargs=True, **kwargs
+        )
+        logger.warning(
+            "The `load_in_4bit` and `load_in_8bit` arguments are deprecated and will be removed in the future versions. "
+            "Please, pass a `BitsAndBytesConfig` object in `quantization_config` argument instead."
+        )
+
+    user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
+    if from_pipeline is not None:
+        user_agent["using_pipeline"] = from_pipeline
+
+    # Load config if we don't provide a configuration
+    if not isinstance(config, PretrainedConfig):
+        config_path = config if config is not None else model_id
+        config, _ = PretrainedConfig.from_pretrained(
+            config_path,
+            cache_dir=cache_dir,
+            return_unused_kwargs=True,
+            force_download=force_download,
+            resume_download=resume_download,
+            proxies=proxies,
+            local_files_only=local_files_only,
+            token=token,
+            revision=revision,
+            subfolder=subfolder,
+            _from_auto=from_auto_class,
+            _from_pipeline=from_pipeline,
+            **kwargs,
+        )
+    else:
+        # In case one passes a config to `from_pretrained` + "attn_implementation"
+        # override the `_attn_implementation` attribute to `attn_implementation` of the kwargs
+        # Please see: https://github.com/huggingface/transformers/issues/28038
+
+        # Overwrite `config._attn_implementation` by the one from the kwargs --> in auto-factory
+        # we pop attn_implementation from the kwargs but this handles the case where users
+        # passes manually the config to `from_pretrained`.
+        config = copy.deepcopy(config)
+
+        kwarg_attn_imp = kwargs.pop("attn_implementation", None)
+        if kwarg_attn_imp is not None and config._attn_implementation != kwarg_attn_imp:
+            config._attn_implementation = kwarg_attn_imp
+
+    # This variable will flag if we're loading a sharded checkpoint. In this case the archive file is just the
+    # index of the files.
+    is_sharded = False
+
+    assert model_id is not None
+    model_id = str(model_id)
+    is_local = os.path.isdir(model_id)
+    assert not is_local
+
+    # set correct filename
+    if from_tf:
+        filename = TF2_WEIGHTS_NAME
+    elif from_flax:
+        filename = FLAX_WEIGHTS_NAME
+    elif use_safetensors is not False:
+        filename = _add_variant(SAFE_WEIGHTS_NAME, variant)
+    else:
+        filename = _add_variant(WEIGHTS_NAME, variant)
+
+    try:
+        # Load from URL or cache if already cached
+        cached_file_kwargs = {
+            "cache_dir": cache_dir,
+            "force_download": force_download,
+            "proxies": proxies,
+            "resume_download": resume_download,
+            "local_files_only": local_files_only,
+            "token": token,
+            "user_agent": user_agent,
+            "revision": revision,
+            "subfolder": subfolder,
+            "_raise_exceptions_for_gated_repo": False,
+            "_raise_exceptions_for_missing_entries": False,
+            "_commit_hash": commit_hash,
+        }
+        resolved_archive_file = cached_file(model_id, filename, **cached_file_kwargs)
+
+        # Since we set _raise_exceptions_for_missing_entries=False, we don't get an exception but a None
+        # result when internet is up, the repo and revision exist, but the file does not.
+        if resolved_archive_file is None and filename == _add_variant(SAFE_WEIGHTS_NAME, variant):
+            # Maybe the checkpoint is sharded, we try to grab the index name in this case.
+            resolved_archive_file = cached_file(
+                model_id,
+                _add_variant(SAFE_WEIGHTS_INDEX_NAME, variant),
+                **cached_file_kwargs,
+            )
+            if resolved_archive_file is not None:
+                is_sharded = True
+            elif use_safetensors:
+                if revision == "main":
+                    resolved_archive_file, revision, is_sharded = auto_conversion(
+                        model_id, **cached_file_kwargs
+                    )
+                cached_file_kwargs["revision"] = revision
+                if resolved_archive_file is None:
+                    raise EnvironmentError(
+                        f"{model_id} does not appear to have a file named"
+                        f" {_add_variant(SAFE_WEIGHTS_NAME, variant)} or {_add_variant(SAFE_WEIGHTS_INDEX_NAME, variant)} "
+                        "and thus cannot be loaded with `safetensors`. Please make sure that the model has "
+                        "been saved with `safe_serialization=True` or do not set `use_safetensors=True`."
+                    )
+            else:
+                # This repo has no safetensors file of any kind, we switch to PyTorch.
+                filename = _add_variant(WEIGHTS_NAME, variant)
+                resolved_archive_file = cached_file(
+                    model_id, filename, **cached_file_kwargs
+                )
+        if resolved_archive_file is None and filename == _add_variant(WEIGHTS_NAME, variant):
+            # Maybe the checkpoint is sharded, we try to grab the index name in this case.
+            resolved_archive_file = cached_file(
+                model_id,
+                _add_variant(WEIGHTS_INDEX_NAME, variant),
+                **cached_file_kwargs,
+            )
+            if resolved_archive_file is not None:
+                is_sharded = True
+        if resolved_archive_file is None:
+            # Otherwise, maybe there is a TF or Flax model file.  We try those to give a helpful error
+            # message.
+            has_file_kwargs = {
+                "revision": revision,
+                "proxies": proxies,
+                "token": token,
+            }
+            if has_file(model_id, TF2_WEIGHTS_NAME, **has_file_kwargs):
+                raise EnvironmentError(
+                    f"{model_id} does not appear to have a file named"
+                    f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file for TensorFlow weights."
+                    " Use `from_tf=True` to load this model from those weights."
+                )
+            elif has_file(model_id, FLAX_WEIGHTS_NAME, **has_file_kwargs):
+                raise EnvironmentError(
+                    f"{model_id} does not appear to have a file named"
+                    f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file for Flax weights. Use"
+                    " `from_flax=True` to load this model from those weights."
+                )
+            elif variant is not None and has_file(
+                model_id, WEIGHTS_NAME, **has_file_kwargs
+            ):
+                raise EnvironmentError(
+                    f"{model_id} does not appear to have a file named"
+                    f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file without the variant"
+                    f" {variant}. Use `variant=None` to load this model from those weights."
+                )
+            else:
+                raise EnvironmentError(
+                    f"{model_id} does not appear to have a file named"
+                    f" {_add_variant(WEIGHTS_NAME, variant)}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or"
+                    f" {FLAX_WEIGHTS_NAME}."
+                )
+    except EnvironmentError:
+        # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
+        # to the original exception.
+        raise
+    except Exception as e:
+        # For any other exception, we throw a generic error.
+        raise EnvironmentError(
+            f"Can't load the model for '{model_id}'. If you were trying to load it"
+            " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
+            f" same name. Otherwise, make sure '{model_id}' is the correct path to a"
+            f" directory containing a file named {_add_variant(WEIGHTS_NAME, variant)},"
+            f" {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or {FLAX_WEIGHTS_NAME}."
+        ) from e
+
+    # We'll need to download and cache each checkpoint shard if the checkpoint is sharded.
+    if is_sharded:
+        # rsolved_archive_file becomes a list of files that point to the different checkpoint shards in this case.
+        resolved_archive_file, _ = get_checkpoint_shard_files(
+            model_id,
+            resolved_archive_file,
+            cache_dir=cache_dir,
+            force_download=force_download,
+            proxies=proxies,
+            resume_download=resume_download,
+            local_files_only=local_files_only,
+            token=token,
+            user_agent=user_agent,
+            revision=revision,
+            subfolder=subfolder,
+            _commit_hash=commit_hash,
+        )
+    return
+
+
+def fs_tf_tfs_cache_model(model_id, **kwargs):
+
+    config: Optional[Union[PretrainedConfig, str, os.PathLike]] = None
+    cache_dir: Optional[Union[str, os.PathLike]] = None
+    ignore_mismatched_sizes: bool = False
+    force_download: bool = False
+    local_files_only: bool = False
+    token: Optional[Union[str, bool]] = None
+    revision: str = "main"
+    use_safetensors: bool = None
+
+    from_pt = kwargs.pop("from_pt", False)
+    resume_download = kwargs.pop("resume_download", False)
+    proxies = kwargs.pop("proxies", None)
+    output_loading_info = kwargs.pop("output_loading_info", False)
+    use_auth_token = kwargs.pop("use_auth_token", None)
+    trust_remote_code = kwargs.pop("trust_remote_code", None)
+    _ = kwargs.pop("mirror", None)
+    load_weight_prefix = kwargs.pop("load_weight_prefix", None)
+    from_pipeline = kwargs.pop("_from_pipeline", None)
+    from_auto_class = kwargs.pop("_from_auto", False)
+    subfolder = kwargs.pop("subfolder", "")
+    commit_hash = kwargs.pop("_commit_hash", None)
+    tf_to_pt_weight_rename = kwargs.pop("tf_to_pt_weight_rename", None)
+
+    # Not relevant for TF models
+    _ = kwargs.pop("adapter_kwargs", None)
+
+    if use_auth_token is not None:
+        if token is not None:
+            raise ValueError(
+                "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+            )
+        token = use_auth_token
+
+    if trust_remote_code is True:
+        logger.warning(
+            "The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is"
+            " ignored."
+        )
+
+    user_agent = {"file_type": "model", "framework": "tensorflow", "from_auto_class": from_auto_class}
+    if from_pipeline is not None:
+        user_agent["using_pipeline"] = from_pipeline
+
+    if use_safetensors is None and not is_safetensors_available():
+        use_safetensors = False
+
+    # Load config if we don't provide a configuration
+    if not isinstance(config, PretrainedConfig):
+        config_path = config if config is not None else model_id
+        config, model_kwargs = PretrainedConfig.config_class.from_pretrained(
+            config_path,
+            cache_dir=cache_dir,
+            return_unused_kwargs=True,
+            force_download=force_download,
+            resume_download=resume_download,
+            proxies=proxies,
+            local_files_only=local_files_only,
+            token=token,
+            revision=revision,
+            _from_auto=from_auto_class,
+            _from_pipeline=from_pipeline,
+            _commit_hash=commit_hash,
+            **kwargs,
+        )
+    else:
+        model_kwargs = kwargs
+
+    if commit_hash is None:
+        commit_hash = getattr(config, "_commit_hash", None)
+
+    # This variable will flag if we're loading a sharded checkpoint. In this case the archive file is just the
+    # index of the files.
+    is_sharded = False
+    # Load model
+    assert model_id is not None
+    model_id = str(model_id)
+    is_local = os.path.isdir(model_id)
+    assert not is_local
+
+    # set correct filename
+    if from_pt:
+        filename = WEIGHTS_NAME
+    elif use_safetensors is not False:
+        filename = SAFE_WEIGHTS_NAME
+    else:
+        filename = TF2_WEIGHTS_NAME
+
+    try:
+        # Load from URL or cache if already cached
+        cached_file_kwargs = {
+            "cache_dir": cache_dir,
+            "force_download": force_download,
+            "proxies": proxies,
+            "resume_download": resume_download,
+            "local_files_only": local_files_only,
+            "token": token,
+            "user_agent": user_agent,
+            "revision": revision,
+            "subfolder": subfolder,
+            "_raise_exceptions_for_gated_repo": False,
+            "_raise_exceptions_for_missing_entries": False,
+            "_commit_hash": commit_hash,
+        }
+        resolved_archive_file = cached_file(model_id, filename, **cached_file_kwargs)
+
+        # Since we set _raise_exceptions_for_missing_entries=False, we don't get an exception but a None
+        # result when internet is up, the repo and revision exist, but the file does not.
+        if resolved_archive_file is None and filename == SAFE_WEIGHTS_NAME:
+            # Did not find the safetensors file, let's fallback to TF.
+            # No support for sharded safetensors yet, so we'll raise an error if that's all we find.
+            filename = TF2_WEIGHTS_NAME
+            resolved_archive_file = cached_file(
+                model_id, TF2_WEIGHTS_NAME, **cached_file_kwargs
+            )
+        if resolved_archive_file is None and filename == TF2_WEIGHTS_NAME:
+            # Maybe the checkpoint is sharded, we try to grab the index name in this case.
+            resolved_archive_file = cached_file(
+                model_id, TF2_WEIGHTS_INDEX_NAME, **cached_file_kwargs
+            )
+            if resolved_archive_file is not None:
+                is_sharded = True
+        if resolved_archive_file is None and filename == WEIGHTS_NAME:
+            # Maybe the checkpoint is sharded, we try to grab the index name in this case.
+            resolved_archive_file = cached_file(
+                model_id, WEIGHTS_INDEX_NAME, **cached_file_kwargs
+            )
+            if resolved_archive_file is not None:
+                is_sharded = True
+        if resolved_archive_file is None:
+            # Otherwise, maybe there is a PyTorch or Flax model file.  We try those to give a helpful error
+            # message.
+            has_file_kwargs = {
+                "revision": revision,
+                "proxies": proxies,
+                "token": token,
+            }
+            if has_file(model_id, SAFE_WEIGHTS_INDEX_NAME, **has_file_kwargs):
+                is_sharded = True
+                raise NotImplementedError(
+                    "Support for sharded checkpoints using safetensors is coming soon!"
+                )
+            elif has_file(model_id, WEIGHTS_NAME, **has_file_kwargs):
+                raise EnvironmentError(
+                    f"{model_id} does not appear to have a file named"
+                    f" {TF2_WEIGHTS_NAME} but there is a file for PyTorch weights. Use `from_pt=True` to"
+                    " load this model from those weights."
+                )
+            else:
+                raise EnvironmentError(
+                    f"{model_id} does not appear to have a file named {WEIGHTS_NAME},"
+                    f" {TF2_WEIGHTS_NAME} or {TF_WEIGHTS_NAME}"
+                )
+
+    except EnvironmentError:
+        # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
+        # to the original exception.
+        raise
+    except Exception:
+        # For any other exception, we throw a generic error.
+
+        raise EnvironmentError(
+            f"Can't load the model for '{model_id}'. If you were trying to load it"
+            " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
+            f" same name. Otherwise, make sure '{model_id}' is the correct path to a"
+            f" directory containing a file named {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME} or {TF_WEIGHTS_NAME}"
+        )
+
+    # We'll need to download and cache each checkpoint shard if the checkpoint is sharded.
+    if is_sharded:
+        # resolved_archive_file becomes a list of files that point to the different checkpoint shards in this case.
+        resolved_archive_file, _ = get_checkpoint_shard_files(
+            model_id,
+            resolved_archive_file,
+            cache_dir=cache_dir,
+            force_download=force_download,
+            proxies=proxies,
+            resume_download=resume_download,
+            local_files_only=local_files_only,
+            token=token,
+            user_agent=user_agent,
+            revision=revision,
+            _commit_hash=commit_hash,
+        )
     return
 
 
@@ -234,6 +982,7 @@ def get_model_class_for_task(
 
         return model_class_names, loaded_library
 
+
 def cache_model_from_task(
     task,
     model_id,
@@ -242,7 +991,6 @@ def cache_model_from_task(
     cache_dir,
     framework,
     torch_dtype,
-    device,
     library_name,
     **model_kwargs,
 ):
@@ -272,6 +1020,7 @@ def cache_model_from_task(
         if original_task == "automatic-speech-recognition" or task == "automatic-speech-recognition":
             if original_task == "auto" and config.architectures is not None:
                 model_class_name = config.architectures[0]
+        #^^^^^^^^^^^^^^^^^^^^ Serveral Different Model Classes ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     model_class_names, loaded_library = get_model_class_for_task(
         task, framework, model_type=model_type, model_class_name=model_class_name, library=library_name
@@ -286,42 +1035,21 @@ def cache_model_from_task(
         assert model_class_names[0] == 'SentenceTransformer'
         cache_folder = model_kwargs.pop("cache_folder", None)
         use_auth_token = model_kwargs.pop("use_auth_token", None)
-        model = model_class(
-            model_id, device=device, cache_folder=cache_folder, use_auth_token=use_auth_token
-        )
+        stfs_cache_model(model_id, cache_folder=cache_folder, use_auth_token=use_auth_token)
     else:
         try:
             if framework == "pt":
                 kwargs["torch_dtype"] = torch_dtype
-
-                if isinstance(device, str):
-                    device = torch.device(device)
-                elif device is None:
-                    device = torch.device("cpu")
-
-                # TODO : fix EulerDiscreteScheduler loading to enable for SD models
-                if version.parse(torch.__version__) >= version.parse("2.0") and library_name != "diffusers":
-                    with device:
-                        # Initialize directly in the requested device, to save allocation time. Especially useful for large
-                        # models to initialize on cuda device.
-                        model = model_class.from_pretrained(model_id, **kwargs)
-                else:
-                    model = model_class.from_pretrained(model_id, **kwargs).to(device)
-            else:
-                model = model_class.from_pretrained(model_id, **kwargs)
+            fs_cache_model(library_name, model_class_names, model_id, **kwargs)
         except OSError:
             if framework == "pt":
                 logger.info("Loading TensorFlow model in PyTorch before exporting.")
                 kwargs["from_tf"] = True
-                model = model_class.from_pretrained(model_id, **kwargs)
+                fs_cache_model(library_name, model_class_names, model_id, **kwargs)
             else:
                 logger.info("Loading PyTorch model in TensorFlow before exporting.")
                 kwargs["from_pt"] = True
-                model = model_class.from_pretrained(model_id, **kwargs)
-
-    TasksManager.standardize_model_attributes(
-        model_id, model, subfolder, revision, cache_dir, library_name
-    )
+                fs_cache_model(library_name, model_class_names, model_id, **kwargs)
 
 
 def cache_model(model_id, cache_dir, monolith) -> Dict:
