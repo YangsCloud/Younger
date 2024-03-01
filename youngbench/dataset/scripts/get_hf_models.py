@@ -41,8 +41,10 @@ from timm.models._pretrained import PretrainedCfg
 from timm.models._builder import _resolve_pretrained_source
 from timm.models._hub import _get_safe_alternatives
 
-from transformers import AutoConfig, T5Config, MT5Config, PretrainedConfig, BitsAndBytesConfig
-from transformers.utils import cached_file, CONFIG_NAME, extract_commit_hash, is_peft_available, find_adapter_config_file, is_safetensors_available, TF_WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF2_WEIGHTS_INDEX_NAME, FLAX_WEIGHTS_NAME, SAFE_WEIGHTS_NAME, SAFE_WEIGHTS_INDEX_NAME, WEIGHTS_NAME, WEIGHTS_INDEX_NAME, has_file, get_check
+from diffusers.pipelines.pipeline_utils import DiffusionPipeline
+
+from transformers import AutoConfig, PretrainedConfig, BitsAndBytesConfig
+from transformers.utils import cached_file, CONFIG_NAME, extract_commit_hash, is_peft_available, find_adapter_config_file, is_safetensors_available, TF_WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF2_WEIGHTS_INDEX_NAME, FLAX_WEIGHTS_NAME, SAFE_WEIGHTS_NAME, SAFE_WEIGHTS_INDEX_NAME, WEIGHTS_NAME, WEIGHTS_INDEX_NAME, has_file
 from transformers.utils.hub import get_checkpoint_shard_files
 from transformers.modeling_utils import _add_variant
 from transformers.safetensors_conversion import auto_conversion
@@ -162,19 +164,7 @@ def get_transformer_model(
     tokenizer_name_or_path: str = None,
 ):
     config = AutoConfig.from_pretrained(model_id, **model_args, cache_dir=cache_dir)
-    if isinstance(config, T5Config):
-        load_t5_model(model_id, config, cache_dir, **model_args)
-    elif isinstance(config, MT5Config):
-        load_mt5_model(model_id, config, cache_dir, **model_args)
-    else:
-        AutoModel.from_pretrained(
-            model_id, config=config, cache_dir=cache_dir, **model_args
-        )
-    AutoTokenizer.from_pretrained(
-        tokenizer_name_or_path if tokenizer_name_or_path is not None else model_id,
-        cache_dir=cache_dir,
-        **tokenizer_args,
-    )
+    fs_transformers_cache_model("AutoModel", model_id, config=config, cache_dir=cache_dir, **model_args)
 
 
 def stfs_load_auto_model(
@@ -405,11 +395,49 @@ def fs_cache_model(library_name, model_class_names, model_id, **kwargs):
 
 
 def fs_diffusers_cache_model(model_class_name, model_id, **kwargs):
-    pass
+    assert model_class_name in {"StableDiffusionPipeline", "StableDiffusionXLImg2ImgPipeline"}
+    cache_dir = kwargs.pop("cache_dir", None)
+    resume_download = kwargs.pop("resume_download", False)
+    force_download = kwargs.pop("force_download", False)
+    proxies = kwargs.pop("proxies", None)
+    local_files_only = kwargs.pop("local_files_only", None)
+    token = kwargs.pop("token", None)
+    revision = kwargs.pop("revision", None)
+    from_flax = kwargs.pop("from_flax", False)
+    custom_pipeline = kwargs.pop("custom_pipeline", None)
+    custom_revision = kwargs.pop("custom_revision", None)
+    variant = kwargs.pop("variant", None)
+    use_safetensors = kwargs.pop("use_safetensors", None)
+    use_onnx = kwargs.pop("use_onnx", None)
+    load_connected_pipeline = kwargs.pop("load_connected_pipeline", False)
+
+    assert not os.path.isdir(model_id)
+    if model_id.count("/") > 1:
+        raise ValueError(
+            f'The provided pretrained_model_name_or_path "{model_id}"'
+            " is neither a valid local path nor a valid repo id. Please check the parameter."
+        )
+    DiffusionPipeline.download(
+        model_id,
+        cache_dir=cache_dir,
+        resume_download=resume_download,
+        force_download=force_download,
+        proxies=proxies,
+        local_files_only=local_files_only,
+        token=token,
+        revision=revision,
+        from_flax=from_flax,
+        use_safetensors=use_safetensors,
+        use_onnx=use_onnx,
+        custom_pipeline=custom_pipeline,
+        custom_revision=custom_revision,
+        variant=variant,
+        load_connected_pipeline=load_connected_pipeline,
+        **kwargs,
+    )
 
 
 def fs_transformers_cache_model(model_class_name: str, model_id, **kwargs):
-
     assert model_class_name.startswith("AutoModel") or model_class_name.startswith("TFAutoModel")
     if model_class_name.startswith("AutoModel"):
         fs_pt_tfs_cache_model(model_id, **kwargs)
@@ -417,9 +445,7 @@ def fs_transformers_cache_model(model_class_name: str, model_id, **kwargs):
         fs_tf_tfs_cache_model(model_id, **kwargs)
 
 
-def fs_pt_tfs_cache_model(model_id, **kwargs):
-    config: Optional[Union[PretrainedConfig, str, os.PathLike]] = None
-    cache_dir: Optional[Union[str, os.PathLike]] = None
+def fs_pt_tfs_cache_model(model_id, config: Optional[Union[PretrainedConfig, str, os.PathLike]] = None, cache_dir: Optional[Union[str, os.PathLike]] = None, **kwargs):
     force_download = False
     local_files_only = False
     token = None
@@ -702,10 +728,7 @@ def fs_pt_tfs_cache_model(model_id, **kwargs):
     return
 
 
-def fs_tf_tfs_cache_model(model_id, **kwargs):
-
-    config: Optional[Union[PretrainedConfig, str, os.PathLike]] = None
-    cache_dir: Optional[Union[str, os.PathLike]] = None
+def fs_tf_tfs_cache_model(model_id, config: Optional[Union[PretrainedConfig, str, os.PathLike]] = None, cache_dir: Optional[Union[str, os.PathLike]] = None, **kwargs):
     ignore_mismatched_sizes: bool = False
     force_download: bool = False
     local_files_only: bool = False
