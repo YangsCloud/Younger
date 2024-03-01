@@ -2,6 +2,12 @@
 
 [English Documentation](./README.md)
 
+## 依赖
+
+1. conda create -n ExportONNX python=3.9
+
+2. pip install optimum[exporters] YoungToolkit diffusers timm transformers sentence-transformers accelerator
+
 ## 数据集构建
 
 预训练模型 (PyTorch/TensorFlow) -> ONNX 模型 -> Network (Directed Acyclic Graph)
