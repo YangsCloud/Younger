@@ -19,6 +19,7 @@ import pathlib
 import argparse
 import importlib
 import dataclasses
+import huggingface_hub
 
 from safetensors import safe_open
 from functools import partial
@@ -43,7 +44,7 @@ from timm.models._hub import _get_safe_alternatives
 
 from diffusers.pipelines.pipeline_utils import DiffusionPipeline
 
-from transformers import AutoConfig, PretrainedConfig, BitsAndBytesConfig
+from transformers import AutoConfig, PretrainedConfig, BitsAndBytesConfig, PreTrainedModel, TFPreTrainedModel, is_torch_available, is_tf_available
 from transformers.utils import cached_file, CONFIG_NAME, extract_commit_hash, is_peft_available, find_adapter_config_file, is_safetensors_available, TF_WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF2_WEIGHTS_INDEX_NAME, FLAX_WEIGHTS_NAME, SAFE_WEIGHTS_NAME, SAFE_WEIGHTS_INDEX_NAME, WEIGHTS_NAME, WEIGHTS_INDEX_NAME, has_file
 from transformers.utils.hub import get_checkpoint_shard_files
 from transformers.modeling_utils import _add_variant
@@ -65,6 +66,8 @@ except ImportError:
 HF_WEIGHTS_NAME = "pytorch_model.bin"  # default pytorch pkl
 __MODEL_HUB_ORGANIZATION__ = "sentence-transformers"
 
+hf_hub_download = partial(hf_hub_download, library_name="timm", library_version=timm_version)
+
 
 def timm_hf_split(hf_id: str):
     # FIXME I may change @ -> # and be parsed as fragment in a URI model name scheme
@@ -83,7 +86,6 @@ def timm_load_state_dict_from_hf(model_id: str, filename: str = HF_WEIGHTS_NAME)
     if _has_safetensors:
         for safe_filename in _get_safe_alternatives(filename):
             try:
-                hf_hub_download = partial(hf_hub_download, library_name="timm", library_version=timm_version)
                 cached_safe_file = hf_hub_download(repo_id=hf_model_id, filename=safe_filename, revision=hf_revision)
                 logger.info(
                     f"[{model_id}] Safe alternative available for '{filename}' "
@@ -118,7 +120,7 @@ def timm_cache_model(
     no_jit: Optional[bool] = None,
     **kwargs,
 ):
-    # Modified from sources: timm.create_model
+    # Modified from sources: timm.create_model & timm.models._builder.build_model_with_cfg
 
     # Parameters that aren't supported by all models or are intended to only override model defaults if set
     # should default to None in command line args/cfg. Remove them if they are present and not set so that
@@ -142,7 +144,6 @@ def timm_cache_model(
         assert isinstance(pretrained_cfg, dict)
         pretrained_cfg = PretrainedCfg(**pretrained_cfg)
         pretrained_cfg_overlay = pretrained_cfg_overlay or {}
-        assert pretrained_cfg.architecture
         pretrained_cfg = dataclasses.replace(pretrained_cfg, **pretrained_cfg_overlay)
         pretrained_cfg = pretrained_cfg.to_dict()
         load_from, pretrained_loc = _resolve_pretrained_source(pretrained_cfg)
@@ -158,9 +159,11 @@ def timm_cache_model(
 
 def get_transformer_model(
     model_id: str,
+    max_seq_length: Optional[int] = None,
     model_args: Dict = {},
     cache_dir: Optional[str] = None,
     tokenizer_args: Dict = {},
+    do_lower_case: bool = False,
     tokenizer_name_or_path: str = None,
 ):
     config = AutoConfig.from_pretrained(model_id, **model_args, cache_dir=cache_dir)
@@ -174,6 +177,7 @@ def stfs_load_auto_model(
     revision: Optional[str] = None,
     trust_remote_code: bool = False,
 ):
+    # Modified from sources: sentence_transformers.Transformer.__init__
     """
     Creates a simple Transformer + Mean Pooling model and returns the modules
     """
@@ -386,6 +390,7 @@ def stfs_cache_model(model_id, cache_folder=None, use_auth_token=None):
 def fs_cache_model(library_name, model_class_names, model_id, **kwargs):
     # Diffusers & Transformers Cache Model
 
+    # Modified from sources: diffusers.pipelines.pipeline_utils.DiffusionPipeline & transformers.modeling_utils.PreTrainedModel.from_pretrained
     if library_name == "diffusers":
         assert len(model_class_names) == 1
         fs_diffusers_cache_model(model_class_names[0], model_id, **kwargs)
@@ -445,13 +450,17 @@ def fs_transformers_cache_model(model_class_name: str, model_id, **kwargs):
         fs_tf_tfs_cache_model(model_id, **kwargs)
 
 
-def fs_pt_tfs_cache_model(model_id, config: Optional[Union[PretrainedConfig, str, os.PathLike]] = None, cache_dir: Optional[Union[str, os.PathLike]] = None, **kwargs):
-    force_download = False
-    local_files_only = False
-    token = None
-    revision = "main"
-    use_safetensors = None
-
+def fs_pt_tfs_cache_model(
+    model_id,
+    config: Optional[Union[PretrainedConfig, str, os.PathLike]] = None,
+    cache_dir: Optional[Union[str, os.PathLike]] = None,
+    revision = "main",
+    force_download = False,
+    local_files_only = False,
+    token = None,
+    use_safetensors = None,
+    **kwargs
+):
     from_tf = kwargs.pop("from_tf", False)
     from_flax = kwargs.pop("from_flax", False)
     resume_download = kwargs.pop("resume_download", False)
@@ -728,14 +737,18 @@ def fs_pt_tfs_cache_model(model_id, config: Optional[Union[PretrainedConfig, str
     return
 
 
-def fs_tf_tfs_cache_model(model_id, config: Optional[Union[PretrainedConfig, str, os.PathLike]] = None, cache_dir: Optional[Union[str, os.PathLike]] = None, **kwargs):
-    ignore_mismatched_sizes: bool = False
-    force_download: bool = False
-    local_files_only: bool = False
-    token: Optional[Union[str, bool]] = None
-    revision: str = "main"
-    use_safetensors: bool = None
-
+def fs_tf_tfs_cache_model(
+    model_id,
+    config: Optional[Union[PretrainedConfig, str, os.PathLike]] = None,
+    cache_dir: Optional[Union[str, os.PathLike]] = None,
+    ignore_mismatched_sizes: bool = False,
+    force_download: bool = False,
+    local_files_only: bool = False,
+    token: Optional[Union[str, bool]] = None,
+    revision: str = "main",
+    use_safetensors: bool = None,
+    **kwargs
+):
     from_pt = kwargs.pop("from_pt", False)
     resume_download = kwargs.pop("resume_download", False)
     proxies = kwargs.pop("proxies", None)
@@ -1056,7 +1069,7 @@ def cache_model_from_task(
     elif library_name == "sentence_transformers":
         assert len(model_class_names) == 1
         assert model_class_names[0] == 'SentenceTransformer'
-        cache_folder = model_kwargs.pop("cache_folder", None)
+        cache_folder = cache_dir
         use_auth_token = model_kwargs.pop("use_auth_token", None)
         stfs_cache_model(model_id, cache_folder=cache_folder, use_auth_token=use_auth_token)
     else:
@@ -1073,6 +1086,102 @@ def cache_model_from_task(
                 logger.info("Loading PyTorch model in TensorFlow before exporting.")
                 kwargs["from_pt"] = True
                 fs_cache_model(library_name, model_class_names, model_id, **kwargs)
+
+
+def _infer_task_from_model_name_or_path(
+    model_name_or_path: str, subfolder: str = "", revision: Optional[str] = None
+) -> str:
+    inferred_task_name = None
+    is_local = os.path.isdir(os.path.join(model_name_or_path, subfolder))
+
+    if is_local:
+        # TODO: maybe implement that.
+        raise RuntimeError("Cannot infer the task from a local directory yet, please specify the task manually.")
+    else:
+        if subfolder != "":
+            raise RuntimeError(
+                "Cannot infer the task from a model repo with a subfolder yet, please specify the task manually."
+            )
+        model_info = huggingface_hub.model_info(model_name_or_path, revision=revision)
+        if getattr(model_info, "library_name", None) == "diffusers":
+            class_name = model_info.config["diffusers"]["class_name"]
+            inferred_task_name = "stable-diffusion-xl" if "StableDiffusionXL" in class_name else "stable-diffusion"
+        elif getattr(model_info, "library_name", None) == "timm":
+            inferred_task_name = "image-classification"
+        else:
+            pipeline_tag = getattr(model_info, "pipeline_tag", None)
+            # The Hub task "conversational" is not a supported task per se, just an alias that may map to
+            # text-generaton or text2text-generation.
+            # The Hub task "object-detection" is not a supported task per se, as in Transformers this may map to either
+            # zero-shot-object-detection or object-detection.
+            if pipeline_tag is not None and pipeline_tag not in ["conversational", "object-detection"]:
+                inferred_task_name = TasksManager.map_from_synonym(model_info.pipeline_tag)
+            else:
+                transformers_info = model_info.transformersInfo
+                if transformers_info is not None and transformers_info.get("pipeline_tag") is not None:
+                    inferred_task_name = TasksManager.map_from_synonym(transformers_info["pipeline_tag"])
+                elif model_info.library_name == "sentence-transformers":
+                    inferred_task_name = "sentence-similarity"
+                else:
+                    # transformersInfo does not always have a pipeline_tag attribute
+                    class_name_prefix = ""
+                    if is_torch_available():
+                        tasks_to_automodels = TasksManager._LIBRARY_TO_TASKS_TO_MODEL_LOADER_MAP[
+                            model_info.library_name
+                        ]
+                    else:
+                        tasks_to_automodels = TasksManager._LIBRARY_TO_TF_TASKS_TO_MODEL_LOADER_MAP[
+                            model_info.library_name
+                        ]
+                        class_name_prefix = "TF"
+
+                    auto_model_class_name = transformers_info["auto_model"]
+                    if not auto_model_class_name.startswith("TF"):
+                        auto_model_class_name = f"{class_name_prefix}{auto_model_class_name}"
+                    for task_name, class_name_for_task in tasks_to_automodels.items():
+                        if class_name_for_task == auto_model_class_name:
+                            inferred_task_name = task_name
+                            break
+
+    if inferred_task_name is None:
+        raise KeyError(f"Could not find the proper task name for {auto_model_class_name}.")
+    return inferred_task_name
+
+
+def infer_task_from_model(
+    model: Union[str, "PreTrainedModel", "TFPreTrainedModel", Type],
+    subfolder: str = "",
+    revision: Optional[str] = None,
+) -> str:
+    """
+    Infers the task from the model repo.
+
+    Args:
+        model (`str`):
+            The model to infer the task from. This can either be the name of a repo on the HuggingFace Hub, an
+            instance of a model, or a model class.
+        subfolder (`str`, *optional*, defaults to `""`):
+            In case the model files are located inside a subfolder of the model directory / repo on the Hugging
+            Face Hub, you can specify the subfolder name here.
+        revision (`Optional[str]`,  defaults to `None`):
+            Revision is the specific model version to use. It can be a branch name, a tag name, or a commit id.
+    Returns:
+        `str`: The task name automatically detected from the model repo.
+    """
+    is_torch_pretrained_model = is_torch_available() and isinstance(model, PreTrainedModel)
+    is_tf_pretrained_model = is_tf_available() and isinstance(model, TFPreTrainedModel)
+    task = None
+    if isinstance(model, str):
+        task = _infer_task_from_model_name_or_path(model, subfolder=subfolder, revision=revision)
+    elif is_torch_pretrained_model or is_tf_pretrained_model:
+        task = TasksManager._infer_task_from_model_or_model_class(model=model)
+    elif inspect.isclass(model):
+        task = TasksManager._infer_task_from_model_or_model_class(model_class=model)
+
+    if task is None:
+        raise ValueError(f"Could not infer the task from {model}.")
+
+    return task
 
 
 def cache_model(model_id, cache_dir, monolith) -> Dict:
@@ -1100,7 +1209,7 @@ def cache_model(model_id, cache_dir, monolith) -> Dict:
             torch_dtype = torch.bfloat16
     if task == "auto":
         try:
-            task = TasksManager.infer_task_from_model(model_id)
+            task = infer_task_from_model(model_id)
         except KeyError as e:
             raise KeyError(
                 f"The task could not be automatically inferred. Please provide the argument --task with the relevant task from {', '.join(TasksManager.get_all_tasks())}. Detailed error: {e}"
@@ -1109,7 +1218,7 @@ def cache_model(model_id, cache_dir, monolith) -> Dict:
             raise RequestsConnectionError(
                 f"The task could not be automatically inferred as this is available only for models hosted on the Hugging Face Hub. Please provide the argument --task with the relevant task from {', '.join(TasksManager.get_all_tasks())}. Detailed error: {e}"
             )
-    
+
     custom_architecture = False
     loading_kwargs = {}
     if library_name == "transformers":
@@ -1258,24 +1367,24 @@ if __name__ == '__main__':
     for model_info in model_infos():
         model_id = model_info['id']
         if model_id not in flags:
-            try:
-                logger.info(f'= v. Fin/To={len(flags)}/{index} - Now Cache {model_id}')
-                cached_args_dict = cache_model(model_id, cache_dir=str(cache_dirpath), monolith=False)
-                assert model_id == cached_args_dict['model_id']
-                flags.add(model_id)
-                with open(cache_flag_path, 'a') as f:
-                    cached_args_json = json.dumps(cached_args_dict)
-                    f.write(f'{cached_args_json}\n')
-                logger.info(f'= ^. Fin/To={len(flags)}/{index} - \'{model_id}\' Finished.')
-            except Exception as e:
-                logger.error(f'E: {e}')
-                logger.error(f'There is an error occurred during cache onnx model, please re-run the script or stop the process.')
-                if not args.ignore:
-                    user_input = input("Do you want to continue? (yes/no): ")
-                    if user_input.lower() == 'yes':
-                        print("Continuing with the process...")
-                    else:
-                        print("Process aborted.")
-                        sys.exit(1)
+            # try:
+            logger.info(f'= v. Fin/To={len(flags)}/{index} - Now Cache {model_id}')
+            cached_args_dict = cache_model(model_id, cache_dir=str(cache_dirpath), monolith=False)
+            assert model_id == cached_args_dict['model_id']
+            flags.add(model_id)
+            with open(cache_flag_path, 'a') as f:
+                cached_args_json = json.dumps(cached_args_dict)
+                f.write(f'{cached_args_json}\n')
+            logger.info(f'= ^. Fin/To={len(flags)}/{index} - \'{model_id}\' Finished.')
+            # except Exception as e:
+            #     logger.error(f'E: {e}')
+            #     logger.error(f'There is an error occurred during cache onnx model, please re-run the script or stop the process.')
+            #     if not args.ignore:
+            #         user_input = input("Do you want to continue? (yes/no): ")
+            #         if user_input.lower() == 'yes':
+            #             print("Continuing with the process...")
+            #         else:
+            #             print("Process aborted.")
+            #             sys.exit(1)
         else:
             continue
