@@ -10,4 +10,7 @@
 
 . ./constants.sh
 
-python -m youngbench.dataset.scripts.get_hf_models --key likes --info-dirpath ${DFS_PATH} --cache-dirpath ${HF_CACHE_PATH} --cache-flag-path ${HF_CACHE_FLAG_PATH}
+#python -m youngbench.dataset.scripts.get_hf_models --key likes --info-dirpath ${DFS_PATH} --cache-dirpath ${HF_CACHE_PATH} --cache-flag-path ${HF_CACHE_FLAG_PATH}
+#python -m youngbench.dataset.scripts.get_hf_models --key likes --info-dirpath ${TFS_PATH} --cache-dirpath ${HF_CACHE_PATH} --cache-flag-path ${HF_CACHE_FLAG_PATH}
+#python -m youngbench.dataset.scripts.get_hf_models --key likes --info-dirpath ${TIMM_PATH} --cache-dirpath ${HF_CACHE_PATH} --cache-flag-path ${HF_CACHE_FLAG_PATH}
+python -m youngbench.dataset.scripts.get_hf_models --key likes --info-dirpath ${STFS_PATH} --cache-dirpath ${HF_CACHE_PATH} --cache-flag-path ${HF_CACHE_FLAG_PATH}
