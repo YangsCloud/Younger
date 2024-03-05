@@ -90,7 +90,7 @@ def timm_load_state_dict_from_hf(model_id: str, filename: str = HF_WEIGHTS_NAME)
                 logger.info(
                     f"[{model_id}] Safe alternative available for '{filename}' "
                     f"(as '{safe_filename}'). Loading weights using safetensors.")
-                return safetensors.torch.load_file(cached_safe_file, device="cpu")
+                return
             except EntryNotFoundError:
                 pass
 
