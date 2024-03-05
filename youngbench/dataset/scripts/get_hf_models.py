@@ -133,6 +133,7 @@ def timm_cache_model(
     # For model names specified in the form `hf-hub:path/architecture_name@revision`,
     # load model weights + pretrained_cfg from Hugging Face hub.
     pretrained_cfg, model_name, model_args = load_model_config_from_hf(model_name)
+    print(model_name)
     if model_args:
         for k, v in model_args.items():
             kwargs.setdefault(k, v)
@@ -1340,6 +1341,8 @@ if __name__ == '__main__':
         with open(cache_flag_path, 'r') as f:
             for line in f:
                 model_args_json = line.strip()
+                if len(model_args_json) == 0:
+                    continue
                 model_args_dict: Dict = json.loads(model_args_json)
                 model_id = model_args_dict.pop('model_id')
                 assert model_id not in flags
@@ -1388,3 +1391,5 @@ if __name__ == '__main__':
             #             sys.exit(1)
         else:
             continue
+
+    logger.info("All Done!")
