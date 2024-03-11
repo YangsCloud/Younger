@@ -16,7 +16,7 @@ from huggingface_hub import login
 from youngbench.logging import set_logger, logger
 from youngbench.dataset.construct.utils.get_info import get_hf_model_infos
 from youngbench.dataset.construct.utils.schema import Model
-from youngbench.dataset.construct.utils.action import create_model_item, read_model_items
+from youngbench.dataset.construct.utils.action import create_model_item, read_model_items, create_model_items
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Enrich The Young Neural Network Architecture Dataset (YoungBench - Dataset).")
@@ -25,11 +25,19 @@ if __name__ == '__main__':
 
     parser.add_argument('--token', type=str, required=True)
 
+    parser.add_argument('--number', type=int, default=1)
+
+    parser.add_argument('--report', type=int, default=100)
+
     parser.add_argument('--hf-token', type=str, default=None)
 
     parser.add_argument('--logging-path', type=str, default=None)
 
     args = parser.parse_args()
+
+    assert args.number > 0
+
+    assert args.report > 0
 
     if args.hf_token is not None:
         login(token=args.hf_token)
@@ -48,7 +56,10 @@ if __name__ == '__main__':
     success = 0
     failure = 0
     skip = 0
+
+    batch = list()
     for model_info in model_infos:
+
         index += 1
         if model_info['id'] in exist_models:
             skip += 1
@@ -56,16 +67,48 @@ if __name__ == '__main__':
 
         else:
             model = Model(model_id=model_info['id'], model_source='HuggingFace', model_likes=model_info['likes'], model_downloads=model_info['downloads'])
-            # Optimize
-            # exist_model = read_model_item_by_model_id(model_id=model.model_id, token=args.token)
+            if len(batch) < args.number:
+                batch.append(model)
 
-            model = create_model_item(model, args.token)
-            if model is None:
-                failure += 1
-                logger.info(f' - No.{index} Item Creation Error - Model ID: {model_info["id"]}')
-            else:
-                exist_models.add(model.model_id)
-                success += 1
+            if len(batch) == args.number:
+                def one_by_one(model):
+                    model = create_model_item(model, args.token)
+                    if model is None:
+                        failure += 1
+                        logger.info(f' - No.{index} Item Creation Error - Model ID: {model.model_id}')
+                    else:
+                        exist_models.add(model.model_id)
+                        success += 1
 
-        if index % 100 == 0:
-            logger.info(f' - [Index: {index}] Success/Failure/Skip:{success}/{failure}/{skip}')
+                if len(batch) == 1:
+                    one_by_one(batch[0])
+                else:
+                    models = create_model_items(batch, args.token)
+                    if len(models) == 0:
+                        logger.info(f' - No. {index-len(batch)+1}-{index} Items Creation Has Error. Now Create Items 1-By-1!')
+                        for model in batch:
+                            one_by_one(model)
+                    else:
+                        success += len(models)
+
+                batch = list()
+
+        if index % args.report == 0:
+            logger.info(f' - [Index: {index}] Success/Failure/Skip/OnRoud:{success}/{failure}/{skip}/{len(batch)}')
+
+    if len(batch) > 0:
+        models = create_model_items(batch, args.token)
+        if len(models) == 0:
+            logger.info(f' - No. {index-len(batch)+1}-{index} Items Creation Has Error. Now Create Items 1-By-1!')
+            for model in batch:
+                model = create_model_item(model, args.token)
+                if model is None:
+                    failure += 1
+                    logger.info(f' - No.{index} Item Creation Error - Model ID: {model.model_id}')
+                else:
+                    exist_models.add(model.model_id)
+                    success += 1
+        else:
+            success += len(models)
+
+    logger.info(f' = END [Index: {index}] Success/Failure/Skip/OnRoud:{success}/{failure}/{skip}/{len(batch)}')

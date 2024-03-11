@@ -36,6 +36,17 @@ def create_model_item(model: Model, token: str) -> Model:
     return model_item
 
 
+def create_model_items(models: list[Model], token: str) -> list[Model]:
+    headers = get_headers(token)
+    items = [model.dict() for model in models]
+    response = requests.post(API_ADDRESS+YBD_MODEL_POINT, headers=headers, json=items)
+    data = response.json()
+    model_items = list()
+    for d in data['data']:
+        model_items.append(Model(**d))
+    return model_items
+
+
 def read_model_items(token: str) -> Generator[Model, None, None]:
     headers = get_headers(token)
     response = requests.get(API_ADDRESS+YBD_MODEL_POINT+'?aggregate[count]=*', headers=headers)
