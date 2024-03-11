@@ -110,5 +110,6 @@ if __name__ == '__main__':
                     success += 1
         else:
             success += len(models)
-
+            batch = list()
+    
     logger.info(f' = END [Index: {index}] Success/Failure/Skip/OnRoud:{success}/{failure}/{skip}/{len(batch)}')
