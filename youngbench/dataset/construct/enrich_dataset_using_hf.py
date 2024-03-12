@@ -16,7 +16,7 @@ from huggingface_hub import login
 from youngbench.logging import set_logger, logger
 from youngbench.dataset.construct.utils.get_info import get_hf_model_infos
 from youngbench.dataset.construct.utils.schema import Model
-from youngbench.dataset.construct.utils.action import create_model_item, read_model_items, create_model_items
+from youngbench.dataset.construct.utils.action import create_model_item, read_model_items_manually, create_model_items
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Enrich The Young Neural Network Architecture Dataset (YoungBench - Dataset).")
@@ -48,9 +48,14 @@ if __name__ == '__main__':
     logger.info(f' = Fetching Models\' Info ( Tag: {args.tag} ) ...')
     model_infos = get_hf_model_infos(filter_list=[args.tag], token=args.hf_token, full=True)
 
+    index = 0
     exist_models = set()
-    for exist_model in read_model_items(args.token):
+    logger.info("Checking Exist Models... ")
+    for exist_model in read_model_items_manually(args.token, fields=['model_id']):
+        index += 1
         exist_models.add(exist_model.model_id)
+        if index % 1000 == 0:
+            logger.info(f" Total {index} Found ... ")
 
     index = 0
     success = 0
@@ -72,8 +77,9 @@ if __name__ == '__main__':
 
             if len(batch) == args.number:
                 def one_by_one(model):
-                    model = create_model_item(model, args.token)
-                    if model is None:
+                    global index, success, args, failure, logger
+                    result = create_model_item(model, args.token)
+                    if result is None:
                         failure += 1
                         logger.info(f' - No.{index} Item Creation Error - Model ID: {model.model_id}')
                     else:
@@ -90,6 +96,8 @@ if __name__ == '__main__':
                             one_by_one(model)
                     else:
                         success += len(models)
+                        for model in models:
+                            exist_models.add(model.model_id)
 
                 batch = list()
 
@@ -101,8 +109,8 @@ if __name__ == '__main__':
         if len(models) == 0:
             logger.info(f' - No. {index-len(batch)+1}-{index} Items Creation Has Error. Now Create Items 1-By-1!')
             for model in batch:
-                model = create_model_item(model, args.token)
-                if model is None:
+                result = create_model_item(model, args.token)
+                if result is None:
                     failure += 1
                     logger.info(f' - No.{index} Item Creation Error - Model ID: {model.model_id}')
                 else:

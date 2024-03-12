@@ -12,13 +12,14 @@
 import json
 import requests
 
-from typing import Generator
+from typing import Any, Generator
 
-from .schema import Model
+from .schema import Model, HFInfo
 
 API_ADDRESS = 'https://api.yangs.cloud/'
 YBD_MODEL_POINT = 'items/Young_Bench_Dataset_Model'
 YBD_NETWORK_POINT = 'items/Young_Bench_Dataset_Network'
+HFI_POINT = 'items/Hugging_Face_Info'
 
 
 def get_headers(token: str):
@@ -82,34 +83,124 @@ def read_model_items_by_model_id(model_id: str, token: str) -> list[Model]:
     return model_items
 
 
-def read_model_items_manually(token: str, filter: dict | None, fields: list[str] | None = None) -> list[Model]:
+def read_model_items_manually(token: str, filter: dict | None = None, fields: list[str] | None = None) -> Generator[Model, None, None]:
     headers = get_headers(token)
+
+    response = requests.get(API_ADDRESS+YBD_MODEL_POINT+'?aggregate[count]=*', headers=headers)
+
+    data = response.json()
+    count = data['data'][0]['count']
+    limit = 100
+    quotient, remainder = divmod(count, limit)
+    pages = quotient + (remainder > 0)
+
     params = dict()
     if filter:
         params['filter'] = json.dumps(filter)
-    
+
     if fields:
         params['fields'] = f'{fields[0]}'
         for field in fields[1:]:
             params['fields'] += f',{field}'
-    response = requests.get(API_ADDRESS+YBD_MODEL_POINT, params=params, headers=headers)
+
+    params['limit'] = limit
+
+    for page in range(1, pages+1):
+        params['page'] = page
+        response = requests.get(API_ADDRESS+YBD_MODEL_POINT, headers=headers, params=params)
+        data = response.json()
+        for d in data['data']:
+            yield Model(**d)
+
+
+def read_hfinfo_items_manually(token: str, filter: dict | None = None, fields: list[str] | None = None) -> Generator[HFInfo, None, None]:
+    headers = get_headers(token)
+
+    response = requests.get(API_ADDRESS+HFI_POINT+'?aggregate[count]=*', headers=headers)
+
     data = response.json()
-    model_items = list()
-    for d in data['data']:
-        model_items.append(Model(**d))
-    return model_items
+    count = data['data'][0]['count']
+    limit = 100
+    quotient, remainder = divmod(count, limit)
+    pages = quotient + (remainder > 0)
+
+    params = dict()
+    if filter:
+        params['filter'] = json.dumps(filter)
+
+    if fields:
+        params['fields'] = f'{fields[0]}'
+        for field in fields[1:]:
+            params['fields'] += f',{field}'
+
+    params['limit'] = limit
+
+    for page in range(1, pages+1):
+        params['page'] = page
+        response = requests.get(API_ADDRESS+HFI_POINT, headers=headers, params=params)
+        data = response.json()
+        for d in data['data']:
+            yield HFInfo(**d)
 
 
 def update_model_item_by_model_id(model_id: str, model: Model, token: str) -> Model:
     headers = get_headers(token)
 
-    model_items = read_model_item_by_model_id(model_id, token)
+    model_items = read_model_items_by_model_id(model_id, token)
     updated_model_item = None
     if len(model_items) == 1:
-        model_item_id = model_items[0]['id']
+        model_item_id = model_items[0].id
         item = model.dict()
         response = requests.patch(API_ADDRESS+YBD_MODEL_POINT+f'/{model_item_id}', headers=headers, json=item)
         data = response.json()
         if 'model_id' in data['data']:
             updated_model_item = Model(**data['data'])
     return updated_model_item
+
+
+def update_model_items_by_model_ids(model_ids: str, data: dict[str, Any], token: str) -> Model:
+    headers = get_headers(token)
+
+    model_item_ids = list()
+    for model_id in model_ids:
+        filter = {
+            'model_id': {
+                '_eq': model_id
+            }
+        }
+        model_items = list(read_model_items_manually(token, filter=filter, fields=['id']))
+        model_item_ids.append(model_items[0].id)
+
+    body = {
+        'keys': model_item_ids,
+        'data': data
+    }
+    response = requests.patch(API_ADDRESS+YBD_MODEL_POINT, headers=headers, json=body)
+    data = response.json()
+    updated_model_items = list()
+    for d in data['data']:
+        updated_model_items.append(Model(**d))
+    return updated_model_items
+
+
+# HFI
+def create_hfinfo_item(hfinfo: HFInfo, token: str) -> HFInfo:
+    headers = get_headers(token)
+    item = hfinfo.dict()
+    response = requests.post(API_ADDRESS+HFI_POINT, headers=headers, json=item)
+    data = response.json()
+    hfinfo_item = None
+    if 'model_id' in data['data']:
+        hfinfo_item = HFInfo(**data['data'])
+    return hfinfo_item
+
+
+def create_hfinfo_items(hfinfos: list[HFInfo], token: str) -> list[HFInfo]:
+    headers = get_headers(token)
+    items = [hfinfo.dict() for hfinfo in hfinfos]
+    response = requests.post(API_ADDRESS+HFI_POINT, headers=headers, json=items)
+    data = response.json()
+    hfinfo_items = list()
+    for d in data['data']:
+        hfinfo_items.append(HFInfo(**d))
+    return hfinfo_items

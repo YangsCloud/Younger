@@ -11,21 +11,42 @@
 
 from typing import Any
 
-class Model(object):
+
+class Schema(object):
+    def __init__(self,
+        **kwargs
+    ) -> None:
+        if kwargs.get('id', None) is not None:
+            self.id = kwargs['id']
+
+    def dict(self):
+        items = dict()
+        for key, value in self.__dict__.items():
+            if key == 'id':
+                continue
+            if not key.startswith('_'):
+                items[key] = value
+        return items
+
+
+class Model(Schema):
     def __init__(self,
         model_id: str | None = None,
         model_source: str | None = None,
-        training_quality_metrics: dict = None,
-        training_time_metrics: dict = None,
-        inference_quality_metrics: dict = None, 
-        inference_time_metrics: dict = None,
+        training_quality_metrics: dict | None = None,
+        training_time_metrics: dict | None = None,
+        inference_quality_metrics: dict | None = None, 
+        inference_time_metrics: dict | None = None,
         model_likes: int | None = None,
         model_downloads: int | None = None,
         maintaining: bool | None= None,
         version: str | None = None,
         network_id: int | None = None,
+        all_metrics: dict | None = None,
+        mark: bool | None = None,
         **kwargs,
     ) -> dict[str, Any]:
+        super().__init__(**kwargs)
         if model_id is not None:
             self.model_id = model_id
         if model_source is not None:
@@ -54,9 +75,26 @@ class Model(object):
         if network_id is not None:
             self.network_id = network_id
 
-    def dict(self):
-        items = dict()
-        for key, value in self.__dict__.items():
-            if not key.startswith('_'):
-                items[key] = value
-        return items
+        if all_metrics is not None:
+            self.all_metrics = all_metrics
+
+        if mark is not None:
+            self.mark = mark
+
+
+class HFInfo(Schema):
+    def __init__(self,
+        model_id: str | None = None,
+        all_metrics: dict | None = None,
+        finish: bool | None = None,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        if model_id is not None:
+            self.model_id = model_id
+
+        if all_metrics is not None:
+            self.all_metrics = all_metrics
+
+        if finish is not None:
+            self.finish = finish
