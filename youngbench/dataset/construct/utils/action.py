@@ -64,7 +64,7 @@ def read_model_items(token: str) -> Generator[Model, None, None]:
             yield Model(**d)
 
 
-def read_model_item_by_model_id(model_id: str, token: str) -> list[Model]:
+def read_model_items_by_model_id(model_id: str, token: str) -> list[Model]:
     headers = get_headers(token)
     filter = {
         'model_id': {
@@ -82,11 +82,16 @@ def read_model_item_by_model_id(model_id: str, token: str) -> list[Model]:
     return model_items
 
 
-def read_model_item_using_filter(filter: dict, token: str) -> list[Model]:
+def read_model_items_manually(token: str, filter: dict | None, fields: list[str] | None = None) -> list[Model]:
     headers = get_headers(token)
-    params = dict(
-        filter = json.dumps(filter)
-    )
+    params = dict()
+    if filter:
+        params['filter'] = json.dumps(filter)
+    
+    if fields:
+        params['fields'] = f'{fields[0]}'
+        for field in fields[1:]:
+            params['fields'] += f',{field}'
     response = requests.get(API_ADDRESS+YBD_MODEL_POINT, params=params, headers=headers)
     data = response.json()
     model_items = list()
