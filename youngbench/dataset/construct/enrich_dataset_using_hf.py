@@ -20,7 +20,7 @@ from youngbench.logging import set_logger, logger
 from youngbench.dataset.construct.utils.get_info import get_hf_model_infos
 from youngbench.dataset.construct.utils.schema import Model
 from youngbench.dataset.construct.utils.action import create_model_item, read_model_items_manually, create_model_items
-from youngbench.dataset.construct.utils.extract import extract_all_metrics, filter_readme_filepaths, realtime_write
+from youngbench.dataset.construct.utils.extract import extract_all_metrics, realtime_write
 
 
 if __name__ == '__main__':
@@ -78,44 +78,43 @@ if __name__ == '__main__':
                     logger.info(f" Total {index} Found ... ")
     logger.info(f"Finish Record. Total {index}.")
 
-    fs = HfFileSystem()
-
     index = 0
     success = 0
     failure = 0
     skip = 0
 
-    last_realtime_write = False
+    # last_realtime_write = False
     batch = list()
     for model_info in model_infos:
 
         index += 1
         if model_info['id'] in exist_models:
             skip += 1
-            if last_realtime_write:
-                realtime_write('\n')
-                last_realtime_write = False
+            # if last_realtime_write:
+            #     realtime_write('\n')
+            #     last_realtime_write = False
             logger.info(f' - No.{index} Item Exists - Skip - Model ID: {model_info["id"]}')
 
         else:
-            filepaths = fs.glob(f'{model_info["id"]}/**')
-            all_metrics = extract_all_metrics(filter_readme_filepaths(filepaths), fs, save_dirpath=args.save_dirpath)
+            # filepaths = fs.glob(f'{model_info["id"]}/**')
+            # print(model_info['id'])
+            all_metrics = extract_all_metrics(model_info['id'], save_dirpath=args.save_dirpath)
             model = Model(model_id=model_info['id'], model_source='HuggingFace', model_likes=model_info['likes'], model_downloads=model_info['downloads'], raw_metrics=all_metrics, maintain=True)
             if len(batch) < args.number:
                 batch.append(model)
-                realtime_write('.')
-                last_realtime_write = True
+                # realtime_write('.')
+                # last_realtime_write = True
 
             if len(batch) == args.number:
-                realtime_write('\n')
+                # realtime_write('\n')
                 def one_by_one(model):
                     global index, success, args, failure, logger
                     result = create_model_item(model, args.token)
                     if result is None:
                         failure += 1
-                        if last_realtime_write:
-                            realtime_write('\n')
-                            last_realtime_write = False
+                        # if last_realtime_write:
+                        #     realtime_write('\n')
+                        #     last_realtime_write = False
                         logger.info(f' - No.{index} Item Creation Error - Model ID: {model.model_id}')
                     else:
                         exist_models.add(model.model_id)
@@ -126,9 +125,9 @@ if __name__ == '__main__':
                 else:
                     models = create_model_items(batch, args.token)
                     if len(models) == 0:
-                        if last_realtime_write:
-                            realtime_write('\n')
-                            last_realtime_write = False
+                        # if last_realtime_write:
+                        #     realtime_write('\n')
+                        #     last_realtime_write = False
                         logger.info(f' - No. {index-len(batch)+1}-{index} Items Creation Has Error. Now Create Items 1-By-1!')
                         for model in batch:
                             one_by_one(model)
@@ -140,24 +139,24 @@ if __name__ == '__main__':
                 batch = list()
 
         if index % args.report == 0:
-            if last_realtime_write:
-                realtime_write('\n')
-                last_realtime_write = False
+            # if last_realtime_write:
+            #     realtime_write('\n')
+            #     last_realtime_write = False
             logger.info(f' - [Index: {index}] Success/Failure/Skip/OnRoud:{success}/{failure}/{skip}/{len(batch)}')
 
     if len(batch) > 0:
         models = create_model_items(batch, args.token)
         if len(models) == 0:
-            if last_realtime_write:
-                realtime_write('\n')
-                last_realtime_write = False
+            # if last_realtime_write:
+            #     realtime_write('\n')
+            #     last_realtime_write = False
             logger.info(f' - No. {index-len(batch)+1}-{index} Items Creation Has Error. Now Create Items 1-By-1!')
             for model in batch:
                 result = create_model_item(model, args.token)
                 if result is None:
-                    if last_realtime_write:
-                        realtime_write('\n')
-                        last_realtime_write = False
+                    # if last_realtime_write:
+                    #     realtime_write('\n')
+                    #     last_realtime_write = False
                     failure += 1
                     logger.info(f' - No.{index} Item Creation Error - Model ID: {model.model_id}')
                 else:
@@ -167,7 +166,7 @@ if __name__ == '__main__':
             success += len(models)
             batch = list()
     
-    if last_realtime_write:
-        realtime_write('\n')
-        last_realtime_write = False
+    # if last_realtime_write:
+    #     realtime_write('\n')
+    #     last_realtime_write = False
     logger.info(f' = END [Index: {index}] Success/Failure/Skip/OnRoud:{success}/{failure}/{skip}/{len(batch)}')

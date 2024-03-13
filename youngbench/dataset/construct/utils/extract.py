@@ -16,7 +16,7 @@ import tempfile
 
 from typing import Any
 from yoolkit import text
-from huggingface_hub import HfFileSystem, ModelCard, ModelCardData
+from huggingface_hub import ModelCard, ModelCardData, EvalResult, hf_hub_download
 
 from youngbench.logging import logger
 
@@ -35,7 +35,7 @@ def realtime_write(info: str):
     return
 
 
-def filter_readme_filepaths(filepaths: list[str]) -> list[str]:
+def filter_readme_filepaths(model_id: str, filepaths: list[str]) -> list[str]:
     readme_filepaths = list()
     pattern = re.compile(r'.*readme(?:\.[^/\\]*)?$', re.IGNORECASE)
     for filepath in filepaths:
@@ -122,6 +122,29 @@ def fetch_metrics(lines: list[str]) -> dict[str, Any]:
     return metrics
 
 
+def replace_invalid_chars(filepath: str):
+    try:
+        with open(filepath, mode='r', encoding='utf-8') as file:
+            content = file.read()
+    except UnicodeDecodeError as e:
+        logger.info(f" Encoding Error - Now Detect The Encoding Mode. - Error: {e}")
+        encoding = text.detect_file_encoding(filepath)
+        try:
+            with open(filepath, mode='r', encoding=encoding) as file:
+                content = file.read()
+        except UnicodeDecodeError as e:
+            logger.info(f" Encoding Error - The Encoding [UTF-8 and {encoding}] are Invalid. - Error: {e}")
+        except Exception as e:
+            logger.info(f" Extract Failed. Skip! {filepath} - Error: {e}")
+    except Exception as e:
+        logger.info(f" Extract Failed. Skip! {filepath} - Error: {e}")
+    
+    content = content.replace('\t', ' ')
+
+    with open(filepath, mode='w', encoding='utf-8') as file:
+        file.write(content)
+
+
 def fetch_card_relate(readme_filepath: str) -> dict[str, Any]:
     card_relate = dict()
     card_data: ModelCardData = ModelCard.load(readme_filepath, ignore_metadata_errors=True).data
@@ -132,7 +155,7 @@ def fetch_card_relate(readme_filepath: str) -> dict[str, Any]:
     if card_data.eval_results:
         for eval_result in card_data.eval_results:
             result = dict(
-                task_type=eval_result.dataset_type,
+                task_type=eval_result.task_type,
                 dataset_type=eval_result.dataset_type,
                 dataset_config=eval_result.dataset_config if eval_result.dataset_config else '',
                 dataset_split=eval_result.dataset_split if eval_result.dataset_split else '',
@@ -145,35 +168,22 @@ def fetch_card_relate(readme_filepath: str) -> dict[str, Any]:
     return card_relate
 
 
-def extract_all_metrics(readme_filepaths: list[str], fs: HfFileSystem, save_dirpath: str | None = None, only_download: bool = False) -> dict[str, dict[str, Any]]:
+def extract_all_metrics(model_id: str, save_dirpath: str | None = None, only_download: bool = False) -> dict[str, dict[str, Any]]:
     save_dirpath = save_dirpath or temp_dir
 
     all_metrics = dict()
-    for readme_filepath in readme_filepaths:
-        readme_savepath = pathlib.Path(save_dirpath).joinpath(readme_filepath)
-        readme_savepath.parent.mkdir(parents=True, exist_ok=True)
-        if not readme_savepath.is_file():
-            fs.download(readme_filepath, lpath=str(readme_savepath))
+    # for readme_filepath in readme_filepaths:
+    save_dirpath: pathlib.Path = pathlib.Path(save_dirpath).joinpath(model_id)
+    save_dirpath.parent.mkdir(parents=True, exist_ok=True)
+    readme_filepath = hf_hub_download(model_id, 'README.md', repo_type='model', local_dir=save_dirpath, local_dir_use_symlinks=False)
 
-        if only_download:
-            continue
+    if only_download:
+        return
 
-        all_metrics[readme_filepath] = dict()
-        all_metrics[readme_filepath]['cards_relate'] = fetch_card_relate(readme_savepath)
+    replace_invalid_chars(readme_filepath)
+    all_metrics['cards_relate'] = fetch_card_relate(readme_filepath)
 
-        try:
-            with open(readme_savepath, encoding='utf-8') as readme:
-                all_metrics[readme_filepath].update(fetch_metrics(readme.readlines()))
-        except UnicodeDecodeError as e:
-            logger.info(f" Encoding Error - Now Detect The Encoding Mode. - Error: {e}")
-            encoding = text.detect_file_encoding(readme_savepath)
-            try:
-                with open(readme_savepath, encoding=encoding) as readme:
-                    all_metrics[readme_filepath].update(fetch_metrics(readme.readlines()))
-            except UnicodeDecodeError as e:
-                logger.info(f" Encoding Error - The Encoding [UTF-8 and {encoding}] are Invalid. - Error: {e}")
-            except Exception as e:
-                logger.info(f" Extract Failed. Skip! {readme_filepath} - Error: {e}")
-        except Exception as e:
-            logger.info(f" Extract Failed. Skip! {readme_filepath} - Error: {e}")
+    with open(readme_filepath, mode='r', encoding='utf-8') as readme:
+        all_metrics.update(fetch_metrics(readme.readlines()))
+    
     return all_metrics
