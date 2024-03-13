@@ -89,14 +89,22 @@ def extract_all_metrics(readme_filepaths: list[str], fs: HfFileSystem, save_dirp
     for readme_filepath in readme_filepaths:
         readme_savepath = pathlib.Path(save_dirpath).joinpath(readme_filepath)
         readme_savepath.parent.mkdir(parents=True, exist_ok=True)
-        fs.download(readme_filepath, lpath=str(readme_savepath))
-        encoding = text.detect_file_encoding(readme_savepath)
+        if not readme_savepath.is_file():
+            fs.download(readme_filepath, lpath=str(readme_savepath))
         try:
-            with open(readme_savepath, encoding=encoding) as readme:
+            with open(readme_savepath, encoding='utf-8') as readme:
                 all_metrics[readme_filepath] = fetch_metrics(readme.readlines())
+        except UnicodeDecodeError as e:
+            encoding = text.detect_file_encoding(readme_savepath)
+            try:
+                with open(readme_savepath, encoding=encoding) as readme:
+                    all_metrics[readme_filepath] = fetch_metrics(readme.readlines())
+            except Exception as e:
+                all_metrics[readme_filepath] = dict()
+                logger.info(f'Extract Failed. Skip! {readme_filepath} - Error: {e}')
         except Exception as e:
             all_metrics[readme_filepath] = dict()
-            logger.info(f" Extract Failed. Skip! Error: {e}")
+            logger.info(f" Extract Failed. Skip! {readme_filepath} - Error: {e}")
     return all_metrics
 
 
