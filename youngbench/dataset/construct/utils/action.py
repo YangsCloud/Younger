@@ -18,7 +18,7 @@ from typing import Any, Generator
 from .schema import Model, HFInfo
 
 API_ADDRESS = 'https://api.yangs.cloud/'
-YBD_MODEL_POINT = 'items/Young_Bench_Dataset_Model'
+YBD_MODEL_POINT = 'items/YoungBench_Dataset_Model'
 YBD_NETWORK_POINT = 'items/Young_Bench_Dataset_Network'
 HFI_POINT = 'items/Hugging_Face_Info'
 
