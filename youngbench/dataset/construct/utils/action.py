@@ -48,6 +48,29 @@ def create_model_items(models: list[Model], token: str) -> list[Model]:
     return model_items
 
 
+def read_limit_model_items(token: str, limit: int = 100, filter: dict | None = None, fields: list[str] | None = None) -> Generator[Model, None, None]:
+    headers = get_headers(token)
+
+    params = dict()
+    if filter:
+        params['filter'] = json.dumps(filter)
+
+    if fields:
+        params['fields'] = f'{fields[0]}'
+        for field in fields[1:]:
+            params['fields'] += f',{field}'
+
+    params['limit'] = limit
+
+    response = requests.get(API_ADDRESS+YBD_MODEL_POINT, headers=headers, params=params)
+    data = response.json()
+    model_items = list()
+    for d in data['data']:
+        model_items.append(Model(**d))
+
+    return model_items
+
+
 def read_model_items(token: str) -> Generator[Model, None, None]:
     headers = get_headers(token)
     response = requests.get(API_ADDRESS+YBD_MODEL_POINT+'?aggregate[count]=*', headers=headers)

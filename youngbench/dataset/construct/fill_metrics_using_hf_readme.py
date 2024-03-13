@@ -20,7 +20,7 @@ from huggingface_hub import login, HfFileSystem, hf_hub_download
 
 from youngbench.logging import set_logger, logger
 from youngbench.dataset.construct.utils.schema import HFInfo, Model
-from youngbench.dataset.construct.utils.action import create_hfinfo_item, create_hfinfo_items, update_model_item_by_model_id, update_model_items_by_model_ids, read_model_items_manually, read_hfinfo_items_manually
+from youngbench.dataset.construct.utils.action import create_hfinfo_item, create_hfinfo_items, update_model_item_by_model_id, update_model_items_by_model_ids, read_model_items_manually, read_hfinfo_items_manually, read_limit_model_items
 
 temp_dir = tempfile.mkdtemp()
 table_pattern = r'(\|?(?:[^\r\n\|]*\|)+(?:[^\r\n]*\|?))\r?\n(\|?(?:(?:\s*:?-+:?\s*)\|)+(?:(?:\s*:?-+:?\s*)\|?))\r?\n((?:\|?(?:(?:[^\r\n\|]*)\|)+(?:(?:(?:[^\r\n\|]*)\|?))\r?\n)+)'
@@ -82,7 +82,7 @@ def fetch_metrics(lines: list[str]) -> dict[str, Any]:
     return metrics
 
 
-def extract_all_metrics(readme_filepaths: list[str], fs: HfFileSystem, save_dirpath: str | None = None) -> dict[str, dict[str, Any]]:
+def extract_all_metrics(readme_filepaths: list[str], fs: HfFileSystem, save_dirpath: str | None = None, only_download: bool = False) -> dict[str, dict[str, Any]]:
     save_dirpath = save_dirpath or temp_dir
 
     all_metrics = dict()
@@ -90,13 +90,23 @@ def extract_all_metrics(readme_filepaths: list[str], fs: HfFileSystem, save_dirp
         readme_savepath = pathlib.Path(save_dirpath).joinpath(readme_filepath)
         readme_savepath.parent.mkdir(parents=True, exist_ok=True)
         fs.download(readme_filepath, lpath=str(readme_savepath))
-        encoding = text.detect_file_encoding(readme_savepath)
+        if only_download:
+            continue
         try:
-            with open(readme_savepath, encoding=encoding) as readme:
+            with open(readme_savepath, encoding='utf-8') as readme:
                 all_metrics[readme_filepath] = fetch_metrics(readme.readlines())
+        except UnicodeDecodeError as e:
+            logger.info(f" Encoding Error - Now Detect The Encoding Mode. - Error: {e}")
+            encoding = text.detect_file_encoding(readme_savepath)
+            try:
+                with open(readme_savepath, encoding=encoding) as readme:
+                    all_metrics[readme_filepath] = fetch_metrics(readme.readlines())
+            except Exception as e:
+                all_metrics[readme_filepath] = dict()
+                logger.info(f" Extract Failed. Skip! {readme_filepath} - Error: {e}")
         except Exception as e:
             all_metrics[readme_filepath] = dict()
-            logger.info(f" Extract Failed. Skip! Error: {e}")
+            logger.info(f" Extract Failed. Skip! {readme_filepath} - Error: {e}")
     return all_metrics
 
 
@@ -114,6 +124,8 @@ if __name__ == '__main__':
     parser.add_argument('--save-dirpath', type=str, default=None)
 
     parser.add_argument('--logging-path', type=str, default=None)
+
+    parser.add_argument('--only-download', action='store_true')
 
     args = parser.parse_args()
 
@@ -141,19 +153,44 @@ if __name__ == '__main__':
     filter = {
         'maintaining': {
             '_eq': 'false'
+        },
+        'model_source': {
+            '_eq': 'HuggingFace'
         }
     }
     batch = list()
-    for model in read_model_items_manually(args.token, fields=['model_id'], filter=filter):
-        index += 1
-        filepaths = fs.glob(f'{model.model_id}/**')
-        all_metrics = extract_all_metrics(filter_readme_filepaths(filepaths), fs, save_dirpath=args.save_dirpath)
-        new_model = Model(all_metrics=all_metrics, maintaining=True)
+    models = read_limit_model_items(args.token, limit=args.number, fields=['model_id'], filter=filter)
+    while models:
+        if models:
+            for model in models:
+                index += 1
+                filepaths = fs.glob(f'{model.model_id}/**')
+                all_metrics = extract_all_metrics(filter_readme_filepaths(filepaths), fs, save_dirpath=args.save_dirpath, only_download=args.only_download)
+                if args.only_download:
+                    if index % args.report == 0:
+                        logger.info(f' - Only Download - [Index: {index}]')
+                    continue
+                new_model = Model(all_metrics=all_metrics, maintaining=True)
 
-        if len(batch) < args.number:
-            batch.append((new_model, model.model_id))
+                if len(batch) < args.number:
+                    batch.append((new_model, model.model_id))
 
-        if len(batch) == args.number:
+                if len(batch) == args.number:
+                    for new_model, model_id in batch:
+                        result = update_model_item_by_model_id(model_id, new_model, args.token)
+                        if result is None:
+                            failure += 1
+                            logger.info(f' - No.{index} Item Creation Error - Model ID: {model_id}')
+                        else:
+                            success += 1
+                    batch = list()
+
+                if index % args.report == 0:
+                    logger.info(f' - [Index: {index}] Success/Failure/OnRoud:{success}/{failure}/{len(batch)}')
+        models = read_limit_model_items(args.token, limit=args.number, fields=['model_id'], filter=filter)
+
+    if not args.only_download:
+        if len(batch) > 0:
             for new_model, model_id in batch:
                 result = update_model_item_by_model_id(model_id, new_model, args.token)
                 if result is None:
@@ -162,17 +199,6 @@ if __name__ == '__main__':
                 else:
                     success += 1
             batch = list()
-
-        if index % args.report == 0:
-            logger.info(f' - [Index: {index}] Success/Failure/OnRoud:{success}/{failure}/{len(batch)}')
-
-    if len(batch) > 0:
-        for new_model, model_id in batch:
-            result = update_model_item_by_model_id(model_id, new_model, args.token)
-            if result is None:
-                failure += 1
-                logger.info(f' - No.{index} Item Creation Error - Model ID: {model_id}')
-            else:
-                success += 1
-        batch = list()
-    logger.info(f' = END [Index: {index}] Success/Failure/OnRoud:{success}/{failure}/{len(batch)}')
+        logger.info(f' = END [Index: {index}] Success/Failure/OnRoud:{success}/{failure}/{len(batch)}')
+    else:
+        logger.info(f' = END = Only Download - [Index: {index}]')
