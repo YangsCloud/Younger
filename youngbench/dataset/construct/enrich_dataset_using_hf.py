@@ -52,6 +52,8 @@ if __name__ == '__main__':
     if args.logging_path is not None:
         set_logger(path=args.logging_path)
 
+    fs = HfFileSystem()
+
     logger.info(f' = Fetching Models\' Info ( Tag: {args.tag} ) ...')
     model_infos = get_hf_model_infos(filter_list=[args.tag], token=args.hf_token, full=True)
 
@@ -98,7 +100,7 @@ if __name__ == '__main__':
         else:
             # filepaths = fs.glob(f'{model_info["id"]}/**')
             # print(model_info['id'])
-            all_metrics = extract_all_metrics(model_info['id'], save_dirpath=args.save_dirpath)
+            all_metrics = extract_all_metrics(model_info['id'], fs=fs, save_dirpath=args.save_dirpath, logger=logger)
             model = Model(model_id=model_info['id'], model_source='HuggingFace', model_likes=model_info['likes'], model_downloads=model_info['downloads'], raw_metrics=all_metrics, maintain=True)
             if len(batch) < args.number:
                 batch.append(model)

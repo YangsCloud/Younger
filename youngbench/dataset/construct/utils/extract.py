@@ -16,7 +16,7 @@ import tempfile
 
 from typing import Any
 from yoolkit import text
-from huggingface_hub import ModelCard, ModelCardData, EvalResult, hf_hub_download
+from huggingface_hub import ModelCard, ModelCardData, EvalResult, hf_hub_download, HfFileSystem
 
 from youngbench.logging import logger
 
@@ -62,6 +62,7 @@ def clean_head(lines: list[str]) -> list[str]:
         while lines[index].strip() != split_pattern and index < len(lines):
             index += 1
         return lines[index+1:]
+    return lines
 
 
 def merge_intervals(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:
@@ -122,7 +123,7 @@ def fetch_metrics(lines: list[str]) -> dict[str, Any]:
     return metrics
 
 
-def replace_invalid_chars(filepath: str):
+def replace_invalid_chars(filepath: str, logger = logger):
     try:
         with open(filepath, mode='r', encoding='utf-8') as file:
             content = file.read()
@@ -168,14 +169,23 @@ def fetch_card_relate(readme_filepath: str) -> dict[str, Any]:
     return card_relate
 
 
-def extract_all_metrics(model_id: str, save_dirpath: str | None = None, only_download: bool = False) -> dict[str, dict[str, Any]]:
+def extract_all_metrics(model_id: str, fs: HfFileSystem, save_dirpath: str | None = None, only_download: bool = False, logger = logger) -> dict[str, dict[str, Any]]:
     save_dirpath = save_dirpath or temp_dir
 
     all_metrics = dict()
     # for readme_filepath in readme_filepaths:
     save_dirpath: pathlib.Path = pathlib.Path(save_dirpath).joinpath(model_id)
     save_dirpath.parent.mkdir(parents=True, exist_ok=True)
-    readme_filepath = hf_hub_download(model_id, 'README.md', repo_type='model', local_dir=save_dirpath, local_dir_use_symlinks=False)
+    try:
+        readme_filepath = hf_hub_download(model_id, 'README.md', repo_type='model', local_dir=save_dirpath, local_dir_use_symlinks=False)
+    except Exception as e:
+        if fs.exists(f"{model_id}/README.md"):
+            raise e
+            # fs.get(f"{model_id}/README.md", readme_filepath)
+            # logger.info(f"Downloaded {model_id}/README.md")
+        else:
+            logger.info(f"REPO: {model_id}. No README.md, Create With Empty Raw_Metrics.")
+            return all_metrics
 
     if only_download:
         return
