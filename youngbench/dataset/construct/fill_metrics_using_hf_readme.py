@@ -16,7 +16,7 @@ import argparse
 
 from typing import Any
 from yoolkit import text
-from huggingface_hub import login, HfFileSystem, hf_hub_download
+from huggingface_hub import login, HfFileSystem, ModelCard, ModelCardData, EvalResult
 
 from youngbench.logging import set_logger, logger
 from youngbench.dataset.construct.utils.schema import HFInfo, Model
@@ -48,7 +48,37 @@ def extract_cells(line: str) -> list[str]:
     return cells
 
 
+def clean_head(lines: list[str]) -> list[str]:
+    split_pattern = '---'
+    if len(lines) <= 2:
+        return lines
+    if lines[0].strip() == split_pattern:
+        index = 1
+        while lines[index].strip() != split_pattern and index < len(lines):
+            index += 1
+        return lines[index+1:]
+
+
+def merge_intervals(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    intervals = sorted(intervals)
+    new_intervals = list()
+    start, end = (-1, -1)
+    for interval in intervals:
+        if end < interval[0]:
+            new_interval = (start, end)
+            new_intervals.append(new_interval)
+            start, end = interval
+
+        else:
+            if end < interval[1]:
+                end = interval[1]
+
+    new_intervals.append((start, end))
+    return new_intervals[1:]
+
+
 def fetch_metrics(lines: list[str]) -> dict[str, Any]:
+    lines = clean_head(lines)
     content = ''.join(lines) + '\n'
     table_relate = list()
     for match_result in re.finditer(table_pattern, content, re.MULTILINE):
@@ -67,19 +97,47 @@ def fetch_metrics(lines: list[str]) -> dict[str, Any]:
     content = re.sub(table_pattern, '', content)
     content = re.sub(date_pattern, '', content)
     content = re.sub(datetime_pattern, '', content)
-    digit_relate = list()
+
+    intervals = list()
     for match_result in re.finditer(digit_pattern, content, re.MULTILINE):
         start = match_result.start() - 32
         end = match_result.end() + 32
+        intervals.append((start, end))
+
+    intervals = merge_intervals(intervals)
+    digit_relate = list()
+    for start, end in intervals:
         digit_context = ' '.join(content[start:end].split())
         digit_relate.append(digit_context)
 
     metrics = dict(
         table_relate=table_relate,
         digit_relate=digit_relate,
-        clean=dict()
     )
     return metrics
+
+
+def fetch_card_relate(readme_filepath: str) -> dict[str, Any]:
+    card_relate = dict()
+    card_data: ModelCardData = ModelCard.load(readme_filepath, ignore_metadata_errors=True).data
+    card_relate['datasets'] = card_data.datasets if card_data.datasets else list()
+    card_relate['metrics'] = card_data.metrics if card_data.metrics else list()
+
+    results = list()
+    if card_data.eval_results:
+        for eval_result in card_data.eval_results:
+            result = dict(
+                task_type=eval_result.dataset_type,
+                dataset_type=eval_result.dataset_type,
+                dataset_config=eval_result.dataset_config if eval_result.dataset_config else '',
+                dataset_split=eval_result.dataset_split if eval_result.dataset_split else '',
+                metric_type=eval_result.metric_type,
+                metric_value=eval_result.metric_value,
+                metric_config=eval_result.metric_config if eval_result.metric_config else '',
+            )
+            results.append(result)
+    card_relate['results'] = results
+    return card_relate
 
 
 def extract_all_metrics(readme_filepaths: list[str], fs: HfFileSystem, save_dirpath: str | None = None, only_download: bool = False) -> dict[str, dict[str, Any]]:
@@ -91,22 +149,27 @@ def extract_all_metrics(readme_filepaths: list[str], fs: HfFileSystem, save_dirp
         readme_savepath.parent.mkdir(parents=True, exist_ok=True)
         if not readme_savepath.is_file():
             fs.download(readme_filepath, lpath=str(readme_savepath))
+
         if only_download:
             continue
+
+        all_metrics[readme_filepath] = dict()
+        all_metrics[readme_filepath]['cards_relate'] = fetch_card_relate(readme_savepath)
+
         try:
             with open(readme_savepath, encoding='utf-8') as readme:
-                all_metrics[readme_filepath] = fetch_metrics(readme.readlines())
+                all_metrics[readme_filepath].update(fetch_metrics(readme.readlines()))
         except UnicodeDecodeError as e:
             logger.info(f" Encoding Error - Now Detect The Encoding Mode. - Error: {e}")
             encoding = text.detect_file_encoding(readme_savepath)
             try:
                 with open(readme_savepath, encoding=encoding) as readme:
-                    all_metrics[readme_filepath] = fetch_metrics(readme.readlines())
+                    all_metrics[readme_filepath].update(fetch_metrics(readme.readlines()))
+            except UnicodeDecodeError as e:
+                logger.info(f" Encoding Error - The Encoding [UTF-8 and {encoding}] are Invalid. - Error: {e}")
             except Exception as e:
-                all_metrics[readme_filepath] = dict()
                 logger.info(f" Extract Failed. Skip! {readme_filepath} - Error: {e}")
         except Exception as e:
-            all_metrics[readme_filepath] = dict()
             logger.info(f" Extract Failed. Skip! {readme_filepath} - Error: {e}")
     return all_metrics
 
@@ -153,7 +216,7 @@ if __name__ == '__main__':
     failure = 0
     filter = {
         'maintaining': {
-            '_eq': 'false'
+            '_eq': True
         },
         'model_source': {
             '_eq': 'HuggingFace'
