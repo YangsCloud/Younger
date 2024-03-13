@@ -119,6 +119,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--hf-token', type=str, default=None)
 
+    parser.add_argument('--download', type=bool, action='store_true')
+
     parser.add_argument('--save-dirpath', type=str, default=None)
 
     parser.add_argument('--logging-path', type=str, default=None)
