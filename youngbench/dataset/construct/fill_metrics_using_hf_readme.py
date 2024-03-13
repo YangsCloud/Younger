@@ -10,6 +10,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import re
+import sys
 import pathlib
 import tempfile
 import argparse
@@ -28,6 +29,12 @@ table_pattern = r'(\|?(?:[^\r\n\|]*\|)+(?:[^\r\n]*\|?))\r?\n(\|?(?:(?:\s*:?-+:?\
 digit_pattern = r'(?:[+-]?(?:(?:\d+(?:\.\d+)?)|(?:\.\d+))%?)\s+|\s+(?:[+-]?(?:(?:\d+(?:\.\d+)?)|(?:\.\d+))%?)'
 date_pattern = r'(?:(?:\d{4})(?:-|\/)(?:\d{1,2})(?:-|\/)\d{1,2})|(?:(?:\d{1,2})(?:-|\/)(?:\d{1,2})(?:-|\/)\d{4})|(?:(?:\d{4})(?:-|\/)(?:\d{1,2}))|(?:(?:\d{1,2})(?:-|\/)(?:\d{4}))|(?:\d{1,2}(?:-|\/)\d{1,2})'
 datetime_pattern = r'\b\d{4}-(?!(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b)\d{1,2}-(?!([12]\d|3[01])\b)\d{1,2} \d{1,2}:\d{2}(:\d{2})?\b|\b\d{1,2}:\d{2}(:\d{2})?(?:\s*[apAP]\.?[mM]\.?)?\b|\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b'
+
+
+def realtime_write(info: str):
+    sys.stdout.write(info)
+    sys.stdout.flush()
+    return
 
 
 def filter_readme_filepaths(filepaths: list[str]) -> list[str]:
@@ -216,7 +223,7 @@ if __name__ == '__main__':
     failure = 0
     filter = {
         'maintaining': {
-            '_eq': True
+            '_eq': False
         },
         'model_source': {
             '_eq': 'HuggingFace'
@@ -226,6 +233,8 @@ if __name__ == '__main__':
     models = read_limit_model_items(args.token, limit=args.number, fields=['model_id'], filter=filter)
     while models:
         if models:
+            if not args.only_download:
+                logger.info(f' - Retrieved {len(models)} Model Items. Now Extract All Metrics For These Models.')
             for model in models:
                 index += 1
                 filepaths = fs.glob(f'{model.model_id}/**')
@@ -238,10 +247,14 @@ if __name__ == '__main__':
 
                 if len(batch) < args.number:
                     batch.append((new_model, model.model_id))
+                    realtime_write('.')
 
                 if len(batch) == args.number:
+                    realtime_write('\n')
+                    logger.info(f' Updating Records:')
                     for new_model, model_id in batch:
                         result = update_model_item_by_model_id(model_id, new_model, args.token)
+                        realtime_write('.')
                         if result is None:
                             failure += 1
                             logger.info(f' - No.{index} Item Creation Error - Model ID: {model_id}')
@@ -250,6 +263,7 @@ if __name__ == '__main__':
                     batch = list()
 
                 if index % args.report == 0:
+                    realtime_write('\n')
                     logger.info(f' - [Index: {index}] Success/Failure/OnRoud:{success}/{failure}/{len(batch)}')
         models = read_limit_model_items(args.token, limit=args.number, fields=['model_id'], filter=filter)
 
