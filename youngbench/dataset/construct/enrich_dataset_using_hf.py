@@ -9,6 +9,9 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import json
+import pathlib
+import tempfile
 import argparse
 
 from huggingface_hub import login
@@ -51,11 +54,25 @@ if __name__ == '__main__':
     index = 0
     exist_models = set()
     logger.info("Checking Exist Models... ")
-    for exist_model in read_model_items_manually(args.token, fields=['model_id']):
-        index += 1
-        exist_models.add(exist_model.model_id)
-        if index % 1000 == 0:
-            logger.info(f" Total {index} Found ... ")
+    tempdir = tempfile.mkdtemp()
+    export_filepath = pathlib.Path(tempdir).joinpath('eduhf')
+    export_filepath.parent.mkdir(parents=True, exist_ok=True)
+    exact_filepaths = list()
+    logger.info(f'Retrieving All Exist Items Into Temp Files ...')
+    for exact_filepath in read_model_items_manually(args.token, limit=1000, fields=['model_id'], export_filepath=export_filepath):
+        logger.info(f'ID of Exist Items Saved Into {exact_filepath}')
+        exact_filepaths.append(exact_filepath)
+
+    logger.info(f'Recording All Exist Items Saved In Temp Files ...')
+    for exact_filepath in exact_filepaths:
+        with open(exact_filepath, 'r') as f:
+            model_items = json.load(f)
+            for model_item in model_items:
+                index += 1
+                exist_models.add(model_item['model_id'])
+                if index % 1000 == 0:
+                    logger.info(f" Total {index} Found ... ")
+    logger.info(f"Finish Record. Total {index}.")
 
     index = 0
     success = 0

@@ -10,6 +10,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import json
+import pathlib
 import requests
 
 from typing import Any, Generator
@@ -106,14 +107,14 @@ def read_model_items_by_model_id(model_id: str, token: str) -> list[Model]:
     return model_items
 
 
-def read_model_items_manually(token: str, filter: dict | None = None, fields: list[str] | None = None) -> Generator[Model, None, None]:
+def read_model_items_manually(token: str, limit: int = 100, filter: dict | None = None, fields: list[str] | None = None, export_filepath: pathlib.Path | str | None = None) -> Generator[Model, None, None]:
     headers = get_headers(token)
 
     response = requests.get(API_ADDRESS+YBD_MODEL_POINT+'?aggregate[count]=*', headers=headers)
 
     data = response.json()
     count = data['data'][0]['count']
-    limit = 100
+    limit = limit
     quotient, remainder = divmod(count, limit)
     pages = quotient + (remainder > 0)
 
@@ -132,8 +133,15 @@ def read_model_items_manually(token: str, filter: dict | None = None, fields: li
         params['page'] = page
         response = requests.get(API_ADDRESS+YBD_MODEL_POINT, headers=headers, params=params)
         data = response.json()
-        for d in data['data']:
-            yield Model(**d)
+        export_filepath = str(export_filepath)
+        if export_filepath:
+            exact_filepath = export_filepath + f'-{page}_{pages}.json'
+            with open(exact_filepath, 'w') as export_file:
+                json.dump(data['data'], export_file)
+            yield exact_filepath
+        else:
+            for d in data['data']:
+                yield Model(**d)
 
 
 def read_hfinfo_items_manually(token: str, filter: dict | None = None, fields: list[str] | None = None) -> Generator[HFInfo, None, None]:
