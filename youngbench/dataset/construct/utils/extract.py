@@ -18,6 +18,7 @@ from typing import Any
 from yoolkit import text
 from huggingface_hub import ModelCard, ModelCardData, EvalResult, hf_hub_download, HfFileSystem
 
+from yaml.scanner import ScannerError
 from youngbench.logging import logger
 
 
@@ -146,9 +147,32 @@ def replace_invalid_chars(filepath: str, logger = logger):
         file.write(content)
 
 
-def fetch_card_relate(readme_filepath: str) -> dict[str, Any]:
+def fetch_card_relate(readme_filepath: str, logger = logger) -> dict[str, Any]:
     card_relate = dict()
-    card_data: ModelCardData = ModelCard.load(readme_filepath, ignore_metadata_errors=True).data
+    try:
+        card_data: ModelCardData = ModelCard.load(readme_filepath, ignore_metadata_errors=True).data
+    except ScannerError as e:
+        logger.info(f' !!! Return Empty Card !!!\nFormat of YAML at the Begin of README File Maybe Wrong: Path - {readme_filepath}.\nError: {e}')
+        return dict(
+            datasets=list(),
+            metrics=list(),
+            results=list()
+        )
+    except ValueError as e:
+        logger.info(f' !!! YAML ValueError !!!\nFormat of YAML at the Begin of README File Maybe Wrong: Path - {readme_filepath}.\nError: {e}')
+        return dict(
+            datasets=list(),
+            metrics=list(),
+            results=list()
+        )
+    except Exception as e:
+        logger.info(f' !!! Unknow ModelCard Parse Error !!!\nFormat of YAML at the Begin of README File Maybe Wrong: Path - {readme_filepath}.\nError: {e}')
+        return dict(
+            datasets=list(),
+            metrics=list(),
+            results=list()
+        )
+
     card_relate['datasets'] = card_data.datasets if card_data.datasets else list()
     card_relate['metrics'] = card_data.metrics if card_data.metrics else list()
 
