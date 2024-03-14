@@ -58,9 +58,9 @@ def clean_head(lines: list[str]) -> list[str]:
     if len(lines) <= 2:
         return lines
     if lines[0].strip() == split_pattern:
-        index = 1
-        while lines[index].strip() != split_pattern and index < len(lines):
-            index += 1
+        for index, line in enumerate(lines[1:], start=1):
+            if line.strip() == split_pattern:
+                break
         return lines[index+1:]
     return lines
 
@@ -161,7 +161,7 @@ def fetch_card_relate(readme_filepath: str) -> dict[str, Any]:
                 dataset_config=eval_result.dataset_config if eval_result.dataset_config else '',
                 dataset_split=eval_result.dataset_split if eval_result.dataset_split else '',
                 metric_type=eval_result.metric_type,
-                metric_value=eval_result.metric_value,
+                metric_value=str(eval_result.metric_value),
                 metric_config=eval_result.metric_config if eval_result.metric_config else '',
             )
             results.append(result)
