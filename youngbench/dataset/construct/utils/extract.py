@@ -48,8 +48,8 @@ def filter_readme_filepaths(model_id: str, filepaths: list[str]) -> list[str]:
 
 def extract_cells(line: str) -> list[str]:
     cell_str = line.strip()
-    cell_str = cell_str[ 1:  ] if cell_str[ 0] == '|' else cell_str
-    cell_str = cell_str[  :-1] if cell_str[-1] == '|' else cell_str
+    cell_str = cell_str[ 1:  ] if len(cell_str) and cell_str[ 0] == '|' else cell_str
+    cell_str = cell_str[  :-1] if len(cell_str) and cell_str[-1] == '|' else cell_str
     cells = [cell.strip() for cell in cell_str.split('|')]
     return cells
 
