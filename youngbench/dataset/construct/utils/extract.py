@@ -204,6 +204,7 @@ def extract_all_metrics(model_id: str, fs: HfFileSystem, save_dirpath: str | Non
         readme_filepath = hf_hub_download(model_id, 'README.md', repo_type='model', local_dir=save_dirpath, local_dir_use_symlinks=False)
     except Exception as e:
         if fs.exists(f"{model_id}/README.md"):
+            logger.error(f"REPO: {model_id}. Encounter An Error {e}.")
             raise e
             # fs.get(f"{model_id}/README.md", readme_filepath)
             # logger.info(f"Downloaded {model_id}/README.md")
