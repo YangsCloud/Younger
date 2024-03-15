@@ -27,6 +27,13 @@ def get_headers(token: str):
     return {"Authorization": f"Bearer {token}"}
 
 
+def get_models_count(token: str) -> int:
+    headers = get_headers(token)
+    response = requests.get(API_ADDRESS+YBD_MODEL_POINT+'?aggregate[count]=*', headers=headers)
+    data = response.json()
+    return data['data'][0]['count']
+
+
 def create_model_item(model: Model, token: str) -> Model:
     headers = get_headers(token)
     item = model.dict()
@@ -107,16 +114,8 @@ def read_model_items_by_model_id(model_id: str, token: str) -> list[Model]:
     return model_items
 
 
-def read_model_items_manually(token: str, limit: int = 100, filter: dict | None = None, fields: list[str] | None = None, export_filepath: pathlib.Path | str | None = None) -> Generator[Model, None, None]:
+def read_model_items_manually(token: str, limit: int = 100, filter: dict | None = None, fields: list[str] | None = None, export_filepath: pathlib.Path | str = '') -> Generator[Model, None, None]:
     headers = get_headers(token)
-
-    response = requests.get(API_ADDRESS+YBD_MODEL_POINT+'?aggregate[count]=*', headers=headers)
-
-    data = response.json()
-    count = data['data'][0]['count']
-    limit = limit
-    quotient, remainder = divmod(count, limit)
-    pages = quotient + (remainder > 0)
 
     params = dict()
     if filter:
@@ -127,13 +126,20 @@ def read_model_items_manually(token: str, limit: int = 100, filter: dict | None 
         for field in fields[1:]:
             params['fields'] += f',{field}'
 
+    response = requests.get(API_ADDRESS+YBD_MODEL_POINT+'?aggregate[count]=*', headers=headers, params=params)
+
+    data = response.json()
+    count = data['data'][0]['count']
+    limit = limit
+    quotient, remainder = divmod(count, limit)
+    pages = quotient + (remainder > 0)
+
     params['limit'] = limit
 
     for page in range(1, pages+1):
         params['page'] = page
         response = requests.get(API_ADDRESS+YBD_MODEL_POINT, headers=headers, params=params)
         data = response.json()
-        export_filepath = str(export_filepath)
         if export_filepath:
             exact_filepath = export_filepath + f'-{page}_{pages}.json'
             with open(exact_filepath, 'w') as export_file:
