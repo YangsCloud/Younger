@@ -38,10 +38,16 @@ def split(raw_metrics) -> tuple:
     
     table_strs = list()
     for tab in table:
-        tab_headers_str = CONCAT_CHAR.join(tab['headers'])
+        good_headers = list()
+        for index, cell in enumerate(tab['headers']):
+            good_headers.append(f'[.{index}.] {cell}')
+        tab_headers_str = CONCAT_CHAR.join(good_headers)
         tab_rows_strs = list()
         for row in tab['rows']:
-            tab_rows_str = CONCAT_CHAR.join(row)
+            good_row = list()
+            for index, cell in enumerate(row):
+                good_row.append(f'[.{index}.] {cell}')
+            tab_rows_str = CONCAT_CHAR.join(good_row)
             tab_rows_strs.append(tab_rows_str)
         table_strs.append((tab_headers_str, tab_rows_strs))
 
@@ -65,6 +71,8 @@ def pretty(splits: dict) -> str:
     pretty_card_results_str = ''
     for index, cards_results_str in enumerate(splits['cards_results_strs']):
         pretty_card_results_str = pretty_card_results_str + f'    No. {index} - {cards_results_str}\n'
+    if len(pretty_card_results_str) == 0:
+        pretty_card_results_str = '    // No Information Provided!\n'
 
     pretty_table_str = ''
     for index, table_str in enumerate(splits['table_strs']):
@@ -84,13 +92,14 @@ def pretty(splits: dict) -> str:
     if len(pretty_digit_str) == 0:
         pretty_digit_str = '    // No Information Provided!\n'
 
+    NIP_STR="\n    // No Information Provided"
     pretty_str = (
         f'【ModelCard】\n'
         f'  NOTE: ModelCard Provides Precise Infomation. Do Not Annotate This Part! Except For Labeling The Metric Class.\n'
         f'\n'
-        f'  Datasets:  {splits["cards_datasets_str"] if splits["cards_datasets_str"] else "// No Information Provided"}\n'
+        f'  Datasets:  {splits["cards_datasets_str"] if splits["cards_datasets_str"] else NIP_STR}\n'
         f'\n'
-        f'  Metrics:   {splits["cards_metrics_str"] if splits["cards_metrics_str"] else "// No Information Provided"}\n'
+        f'  Metrics:   {splits["cards_metrics_str"] if splits["cards_metrics_str"] else NIP_STR}\n'
         f'\n'
         f'  Results:\n'
         f'{pretty_card_results_str}'
