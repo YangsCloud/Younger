@@ -35,7 +35,15 @@ def split(raw_metrics) -> tuple:
     table = raw_metrics['table_relate']
     digit = raw_metrics['digit_relate']
 
-    cards_datasets_str = CONCAT_CHAR.join(cards['datasets'])
+    card_datasets = list()
+    for dataset in cards['datasets']:
+        if isinstance(dataset, str):
+            dataset_str = dataset
+        else:
+            dataset_str = json.dumps(dataset)
+        card_datasets.append(dataset_str)
+    cards_datasets_str = CONCAT_CHAR.join(card_datasets)
+
     card_metrics = list()
     for metric in cards['metrics']:
         if isinstance(metric, str):
@@ -44,6 +52,7 @@ def split(raw_metrics) -> tuple:
             metric_str = json.dumps(metric)
         card_metrics.append(metric_str)
     cards_metrics_str = CONCAT_CHAR.join(card_metrics)
+
     cards_results_strs = list()
     for result in cards['results']:
         cards_result = list()
