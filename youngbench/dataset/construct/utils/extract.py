@@ -125,6 +125,7 @@ def fetch_metrics(lines: list[str]) -> dict[str, Any]:
 
 
 def replace_invalid_chars(filepath: str, logger = logger):
+    content = ''
     try:
         with open(filepath, mode='r', encoding='utf-8') as file:
             content = file.read()
@@ -132,6 +133,7 @@ def replace_invalid_chars(filepath: str, logger = logger):
         logger.info(f" Encoding Error - Now Detect The Encoding Mode. - Error: {e}")
         encoding = text.detect_file_encoding(filepath)
         try:
+            logger.info(f"  -  Detected Encoding = {encoding}")
             with open(filepath, mode='r', encoding=encoding) as file:
                 content = file.read()
         except UnicodeDecodeError as e:

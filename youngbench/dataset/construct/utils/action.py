@@ -141,7 +141,7 @@ def read_model_items_manually(token: str, limit: int = 100, filter: dict | None 
         response = requests.get(API_ADDRESS+YBD_MODEL_POINT, headers=headers, params=params)
         data = response.json()
         if export_filepath:
-            exact_filepath = export_filepath + f'-{page}_{pages}.json'
+            exact_filepath = str(export_filepath) + f'-{page}_{pages}.json'
             with open(exact_filepath, 'w') as export_file:
                 json.dump(data['data'], export_file)
             yield exact_filepath
