@@ -22,6 +22,15 @@ NULL = '_NULL_'
 
 
 def split(raw_metrics) -> tuple:
+    if len(raw_metrics.keys()) == 0:
+        return dict(
+            cards_datasets_str='',
+            cards_metrics_str='',
+            cards_results_strs=list(),
+            table_strs=list(),
+            digit=list()
+        )
+
     cards = raw_metrics['cards_relate']
     table = raw_metrics['table_relate']
     digit = raw_metrics['digit_relate']
