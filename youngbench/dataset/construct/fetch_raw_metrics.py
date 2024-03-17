@@ -208,7 +208,7 @@ if __name__ == '__main__':
         logger.info(f" Now Check ...")
         skip = 0
         for model in models:
-            if len(model.raw_metrics.keys()) == 0 or has_card_metric_value(model.raw_metrics['cards_relate']['results']):
+            if len(model.raw_metrics.keys()) != 0 and has_card_metric_value(model.raw_metrics['cards_relate']['results']):
                 models_with_offical_metric.add(model.model_id)
                 save_filename_prefix = 'neat_model'
             else:

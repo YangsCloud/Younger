@@ -10,7 +10,7 @@
 
 . ./constants.sh
 
-#python -m youngbench.dataset.scripts.get_hf_models --key likes --info-dirpath ${DFS_PATH} --cache-dirpath ${HF_CACHE_PATH} --cache-flag-path ${HF_CACHE_FLAG_PATH}
-#python -m youngbench.dataset.scripts.get_hf_models --key likes --info-dirpath ${TFS_PATH} --cache-dirpath ${HF_CACHE_PATH} --cache-flag-path ${HF_CACHE_FLAG_PATH}
-#python -m youngbench.dataset.scripts.get_hf_models --key likes --info-dirpath ${TIMM_PATH} --cache-dirpath ${HF_CACHE_PATH} --cache-flag-path ${HF_CACHE_FLAG_PATH}
-python -m youngbench.dataset.scripts.get_hf_models --key likes --info-dirpath ${STFS_PATH} --cache-dirpath ${HF_CACHE_PATH} --cache-flag-path ${HF_CACHE_FLAG_PATH}
+# python -m youngbench.dataset.construct.get_hf_models --model-ids-filepath ${HF_PATH}/70K-1-Neat.json --cache-dirpath ${HF_CACHE_PATH} --cache-flag-path ${HF_CACHE_FLAG_PATH}
+# python -m youngbench.dataset.construct.get_hf_models --model-ids-filepath ${HF_PATH}/70K-2-Neat.json --cache-dirpath ${HF_CACHE_PATH} --cache-flag-path ${HF_CACHE_FLAG_PATH}
+python -m youngbench.dataset.construct.get_hf_models --model-ids-filepath ${HF_PATH}/70K-3-Neat.json --cache-dirpath ${HF_CACHE_PATH} --cache-flag-path ${HF_CACHE_FLAG_PATH}
+# python -m youngbench.dataset.construct.get_hf_models --model-ids-filepath ${HF_PATH}/70K-4-Neat.json --cache-dirpath ${HF_CACHE_PATH} --cache-flag-path ${HF_CACHE_FLAG_PATH}
