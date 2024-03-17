@@ -16,7 +16,8 @@ import argparse
 from youngbench.logging import set_logger, logger
 from youngbench.dataset.construct.utils.action import get_models_count, read_model_items_manually
 
-CARD_RESULT_LABEL = ["metric_type", "metric_value", "metric_config", "task_type", "dataset_type", "dataset_config", "dataset_split"]
+# CARD_RESULT_LABEL = ["metric_type", "metric_value", "metric_config", "task_type", "dataset_type", "dataset_config", "dataset_split"]
+CARD_RESULT_LABEL = ["metric_type", "metric_value", "task_type", "dataset_type", "dataset_split"]
 CONCAT_CHAR = ' =|= '
 NULL = '_NULL_'
 
@@ -36,6 +37,8 @@ def split(raw_metrics) -> tuple:
     digit = raw_metrics['digit_relate']
 
     card_datasets = list()
+    if isinstance(cards['datasets'], str):
+        cards['datasets'] = [cards['datasets']]
     for dataset in cards['datasets']:
         if isinstance(dataset, str):
             dataset_str = dataset
@@ -45,6 +48,8 @@ def split(raw_metrics) -> tuple:
     cards_datasets_str = CONCAT_CHAR.join(card_datasets)
 
     card_metrics = list()
+    if isinstance(cards['metrics'], str):
+        cards['metrics'] = [cards['metrics']]
     for metric in cards['metrics']:
         if isinstance(metric, str):
             metric_str = metric
@@ -88,6 +93,13 @@ def split(raw_metrics) -> tuple:
 def check(splits: dict) -> bool:
     for _, split in splits.items():
         if len(split) != 0:
+            return True
+    return False
+
+
+def has_card_metric_value(card_results) -> bool:
+    for card_result in card_results:
+        if len(card_result['metric_value']) != 0:
             return True
     return False
 
@@ -179,16 +191,24 @@ if __name__ == '__main__':
         )
     )
 
+    models_with_offical_metric = set()
+
     exact_filepaths = list()
     logger.info(f'Retrieving Items From {args.l_index} To {args.r_index} ...')
     for offset in range(args.l_index, args.r_index + 1, args.step):
         l_id = offset
-        r_id = offset + args.step - 1
+        r_id = min(offset + args.step - 1, args.r_index)
         models = list(read_model_items_manually(args.token, limit=args.step, filter=dict(id=dict(_between=[l_id, r_id])), fields=['id', 'model_id', 'raw_metrics']))
         logger.info(f" Retrieved Total {len(models)} ({models[0].id} ... {models[-1].id}).")
         logger.info(f" Now Check ...")
         skip = 0
         for model in models:
+            if has_card_metric_value(model.raw_metrics['cards_relate']['results']):
+                models_with_offical_metric.add(model.model_id)
+                save_filename_prefix = 'neat_model'
+            else:
+                save_filename_prefix = 'model'
+
             splits = split(model.raw_metrics)
             if not check(splits):
                 logger.info(f" No Need To Be Labeled {model.model_id}...")
@@ -196,9 +216,13 @@ if __name__ == '__main__':
                 continue
             ls_template['data']['model_id'] = model.model_id
             ls_template['data']['text'] = pretty(splits)
-            save_filepath = save_dirpath.joinpath(f'model_{model.id}.json')
+            save_filepath = save_dirpath.joinpath(f'{save_filename_prefix}.{model.id}.json')
             with open(save_filepath, 'w') as sf:
                 json.dump(ls_template, sf)
         logger.info(f" Retrieved/Skip ({len(models) - skip}/{skip}).")
+
+    neat_model_ids_filepath = save_dirpath.joinpath('Neat_Model_IDs.json')
+    with open(neat_model_ids_filepath, 'w') as sf:
+        json.dump(list(models_with_offical_metric), sf)
 
     logger.info(f"Finish Retrive.")
