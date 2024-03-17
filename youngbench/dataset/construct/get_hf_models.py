@@ -9,7 +9,9 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import sys
 import json
+import psutil
 import pathlib
 import argparse
 
@@ -23,6 +25,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Convert HuggingFace Models ['Timm', 'Diffusers', 'Transformers', 'Sentence Transformers'] to ONNX format.")
 
     parser.add_argument('--cache-dirpath', type=str, default='./')
+    parser.add_argument('--fails-flag-path', type=str, default='./fails.flg')
     parser.add_argument('--cache-flag-path', type=str, default='./cache.flg')
     parser.add_argument('--model-ids-filepath', type=str, default='./model_ids.json')
 
@@ -40,6 +43,7 @@ if __name__ == '__main__':
     if args.logging_path is not None:
         set_logger(path=args.logging_path)
 
+    fails_flag_path = pathlib.Path(args.fails_flag_path)
     cache_flag_path = pathlib.Path(args.cache_flag_path)
     flags = set()
     if cache_flag_path.is_file():
@@ -70,7 +74,22 @@ if __name__ == '__main__':
         if model_id not in flags:
             # try:
             logger.info(f'= v. Finished/Total ({len(flags)}/{len(model_ids)}) - Now Cache {model_id}')
-            cached_args_dict = cache_model(model_id, cache_dir=str(cache_dirpath), monolith=False)
+            try:
+                cached_args_dict = cache_model(model_id, cache_dir=str(cache_dirpath), monolith=False)
+            except Exception as e:
+                logger.info(f' - Model ID:{model_id} - Cache Failed Finished.')
+                with open(fails_flag_path, 'a') as f:
+                    f.write(f'{model_id}\n')
+                logger.error(f'E: {e}')
+                logger.error(f'There is an error occurred during cache onnx model, please re-run the script or stop the process.')
+                if not args.ignore:
+                    user_input = input("Do you want to continue? (yes/no): ")
+                    if user_input.lower() == 'yes':
+                        print("Continuing with the process...")
+                        continue
+                    else:
+                        print("Process aborted.")
+                        sys.exit(1)
             assert model_id == cached_args_dict['model_id']
             flags.add(model_id)
             with open(cache_flag_path, 'a') as f:
