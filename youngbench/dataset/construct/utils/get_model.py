@@ -76,7 +76,7 @@ def timm_hf_split(hf_id: str):
     return hf_model_id, hf_revision
 
 
-def timm_load_state_dict_from_hf(model_id: str, filename: str = HF_WEIGHTS_NAME):
+def timm_load_state_dict_from_hf(model_id: str, filename: str = HF_WEIGHTS_NAME, cache_dir: Optional[str] = None):
     # Modified from sources: timm.load_state_dict_from_hf
     hf_model_id, hf_revision = timm_hf_split(model_id)
 
@@ -84,7 +84,7 @@ def timm_load_state_dict_from_hf(model_id: str, filename: str = HF_WEIGHTS_NAME)
     if _has_safetensors:
         for safe_filename in _get_safe_alternatives(filename):
             try:
-                cached_safe_file = hf_hub_download(repo_id=hf_model_id, filename=safe_filename, revision=hf_revision)
+                cached_safe_file = hf_hub_download(repo_id=hf_model_id, filename=safe_filename, revision=hf_revision, cache_dir=cache_dir)
                 logger.info(
                     f"[{model_id}] Safe alternative available for '{filename}' "
                     f"(as '{safe_filename}'). Loading weights using safetensors.")
@@ -131,7 +131,7 @@ def timm_cache_model(
     # For model names specified in the form `hf-hub:path/architecture_name@revision`,
     # load model weights + pretrained_cfg from Hugging Face hub.
     pretrained_cfg, model_name, model_args = load_model_config_from_hf(model_name)
-    print(model_name)
+    # print(model_name)
     if model_args:
         for k, v in model_args.items():
             kwargs.setdefault(k, v)
@@ -149,9 +149,9 @@ def timm_cache_model(
         assert load_from == 'hf-hub'
         logger.info(f'Loading pretrained weights from Hugging Face hub ({pretrained_loc})')
         if isinstance(pretrained_loc, (list, tuple)):
-            timm_load_state_dict_from_hf(*pretrained_loc)
+            timm_load_state_dict_from_hf(*pretrained_loc, cache_dir=kwargs['cache_dir'])
         else:
-            timm_load_state_dict_from_hf(pretrained_loc)
+            timm_load_state_dict_from_hf(pretrained_loc, cache_dir=kwargs['cache_dir'])
 
     return
 
@@ -1064,7 +1064,7 @@ def cache_model_from_task(
     if library_name == "timm":
         assert len(model_class_names) == 1
         assert model_class_names[0] == 'create_model'
-        timm_cache_model(f"hf_hub:{model_id}", pretrained=True, exportable=True)
+        timm_cache_model(f"hf_hub:{model_id}", pretrained=True, exportable=True, cache_dir=cache_dir)
     elif library_name == "sentence_transformers":
         assert len(model_class_names) == 1
         assert model_class_names[0] == 'SentenceTransformer'

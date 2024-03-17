@@ -65,7 +65,6 @@ if __name__ == '__main__':
     model_ids = list()
     with open(model_ids_filepath, 'r') as midsf:
         model_ids = json.load(midsf)
-    model_ids = set(model_ids)
     logger.info(f"Load Total {len(model_ids)} Model IDs.")
 
     cache_dirpath = pathlib.Path(args.cache_dirpath)
