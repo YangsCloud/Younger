@@ -32,4 +32,5 @@ mkdir -p ${HF_LOG_PATH}
 
 HF_SAVE_FLAG_PATH=${HF_PATH}/save.flg
 HF_CACHE_FLAG_PATH=${HF_PATH}/cache.flg
+HF_FAILS_FLAG_PATH=${HF_PATH}/fails.flg
 HF_CACHE_PATH=${HF_PATH}/Cache
