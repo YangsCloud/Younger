@@ -175,9 +175,14 @@ if __name__ == '__main__':
 
     total_models = get_models_count(args.token)
     assert args.step > 0
-    assert 1 <= args.l_index and args.l_index <= total_models
-    assert 1 <= args.r_index and args.r_index <= total_models
-    assert args.l_index <= args.r_index
+
+    l_index = min(args.l_index, total_models)
+    assert 1 <= l_index
+
+    r_index = min(args.r_index, total_models)
+    assert 1 <= r_index
+
+    assert l_index <= r_index
 
     save_dirpath = pathlib.Path(args.save_dirpath)
     save_dirpath.mkdir(parents=True, exist_ok=True)
@@ -194,16 +199,16 @@ if __name__ == '__main__':
     models_with_offical_metric = set()
 
     exact_filepaths = list()
-    logger.info(f'Retrieving Items From {args.l_index} To {args.r_index} ...')
-    for offset in range(args.l_index, args.r_index + 1, args.step):
+    logger.info(f'Retrieving Items From {l_index} To {r_index} ...')
+    for offset in range(l_index, r_index + 1, args.step):
         l_id = offset
-        r_id = min(offset + args.step - 1, args.r_index)
+        r_id = min(offset + args.step - 1, r_index)
         models = list(read_model_items_manually(args.token, limit=args.step, filter=dict(id=dict(_between=[l_id, r_id])), fields=['id', 'model_id', 'raw_metrics']))
         logger.info(f" Retrieved Total {len(models)} ({models[0].id} ... {models[-1].id}).")
         logger.info(f" Now Check ...")
         skip = 0
         for model in models:
-            if has_card_metric_value(model.raw_metrics['cards_relate']['results']):
+            if len(model.raw_metrics.keys()) == 0 or has_card_metric_value(model.raw_metrics['cards_relate']['results']):
                 models_with_offical_metric.add(model.model_id)
                 save_filename_prefix = 'neat_model'
             else:
