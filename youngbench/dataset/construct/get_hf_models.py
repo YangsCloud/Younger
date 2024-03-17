@@ -35,6 +35,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--ignore', action='store_true')
 
+    parser.add_argument('--yes', action='store_true')
+
     args = parser.parse_args()
 
     if args.hf_token is not None:
@@ -83,6 +85,9 @@ if __name__ == '__main__':
                 logger.error(f'E: {e}')
                 logger.error(f'There is an error occurred during cache onnx model, please re-run the script or stop the process.')
                 if not args.ignore:
+                    if args.yes:
+                        print("Continuing with the process...")
+                        continue
                     user_input = input("Do you want to continue? (yes/no): ")
                     if user_input.lower() == 'yes':
                         print("Continuing with the process...")
