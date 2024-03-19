@@ -28,9 +28,13 @@ def get_free(path: str | pathlib.Path) -> int:
     return usage.free
 
 
-def archive_cache(cache_dirpath: str | pathlib.Path, cache_savepath: str | pathlib.Path):
-    with tarfile.open(cache_savepath, mode='w:gz', dereference=False) as tar:
-        tar.add(cache_dirpath, arcname=os.path.basename(cache_dirpath))
+def archive_cache(cache_dirpath: str | pathlib.Path, cache_savepath: str | pathlib.Path, only_tar: bool = True):
+    if only_tar:
+        with tarfile.open(cache_savepath, mode='w', dereference=False) as tar:
+            tar.add(cache_dirpath, arcname="")
+    else:
+        with tarfile.open(cache_savepath, mode='w:gz', dereference=False) as tar:
+            tar.add(cache_dirpath, arcname=os.path.basename(cache_dirpath))
     return
 
 
@@ -51,6 +55,7 @@ if __name__ == '__main__':
     parser.add_argument('--ignore', action='store_true')
 
     parser.add_argument('--yes', action='store_true')
+    parser.add_argument('--compress', action='store_true')
 
     args = parser.parse_args()
 
@@ -107,7 +112,7 @@ if __name__ == '__main__':
     total_free = get_free(cache_dirpath)
 
     tobeuse_disk = total_free * du_per
-    logger.info(f'Current Disk Space Left: {total_free / 1024 / 1024 / 1024:.3f} GB. {du_per*100:.2f}% = {tobeuse_disk / 1024 / 1024 / 1024:.3f} will be used.')
+    logger.info(f'Current Disk Space Left: {total_free / 1024 / 1024 / 1024:.3f} GB. {du_per*100:.2f}% = {tobeuse_disk / 1024 / 1024 / 1024:.3f} GB will be used.')
 
     flags = set()
     flags.update(cache_flags)
@@ -147,7 +152,7 @@ if __name__ == '__main__':
                 f.write(f'{cached_args_json}\n')
             this_cache_tar_dirpath = cache_tar_dirpath.joinpath(f'No-{index}.tar.gz')
             logger.info(f'... Begin Tar Cache: {this_cache_dirpath} -> To {this_cache_tar_dirpath}.')
-            archive_cache(this_cache_dirpath, str(this_cache_tar_dirpath))
+            archive_cache(this_cache_dirpath, str(this_cache_tar_dirpath), not args.compress)
             logger.info(f'= ^. Finished/Total ({len(flags)}/{len(model_ids)}) - \'{model_id}\' Finished.')
             # except Exception as e:
             #     logger.error(f'E: {e}')
