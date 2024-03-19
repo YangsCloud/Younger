@@ -17,7 +17,7 @@ import tarfile
 import pathlib
 import argparse
 
-from huggingface_hub import login
+from huggingface_hub import login, scan_cache_dir
 
 from youngbench.logging import set_logger, logger
 from youngbench.dataset.construct.utils.get_model import cache_model
@@ -35,6 +35,17 @@ def archive_cache(cache_dirpath: str | pathlib.Path, cache_savepath: str | pathl
     else:
         with tarfile.open(cache_savepath+'.tar.gz', mode='w:gz', dereference=False) as tar:
             tar.add(cache_dirpath, arcname=os.path.basename(cache_dirpath))
+    return
+
+
+def remove_cache(cache_dirpath: str | pathlib.Path):
+    info = scan_cache_dir(cache_dirpath)
+    commit_hashes = list()
+    for repo in list(info.repos):
+        for revision in list(repo.revisions):
+            commit_hashes.append(revision.commit_hash)
+    delete_strategy = info.delete_revisions(*commit_hashes)
+    delete_strategy.execute()
     return
 
 
@@ -153,6 +164,7 @@ if __name__ == '__main__':
             this_cache_tar_dirpath = cache_tar_dirpath.joinpath(f'No-{index}')
             logger.info(f'... Begin Tar Cache: {this_cache_dirpath} -> To {this_cache_tar_dirpath}.')
             archive_cache(this_cache_dirpath, str(this_cache_tar_dirpath), not args.compress)
+            remove_cache(this_cache_dirpath)
             logger.info(f'= ^. Finished/Total ({len(flags)}/{len(model_ids)}) - \'{model_id}\' Finished.')
             # except Exception as e:
             #     logger.error(f'E: {e}')
