@@ -37,8 +37,9 @@ def archive_cache(cache_dirpath: str | pathlib.Path, cache_savepath: str | pathl
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Convert HuggingFace Models ['Timm', 'Diffusers', 'Transformers', 'Sentence Transformers'] to ONNX format.")
 
+    parser.add_argument('--disk-usage-percentage', type=float, default=0.9)
     parser.add_argument('--cache-dirpath', type=str, default='./Cache')
-    parser.add_argument('--cache-savepath', type=str, default='./Cache.tar.gz')
+    parser.add_argument('--cache-tar-dirpath', type=str, default='./Cache_Tar')
     parser.add_argument('--fails-flag-path', type=str, default='./fails.flg')
     parser.add_argument('--cache-flag-path', type=str, default='./cache.flg')
     parser.add_argument('--model-ids-filepath', type=str, default='./model_ids.json')
@@ -58,6 +59,9 @@ if __name__ == '__main__':
 
     if args.logging_path is not None:
         set_logger(path=args.logging_path)
+
+    du_per = args.disk_usage_percentage
+    assert 0 < du_per and du_per <= 1
 
     cache_flags = set()
     cache_flag_path = pathlib.Path(args.cache_flag_path)
@@ -94,24 +98,31 @@ if __name__ == '__main__':
     logger.info(f"Load Total {len(model_ids)} Model IDs.")
 
     cache_dirpath = pathlib.Path(args.cache_dirpath)
+    cache_dirpath.mkdir(parents=True, exist_ok=True)
     logger.info(f"User specified cache folder: {cache_dirpath.absolute()}")
+    cache_tar_dirpath = pathlib.Path(args.cache_tar_dirpath)
+    cache_tar_dirpath.mkdir(parents=True, exist_ok=True)
+    logger.info(f"User specified cache Tar folder: {cache_tar_dirpath.absolute()}")
 
-    current_free = get_free(cache_dirpath)
-    tobeuse_disk = current_free // 2
-    logger.info(f'Current Disk Space Left: {current_free / 1024 / 1024 / 1024:.3f} GB. Half will be used.')
+    total_free = get_free(cache_dirpath)
+
+    tobeuse_disk = total_free * du_per
+    logger.info(f'Current Disk Space Left: {total_free / 1024 / 1024 / 1024:.3f} GB. {du_per*100:.2f}% = {tobeuse_disk / 1024 / 1024 / 1024:.3f} will be used.')
 
     flags = set()
     flags.update(cache_flags)
     flags.update(fails_flags)
-    for model_id in model_ids:
-        if get_free(cache_dirpath) < tobeuse_disk:
+    for index, model_id in enumerate(model_ids):
+        if get_free(cache_dirpath) < total_free - tobeuse_disk:
             logger.info(f'- Stop! Reach Half of The Maximum Disk Usage!')
             break
         if model_id not in flags:
             # try:
             logger.info(f'= v. Now Cache {model_id}')
             try:
-                cached_args_dict = cache_model(model_id, cache_dir=str(cache_dirpath), monolith=False)
+                this_cache_dirpath = cache_dirpath.joinpath(f'No-{index}')
+                this_cache_dirpath.mkdir(parents=True, exist_ok=True)
+                cached_args_dict = cache_model(model_id, cache_dir=str(this_cache_dirpath), monolith=False)
             except Exception as e:
                 logger.info(f' - Model ID:{model_id} - Cache Failed Finished.')
                 with open(fails_flag_path, 'a') as f:
@@ -134,6 +145,9 @@ if __name__ == '__main__':
             with open(cache_flag_path, 'a') as f:
                 cached_args_json = json.dumps(cached_args_dict)
                 f.write(f'{cached_args_json}\n')
+            this_cache_tar_dirpath = cache_tar_dirpath.joinpath(f'No-{index}.tar.gz')
+            logger.info(f'... Begin Tar Cache: {this_cache_dirpath} -> To {this_cache_tar_dirpath}.')
+            archive_cache(this_cache_dirpath, str(this_cache_tar_dirpath))
             logger.info(f'= ^. Finished/Total ({len(flags)}/{len(model_ids)}) - \'{model_id}\' Finished.')
             # except Exception as e:
             #     logger.error(f'E: {e}')
@@ -148,6 +162,4 @@ if __name__ == '__main__':
         else:
             continue
 
-    logger.info(f'... Begin Tar Cache: {cache_dirpath} -> To {args.cache_savepath}.')
-    archive_cache(cache_dirpath, args.cache_savepath)
     logger.info("All Done!")
