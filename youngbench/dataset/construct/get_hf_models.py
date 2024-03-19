@@ -9,9 +9,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import os
 import sys
 import json
 import psutil
+import tarfile
 import pathlib
 import argparse
 
@@ -21,10 +23,22 @@ from youngbench.logging import set_logger, logger
 from youngbench.dataset.construct.utils.get_model import cache_model
 
 
+def get_free(path: str | pathlib.Path) -> int:
+    usage = psutil.disk_usage(path)
+    return usage.free
+
+
+def archive_cache(cache_dirpath: str | pathlib.Path, cache_savepath: str | pathlib.Path):
+    with tarfile.open(cache_savepath, mode='w:gz', dereference=False) as tar:
+        tar.add(cache_dirpath, arcname=os.path.basename(cache_dirpath))
+    return
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Convert HuggingFace Models ['Timm', 'Diffusers', 'Transformers', 'Sentence Transformers'] to ONNX format.")
 
-    parser.add_argument('--cache-dirpath', type=str, default='./')
+    parser.add_argument('--cache-dirpath', type=str, default='./Cache')
+    parser.add_argument('--cache-savepath', type=str, default='./Cache.tar.gz')
     parser.add_argument('--fails-flag-path', type=str, default='./fails.flg')
     parser.add_argument('--cache-flag-path', type=str, default='./cache.flg')
     parser.add_argument('--model-ids-filepath', type=str, default='./model_ids.json')
@@ -45,9 +59,8 @@ if __name__ == '__main__':
     if args.logging_path is not None:
         set_logger(path=args.logging_path)
 
-    fails_flag_path = pathlib.Path(args.fails_flag_path)
+    cache_flags = set()
     cache_flag_path = pathlib.Path(args.cache_flag_path)
-    flags = set()
     if cache_flag_path.is_file():
         with open(cache_flag_path, 'r') as f:
             for line in f:
@@ -56,9 +69,22 @@ if __name__ == '__main__':
                     continue
                 model_args_dict: dict = json.loads(model_args_json)
                 model_id = model_args_dict.pop('model_id')
-                assert model_id not in flags
-                flags.add(model_id)
+                assert model_id not in cache_flags
+                cache_flags.add(model_id)
+    logger.info(f'Already Cached: {len(cache_flags)}')
 
+    fails_flags = set()
+    fails_flag_path = pathlib.Path(args.fails_flag_path)
+    if fails_flag_path.is_file():
+        with open(fails_flag_path, 'r') as f:
+            for line in f:
+                model_id = line.strip()
+                if len(model_id) == 0:
+                    continue
+                assert model_id not in fails_flags
+                fails_flags.add(model_id)
+    logger.info(f'Previous Failed: {len(fails_flags)}')
+ 
     model_ids_filepath = pathlib.Path(args.model_ids_filepath)
     logger.info(f"Loading Model IDs (To Be Cached): {model_ids_filepath.absolute()} ...")
     assert model_ids_filepath.is_file()
@@ -70,11 +96,20 @@ if __name__ == '__main__':
     cache_dirpath = pathlib.Path(args.cache_dirpath)
     logger.info(f"User specified cache folder: {cache_dirpath.absolute()}")
 
-    index = 0
+    current_free = get_free(cache_dirpath)
+    tobeuse_disk = current_free // 2
+    logger.info(f'Current Disk Space Left: {current_free / 1024 / 1024 / 1024:.3f} GB. Half will be used.')
+
+    flags = set()
+    flags.update(cache_flags)
+    flags.update(fails_flags)
     for model_id in model_ids:
+        if get_free(cache_dirpath) < tobeuse_disk:
+            logger.info(f'- Stop! Reach Half of The Maximum Disk Usage!')
+            break
         if model_id not in flags:
             # try:
-            logger.info(f'= v. Finished/Total ({len(flags)}/{len(model_ids)}) - Now Cache {model_id}')
+            logger.info(f'= v. Now Cache {model_id}')
             try:
                 cached_args_dict = cache_model(model_id, cache_dir=str(cache_dirpath), monolith=False)
             except Exception as e:
@@ -113,4 +148,6 @@ if __name__ == '__main__':
         else:
             continue
 
+    logger.info(f'... Begin Tar Cache: {cache_dirpath} -> To {args.cache_savepath}.')
+    archive_cache(cache_dirpath, args.cache_savepath)
     logger.info("All Done!")
