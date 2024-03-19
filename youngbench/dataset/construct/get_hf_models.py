@@ -30,10 +30,10 @@ def get_free(path: str | pathlib.Path) -> int:
 
 def archive_cache(cache_dirpath: str | pathlib.Path, cache_savepath: str | pathlib.Path, only_tar: bool = True):
     if only_tar:
-        with tarfile.open(cache_savepath, mode='w', dereference=False) as tar:
-            tar.add(cache_dirpath, arcname="")
+        with tarfile.open(cache_savepath+'.tar', mode='w', dereference=False) as tar:
+            tar.add(cache_dirpath, arcname=os.path.basename(cache_dirpath))
     else:
-        with tarfile.open(cache_savepath, mode='w:gz', dereference=False) as tar:
+        with tarfile.open(cache_savepath+'.tar.gz', mode='w:gz', dereference=False) as tar:
             tar.add(cache_dirpath, arcname=os.path.basename(cache_dirpath))
     return
 
@@ -150,7 +150,7 @@ if __name__ == '__main__':
             with open(cache_flag_path, 'a') as f:
                 cached_args_json = json.dumps(cached_args_dict)
                 f.write(f'{cached_args_json}\n')
-            this_cache_tar_dirpath = cache_tar_dirpath.joinpath(f'No-{index}.tar.gz')
+            this_cache_tar_dirpath = cache_tar_dirpath.joinpath(f'No-{index}')
             logger.info(f'... Begin Tar Cache: {this_cache_dirpath} -> To {this_cache_tar_dirpath}.')
             archive_cache(this_cache_dirpath, str(this_cache_tar_dirpath), not args.compress)
             logger.info(f'= ^. Finished/Total ({len(flags)}/{len(model_ids)}) - \'{model_id}\' Finished.')
