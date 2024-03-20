@@ -8,13 +8,14 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+HF_TOKEN="Secret"
 DFS_TAG=diffusers
 TFS_TAG=transformers
 STFS_TAG=sentence-transformers
 TIMM_TAG=timm
 ONNX_TAG=onnx
 
-HF_PATH=/mnt/d/HF
+HF_PATH=/home/jason/HF
 DFS_PATH=${HF_PATH}/Diffusers
 TFS_PATH=${HF_PATH}/Transformers
 STFS_PATH=${HF_PATH}/Sentence_Transformers
@@ -34,3 +35,4 @@ HF_SAVE_FLAG_PATH=${HF_PATH}/save.flg
 HF_CACHE_FLAG_PATH=${HF_PATH}/cache.flg
 HF_FAILS_FLAG_PATH=${HF_PATH}/fails.flg
 HF_CACHE_PATH=${HF_PATH}/Cache
+HF_CACHE_TAR_PATH=${HF_PATH}/Cache_Tar

@@ -66,6 +66,7 @@ if __name__ == '__main__':
     parser.add_argument('--ignore', action='store_true')
 
     parser.add_argument('--yes', action='store_true')
+    parser.add_argument('--archive', action='store_true')
     parser.add_argument('--compress', action='store_true')
 
     args = parser.parse_args()
@@ -136,8 +137,11 @@ if __name__ == '__main__':
             # try:
             logger.info(f'= v. Now Cache {model_id}')
             try:
-                this_cache_dirpath = cache_dirpath.joinpath(f'No-{index}')
-                this_cache_dirpath.mkdir(parents=True, exist_ok=True)
+                if args.archive:
+                    this_cache_dirpath = cache_dirpath.joinpath(f'No-{index}')
+                    this_cache_dirpath.mkdir(parents=True, exist_ok=True)
+                else:
+                    this_cache_dirpath = cache_dirpath
                 cached_args_dict = cache_model(model_id, cache_dir=str(this_cache_dirpath), monolith=False)
             except Exception as e:
                 logger.info(f' - Model ID:{model_id} - Cache Failed Finished.')
@@ -161,10 +165,11 @@ if __name__ == '__main__':
             with open(cache_flag_path, 'a') as f:
                 cached_args_json = json.dumps(cached_args_dict)
                 f.write(f'{cached_args_json}\n')
-            this_cache_tar_dirpath = cache_tar_dirpath.joinpath(f'No-{index}')
-            logger.info(f'... Begin Tar Cache: {this_cache_dirpath} -> To {this_cache_tar_dirpath}.')
-            archive_cache(this_cache_dirpath, str(this_cache_tar_dirpath), not args.compress)
-            remove_cache(this_cache_dirpath)
+            if args.archive:
+                this_cache_tar_dirpath = cache_tar_dirpath.joinpath(f'No-{index}')
+                logger.info(f'... Begin Tar Cache: {this_cache_dirpath} -> To {this_cache_tar_dirpath}.')
+                archive_cache(this_cache_dirpath, str(this_cache_tar_dirpath), not args.compress)
+                remove_cache(this_cache_dirpath)
             logger.info(f'= ^. Finished/Total ({len(flags)}/{len(model_ids)}) - \'{model_id}\' Finished.')
             # except Exception as e:
             #     logger.error(f'E: {e}')
