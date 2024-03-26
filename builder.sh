@@ -10,11 +10,11 @@
 
 
 ROOT_DIRPATH=/home/zxyang/YBD
-HF_CACHE_DIRPATH=/zxyang/HF/Cache
 CACHE_DIRPATH=${ROOT_DIRPATH}/Temp
 MODEL_ID_FILEPATH=${ROOT_DIRPATH}/model.ids
 PROCESS_FLAG_FILEPATH=${ROOT_DIRPATH}/process.flg
 DATASET_DIRPATH=${ROOT_DIRPATH}/dataset
+HF_CACHE_DIRPATH=/home/zxyang/TestCache
 
 python -m youngbench.dataset.construct.builder \
   --version 0.0.1 \

@@ -131,7 +131,7 @@ if __name__ == "__main__":
     dataset = Dataset()
 
     save_dirpath = pathlib.Path(args.save_dirpath)
-    assert not save_dirpath.is_dir(), f'Directory exists at the specified \"Save Path\": {save_dirpath}.'
+    #assert not save_dirpath.is_dir(), f'Directory exists at the specified \"Save Path\": {save_dirpath}.'
 
     logger.info(f'-> Dataset Initialized.')
 
