@@ -19,8 +19,7 @@ from typing import Dict, Union, Optional
 from youngbench.dataset.modules.meta import Meta
 from youngbench.dataset.modules.network import Network
 
-from youngbench.dataset.utils.io import load_json, save_json, load_model, save_model, check_model
-from youngbench.dataset.utils.cache import get_cache_root
+from youngbench.dataset.utils.io import load_json, save_json, load_model, check_model
 from youngbench.dataset.utils.translation import trans_model_proto
 
 from youngbench.constants import InstanceLabelName
@@ -33,7 +32,6 @@ class Instance(object):
             labels: Dict[str, str] = None,
             version: Optional[semantic_version.Version] = None,
     ) -> None:
-        # Lazy load model.
         model = model or onnx.ModelProto()
         labels = labels or dict()
         version = version or semantic_version.Version('0.0.0')
@@ -44,15 +42,13 @@ class Instance(object):
         self._network_dirname = 'network'
         self._network = Network()
 
-        self._model_filename = 'model.onnx'
-        self._model_cache_filepath = str()
-
         self._labels_filename = 'label.json'
         self._labels = dict()
         for attribute in InstanceLabelName.attributes:
             label_name = getattr(InstanceLabelName, attribute)
             self._labels[label_name] = None
 
+        self._unique_filename = 'unique.id'
         self._unique = None
 
         self.tag(labels)
@@ -62,10 +58,6 @@ class Instance(object):
     @property
     def meta(self) -> Meta:
         return self._meta
-
-    @property
-    def model(self) -> onnx.ModelProto:
-        return load_model(self._model_cache_filepath)
 
     @property
     def labels(self) -> Dict[str, str]:
@@ -86,8 +78,8 @@ class Instance(object):
         assert instance_dirpath.is_dir(), f'There is no \"Instance\" can be loaded from the specified directory \"{instance_dirpath.absolute()}\".'
         meta_filepath = instance_dirpath.joinpath(self._meta_filename)
         self._load_meta(meta_filepath)
-        model_filepath = instance_dirpath.joinpath(self._model_filename)
-        self._load_model(model_filepath)
+        unique_filepath = instance_dirpath.joinpath(self._unique_filename)
+        self._load_unique(unique_filepath)
         labels_filepath = instance_dirpath.joinpath(self._labels_filename)
         self._load_labels(labels_filepath)
         network_dirpath = instance_dirpath.joinpath(self._network_dirname)
@@ -98,8 +90,8 @@ class Instance(object):
         assert not instance_dirpath.is_dir(), f'\"Instance\" can not be saved into the specified directory \"{instance_dirpath.absolute()}\".'
         meta_filepath = instance_dirpath.joinpath(self._meta_filename)
         self._save_meta(meta_filepath)
-        model_filepath = instance_dirpath.joinpath(self._model_filename)
-        self._save_model(model_filepath)
+        unique_filepath = instance_dirpath.joinpath(self._unique_filename)
+        self._save_unique(unique_filepath)
         labels_filepath = instance_dirpath.joinpath(self._labels_filename)
         self._save_labels(labels_filepath)
         network_dirpath = instance_dirpath.joinpath(self._network_dirname)
@@ -116,15 +108,14 @@ class Instance(object):
         self._meta.save(meta_filepath)
         return
 
-    def _load_model(self, model_filepath: pathlib.Path) -> None:
-        assert model_filepath.is_file(), f'There is no \"ONNX Model\" can be loaded from the specified path \"{model_filepath.absolute()}\".'
-        self._unique = check_model(model_filepath)
-        self._model_cache_filepath = model_filepath
+    def _load_unique(self, unique_filepath: pathlib.Path) -> None:
+        assert unique_filepath.is_file(), f'There is no \"Unique ID\" can be loaded from the specified path \"{unique_filepath.absolute()}\".'
+        self._unique = load_json(unique_filepath)
         return
 
-    def _save_model(self, model_filepath: pathlib.Path) -> None:
-        assert not model_filepath.is_file(), f'\"ONNX Model\" can not be saved into the specified path \"{model_filepath.absolute()}\".'
-        save_model(self.model, model_filepath)
+    def _save_unique(self, unique_filepath: pathlib.Path) -> None:
+        assert not unique_filepath.is_file(), f'\"Unique ID\" can not be saved into the specified path \"{unique_filepath.absolute()}\".'
+        save_json(self._unique, unique_filepath)
         return
 
     def _load_labels(self, labels_filepath: pathlib.Path) -> None:
@@ -157,15 +148,14 @@ class Instance(object):
         assert isinstance(model_handler, onnx.ModelProto) or isinstance(model_handler, pathlib.Path), f'Argument \"model_handler\" must be an ONNX Model Proto (onnx.ModelProto) or a Path (pathlib.Path) instead \"{type(model_handler)}\"!'
         if self.meta.is_fresh:
             unique = check_model(model_handler)
-            if isinstance(model_handler, onnx.ModelProto) and unique is not None:
-                cache_root = get_cache_root()
-                self._model_cache_filepath = cache_root.joinpath(unique)
-                save_model(model_handler, self._model_cache_filepath)
-            if isinstance(model_handler, pathlib.Path) and unique is not None:
-                self._model_cache_filepath = model_handler
+            if unique is not None:
+                if isinstance(model_handler, onnx.ModelProto):
+                    model = model_handler
+                if isinstance(model_handler, pathlib.Path):
+                    model = load_model(model_handler)
 
             if unique is not None:
-                self._network = Network(trans_model_proto(self.model))
+                self._network = Network(trans_model_proto(model, neglect_tensor_values=True))
             self._unique = unique
         return
 
@@ -173,7 +163,6 @@ class Instance(object):
         # TODO:  Optimize this method, as assigning network values involves significant memory consumption.
         instance = Instance()
         instance._network = self._network
-        instance._model_cache_filepath = self._model_cache_filepath
         instance._unique = self._unique
         return instance
 

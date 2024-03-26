@@ -19,8 +19,6 @@ from functools import partial
 from onnx.shape_inference import infer_shapes
 from onnx.inliner import inline_local_functions
 
-from youngbench.constants import ONNXOperatorDomain
-
 
 def trans_string_string_entry_proto(string_string_entry_proto: onnx.StringStringEntryProto) -> Dict:
     key: str = string_string_entry_proto.key
@@ -185,7 +183,7 @@ def trans_value_info_proto(value_info_proto: onnx.ValueInfoProto) -> Dict:
     return value_info_proto_dict
 
 
-def trans_tensor_proto(tensor_proto: onnx.TensorProto) -> Dict:
+def trans_tensor_proto(tensor_proto: onnx.TensorProto, neglect_tensor_values: bool = True) -> Dict:
     # Collect arguments that are used in onnx.helper.make_tensor(name: str, data_type: int, dims: Sequence[int], vals: Any, raw: bool = False) → TensorProto.
     #   1. Two fields 'data_location' and 'external_data' are added to support for storing large tensor values.
     #      Where DataLocation is a new enum:
@@ -217,25 +215,29 @@ def trans_tensor_proto(tensor_proto: onnx.TensorProto) -> Dict:
     data_type: int = tensor_proto.data_type
     dims: List[int] = list(tensor_proto.dims)
 
-    # vals can be any type of data defined in onnx.TensorProto.DataType enum.
-    # There is an easy alternative method:
-    #   1. Make a TensorProto by using onnx.numpy_helper.from_array(arr: ndarray, name: str | None = None) → TensorProto
-    #   2. Make a Numpy Arrray by using onnx.numpy_helper.to_array(tensor: TensorProto, base_dir: str = '') → ndarray
-    if tensor_proto.data_location == onnx.TensorProto.DataLocation.DEFAULT:
-        if tensor_proto.raw_data:
-            raw: bool = True
-            vals = tensor_proto.raw_data
-        else:
-            raw: bool = False
-            field = onnx.helper.tensor_dtype_to_field(data_type)
-            vals = list(getattr(tensor_proto, field))
+    if not neglect_tensor_values:
+        # vals can be any type of data defined in onnx.TensorProto.DataType enum.
+        # There is an easy alternative method:
+        #   1. Make a TensorProto by using onnx.numpy_helper.from_array(arr: ndarray, name: str | None = None) → TensorProto
+        #   2. Make a Numpy Arrray by using onnx.numpy_helper.to_array(tensor: TensorProto, base_dir: str = '') → ndarray
+        if tensor_proto.data_location == onnx.TensorProto.DataLocation.DEFAULT:
+            if tensor_proto.raw_data:
+                raw: bool = True
+                vals = tensor_proto.raw_data
+            else:
+                raw: bool = False
+                field = onnx.helper.tensor_dtype_to_field(data_type)
+                vals = list(getattr(tensor_proto, field))
 
-    elif tensor_proto.data_location == onnx.TensorProto.DataLocation.EXTERNAL:
-        print(f'Support for handling external_data functionality is not yet available.')
-        raise NotImplementedError
+        elif tensor_proto.data_location == onnx.TensorProto.DataLocation.EXTERNAL:
+            print(f'Support for handling external_data functionality is not yet available.')
+            raise NotImplementedError
+        else:
+            print(f'The ONNX proto file may have been updated, and the project does not yet support processing this type of data_location: {tensor_proto.data_location}.')
+            raise NotImplementedError
     else:
-        print(f'The ONNX proto file may have been updated, and the project does not yet support processing this type of data_location: {tensor_proto.data_location}.')
-        raise NotImplementedError
+        raw: bool = False
+        vals = None
 
     tensor_proto_dict = dict(
         name = name,
@@ -247,7 +249,7 @@ def trans_tensor_proto(tensor_proto: onnx.TensorProto) -> Dict:
     return tensor_proto_dict
 
 
-def trans_sparse_tensor_proto(sparse_tensor_proto: onnx.SparseTensorProto) -> Dict:
+def trans_sparse_tensor_proto(sparse_tensor_proto: onnx.SparseTensorProto, neglect_tensor_values: bool = True) -> Dict:
     # Collect arguments that are used in onnx.helper.make_sparse_tensor(values: TensorProto, indices: TensorProto, dims: Sequence[int]) → SparseTensorProto.
     # SparseTensorProto:
     #   The sequence of non-default values are encoded as a tensor of shape [NNZ] (the Number of NonZero elements).
@@ -263,8 +265,8 @@ def trans_sparse_tensor_proto(sparse_tensor_proto: onnx.SparseTensorProto) -> Di
     # SparseTensorProto is mostly used in sparse_initializer field of the onnx graph.
     # values must have a non-empty name present which serves as a name for SparseTensorProto when used in sparse_initializer list.
 
-    values = trans_tensor_proto(sparse_tensor_proto.values)
-    indices = trans_tensor_proto(sparse_tensor_proto.indices)
+    values = trans_tensor_proto(sparse_tensor_proto.values) if not neglect_tensor_values else None
+    indices = trans_tensor_proto(sparse_tensor_proto.indices) if not neglect_tensor_values else None
     dims: List[int] = list(sparse_tensor_proto.dims)
 
     sparse_tensor_proto_dict = dict(
@@ -276,7 +278,7 @@ def trans_sparse_tensor_proto(sparse_tensor_proto: onnx.SparseTensorProto) -> Di
     return sparse_tensor_proto_dict
 
 
-def trans_attribute_proto(attribute_proto: onnx.AttributeProto, trans_graph_proto_method: Callable[[onnx.GraphProto, ], Any]) -> Dict:
+def trans_attribute_proto(attribute_proto: onnx.AttributeProto, trans_graph_proto_method: Callable[[onnx.GraphProto, ], Any], neglect_tensor_values: bool = True) -> Dict:
     # Collect arguments that are used in onnx.helper.make_attribute(key: str, value: Any, doc_string: str | None = None, attr_type: int | None = None) → AttributeProto
     # 1. A named attribute containing either singular float, integer, string, graph, and tensor values, or repeated float, integer, string, graph, and tensor values.
     # 2. An AttributeProto MUST contain the name field, and *only one* of the following content fields, effectively enforcing a C/C++ union equivalent.
@@ -367,11 +369,11 @@ def trans_attribute_proto(attribute_proto: onnx.AttributeProto, trans_graph_prot
         onnx.defs.OpSchema.AttrType.GRAPH: trans_graph_proto_method,
         onnx.defs.OpSchema.AttrType.GRAPHS: trans_graph_proto_method,
 
-        onnx.defs.OpSchema.AttrType.TENSOR: trans_tensor_proto,
-        onnx.defs.OpSchema.AttrType.TENSORS: trans_tensor_proto,
+        onnx.defs.OpSchema.AttrType.TENSOR: partial(trans_tensor_proto, neglect_tensor_values=neglect_tensor_values),
+        onnx.defs.OpSchema.AttrType.TENSORS: partial(trans_tensor_proto, neglect_tensor_values=neglect_tensor_values),
 
-        onnx.defs.OpSchema.AttrType.SPARSE_TENSOR: trans_sparse_tensor_proto,
-        onnx.defs.OpSchema.AttrType.SPARSE_TENSORS: trans_sparse_tensor_proto,
+        onnx.defs.OpSchema.AttrType.SPARSE_TENSOR: partial(trans_sparse_tensor_proto, neglect_tensor_values=neglect_tensor_values),
+        onnx.defs.OpSchema.AttrType.SPARSE_TENSORS: partial(trans_sparse_tensor_proto, neglect_tensor_values=neglect_tensor_values),
 
         onnx.defs.OpSchema.AttrType.TYPE_PROTO: trans_type_proto,
         onnx.defs.OpSchema.AttrType.TYPE_PROTOS: trans_type_proto,
@@ -419,7 +421,7 @@ def trans_node_io(node_proto: onnx.NodeProto) -> Tuple[Dict[str, int], Dict[str,
     return (operands, results)
 
 
-def trans_node_proto(node_proto: onnx.NodeProto, trans_graph_proto_method: Callable[[onnx.GraphProto, ], Any]) -> Dict:
+def trans_node_proto(node_proto: onnx.NodeProto, trans_graph_proto_method: Callable[[onnx.GraphProto, ], Any], neglect_tensor_values: bool = True) -> Dict:
     # TODO: Code ignores the processing of all third-party operators, excluding those defined by the official ONNX specification and user-defined functions.
     # TODO: In the future, functionality to handle these third-party operators will need to be added.
     # NOTE: A node input in a nested subgraph MAY refer to names introduced in outer graphs (as node outputs, graph inputs, or graph initializers).
@@ -498,7 +500,7 @@ def trans_node_proto(node_proto: onnx.NodeProto, trans_graph_proto_method: Calla
     # Record whether there is a subgraph
     node_proto_attributes: Dict[str, Dict] = dict()
     for node_proto_attribute in node_proto.attribute:
-        node_proto_attribute = trans_attribute_proto(node_proto_attribute, trans_graph_proto_method=trans_graph_proto_method)
+        node_proto_attribute = trans_attribute_proto(node_proto_attribute, trans_graph_proto_method=trans_graph_proto_method, neglect_tensor_values=neglect_tensor_values)
         key = node_proto_attribute.pop('key')
         node_proto_attributes[key] = node_proto_attribute
 
@@ -513,7 +515,7 @@ def trans_node_proto(node_proto: onnx.NodeProto, trans_graph_proto_method: Calla
     return node_proto_dict
 
 
-def trans_graph_proto(ox_graph: onnx.GraphProto, outer_dataflow2source: Optional[Dict[str, Tuple[int, int]]] = None, verbose: bool = False) -> networkx.DiGraph:
+def trans_graph_proto(ox_graph: onnx.GraphProto, outer_dataflow2source: Optional[Dict[str, Tuple[int, int]]] = None, neglect_tensor_values: bool = True, verbose: bool = False) -> networkx.DiGraph:
     # TODO: Some `value_info` may not be inferred by the `onnx.shape_inference.infer_shapes` method.
     # TODO: This is because there are operators outside the official ONNX domain in the graph.
     # TODO: Support for this part will need to be added in the future.
@@ -555,7 +557,7 @@ def trans_graph_proto(ox_graph: onnx.GraphProto, outer_dataflow2source: Optional
             specific_attributes = constant_attributes
         if node_type == 'operator':
             specific_attributes = operator_attributes
-        
+
         for node_attribute_key, node_attribute_value in node_attributes.items():
             if node_attribute_key in specific_attributes.keys():
                 specific_attributes[node_attribute_key] = node_attribute_value
@@ -640,7 +642,7 @@ def trans_graph_proto(ox_graph: onnx.GraphProto, outer_dataflow2source: Optional
     # For the infomation about relationship between 'input,' 'output,' 'value_info,' and 'initializer', see ONNX Official Doc: https://onnx.ai/onnx/repo-docs/IR.html#graphs & https://onnx.ai/onnx/repo-docs/IR.html#names-within-a-graph
 
     # Process Dataflow
-    dataflows: Dict[str, Dict] = dict() # Key: Name in Value namespace; Value: node inputs & outputs, tensor values (if named), graph inputs, outputs. - All is ValueInfo
+    dataflows: Dict[str, Dict] = dict() # Key: Name in Value namespace; Value: node inputs & outputs, tensor values (if named, tensor_type_proto), graph inputs, outputs. - All is ValueInfo
     default_values: Dict[str, Dict] = dict() # Key: Name in Value namespace; Value: tensor of inputs or constants. - All is Tensor
 
     graph_inputs: Dict[str, int] = dict()
@@ -681,14 +683,14 @@ def trans_graph_proto(ox_graph: onnx.GraphProto, outer_dataflow2source: Optional
             non_constants.add(node_output)
 
     for graph_initializer in ox_graph.initializer:
-        graph_initializer = trans_tensor_proto(graph_initializer)
+        graph_initializer = trans_tensor_proto(graph_initializer, neglect_tensor_values=neglect_tensor_values)
         name = graph_initializer.pop('name')
         default_values[name] = graph_initializer
         if name not in non_constants:
             graph_constants[name] = len(graph_constants)
 
     for graph_sparse_initializer in ox_graph.sparse_initializer:
-        graph_sparse_initializer = trans_sparse_tensor_proto(graph_sparse_initializer)
+        graph_sparse_initializer = trans_sparse_tensor_proto(graph_sparse_initializer, neglect_tensor_values=neglect_tensor_values)
         name = graph_sparse_initializer.pop('name')
         default_values[name] = graph_sparse_initializer
         if name not in non_constants:
@@ -737,8 +739,8 @@ def trans_graph_proto(ox_graph: onnx.GraphProto, outer_dataflow2source: Optional
         all_outer_dataflow2source = dict()
         all_outer_dataflow2source.update(dataflow2source)
         all_outer_dataflow2source.update(outer_dataflow2source)
-        trans_graph_proto_method = partial(trans_graph_proto, outer_dataflow2source=all_outer_dataflow2source, verbose=verbose)
-        node = trans_node_proto(node, trans_graph_proto_method)
+        trans_graph_proto_method = partial(trans_graph_proto, outer_dataflow2source=all_outer_dataflow2source, neglect_tensor_values=neglect_tensor_values, verbose=verbose)
+        node = trans_node_proto(node, trans_graph_proto_method, neglect_tensor_values=neglect_tensor_values)
         nx_graph.add_node(f'{len(nx_graph)}', **get_complete_node_attributes('operator', node))
 
     nx_graph.add_node(input_node_index, **get_complete_node_attributes('input', dict(graph_inputs=graph_inputs)))
@@ -779,7 +781,7 @@ def trans_graph_proto(ox_graph: onnx.GraphProto, outer_dataflow2source: Optional
     return nx_graph
 
 
-def trans_model_proto(model: onnx.ModelProto, verbose: bool = False) -> networkx.DiGraph:
+def trans_model_proto(model: onnx.ModelProto, neglect_tensor_values: bool = True, verbose: bool = False) -> networkx.DiGraph:
     # Tranlating components of ModelProto into DiGraph attributes.
     # It is a detailed version of the 'trans_model_proto'
     # ModelProto provides more metadata than GraphProto
@@ -827,7 +829,7 @@ def trans_model_proto(model: onnx.ModelProto, verbose: bool = False) -> networkx
         ox_model_metadata_props: Dict[str, str] = trans_string_string_entry_proto(ox_model_metadata_props)
         metadata_props.append(ox_model_metadata_props)
 
-    graph: networkx.DiGraph = trans_graph_proto(model.graph, verbose=verbose)
+    graph: networkx.DiGraph = trans_graph_proto(model.graph, neglect_tensor_values=neglect_tensor_values, verbose=verbose)
 
     graph_attributes = dict(
         ir_version = ir_version,
