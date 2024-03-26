@@ -264,7 +264,7 @@ def trans_sparse_tensor_proto(sparse_tensor_proto: onnx.SparseTensorProto) -> Di
     # values must have a non-empty name present which serves as a name for SparseTensorProto when used in sparse_initializer list.
 
     values = trans_tensor_proto(sparse_tensor_proto.values)
-    indices = trans_tensor_proto(sparse_tensor_proto.values)
+    indices = trans_tensor_proto(sparse_tensor_proto.indices)
     dims: List[int] = list(sparse_tensor_proto.dims)
 
     sparse_tensor_proto_dict = dict(
