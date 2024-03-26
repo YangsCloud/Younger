@@ -13,12 +13,13 @@
 import os
 import json
 import onnx
+import shutil
 import pathlib
 import argparse
 import semantic_version
 
-from typing import Generator, Tuple
 from optimum.exporters.onnx import main_export
+from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
 
 from youngbench.dataset.modules import Dataset, Instance
 from youngbench.dataset.modules import Instance
@@ -56,6 +57,32 @@ def convert_hf_onnx(model_id: str, output_dir: str, device: str = 'cpu', cache_d
             onnx_model_filenames.append(filename)
 
     return onnx_model_filenames
+
+
+def clean_dir(dirpath: pathlib.Path):
+    for filename in os.listdir(dirpath):
+        filepath = dirpath.joinpath(filename)
+        if filepath.is_dir():
+            shutil.rmtree(filepath)
+        if filepath.is_file():
+            os.remove(filepath)
+
+
+def clean_hfmodel_cache(model_id: str, cache_dir: str | None = None):
+    repo_type = "model"
+    if cache_dir is None:
+        cache_dir = HUGGINGFACE_HUB_CACHE
+    
+    cache_dirpath = pathlib.Path(cache_dir)
+
+    object_id = model_id.replace("/", "--")
+    model_cache = cache_dirpath.joinpath(f"{repo_type}s--{object_id}")
+    clean_dir(model_cache)
+    os.rmdir(model_cache)
+
+
+def clean_convert_cache(convert_cache_dirpath: pathlib.Path = None):
+    clean_dir(convert_cache_dirpath)
 
 
 if __name__ == "__main__":
@@ -198,6 +225,9 @@ if __name__ == "__main__":
                 o2n_process_flag = json.dumps(dict(mode='fail', record=(model_id, o2n_fail_flags)))
                 f.write(f'{o2n_process_flag}\n')
 
+        if mode == 'succ':
+            clean_hfmodel_cache(model_id, cache_dir=hf_cache_dirpath)
+            clean_convert_cache(convert_cache_dirpath)
         logger.info(f' = # No.{index}: Finished. Succ/Fail/Total=({h2o_succ}/{h2o_fail}/{len(model_ids)})')
 
     logger.info(f'-> Instances Created.')
