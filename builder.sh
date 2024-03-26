@@ -24,5 +24,4 @@ python -m youngbench.dataset.construct.builder \
   --save-dirpath ${DATASET_DIRPATH} \
   --process-flag-path ${PROCESS_FLAG_FILEPATH} \
   --logging-path ${ROOT_DIRPATH}/convert.log \
-  --device 'cpu' \
-  --mode 'Create'
+  --device 'cpu'
