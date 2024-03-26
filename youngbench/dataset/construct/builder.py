@@ -10,13 +10,15 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import os
+import json
 import onnx
 import pathlib
 import argparse
 import semantic_version
 
-from onnx import hub
 from typing import Generator, Tuple
+from optimum.exporters.onnx import main_export
 
 from youngbench.dataset.modules import Dataset
 from youngbench.dataset.modules import Instance
@@ -26,66 +28,53 @@ from youngbench.dataset.utils.cache import set_cache_root, get_cache_root
 from youngbench.logging import set_logger, logger
 
 
-def get_onnx_official_onnx_models() -> Generator[Tuple[str, onnx.ModelProto], None, None]:
-    all_models = sorted(hub.list_models(), key=lambda x: x.metadata['model_bytes'])
-    for model_info in all_models:
-        # onnx_model = hub.load(model=model_info.model, opset=model_info.opset)
-        total_try = 10
-        for i in range(total_try):
-            try:
-                onnx_model = hub.load(model=model_info.model, opset=model_info.opset)
-                break
-            except:
-                print(f'Try No. {i+1}/{total_try} to re-load.')
-        yield (model_info.model, onnx_model)
-
-
-def get_pytorch_official_onnx_models() -> Generator[Tuple[str, onnx.ModelProto], None, None]:
-    yield
-
-
-def get_tensorflow_official_onnx_models() -> Generator[Tuple[str, onnx.ModelProto], None, None]:
-    yield
-
-
-def get_official_onnx_models(onnx: bool = False, pytorch: bool = False, tensorflow: bool = False) -> Generator[Tuple[str, onnx.ModelProto], None, None]:
-    if onnx:
-        yield from get_onnx_official_onnx_models()
-    if pytorch:
-        yield from get_pytorch_official_onnx_models()
-    if tensorflow:
-        yield from get_tensorflow_official_onnx_models()
-
-
-def get_provided_onnx_models(onnx_path: pathlib.Path) -> Generator[Tuple[str, onnx.ModelProto], None, None]:
-    for filepath in onnx_path.iterdir():
-        onnx_model = load_model(filepath)
-        yield (filepath.stem, onnx_model)
-
-
 def get_opset_version(onnx_model: onnx.ModelProto):
     for opset_info in onnx_model.opset_import:
         if opset_info.domain == "":
             opset_version = opset_info.version
             break
+
     return opset_version
 
 
+def convert_hf_onnx(model_id: str, output_dir: str, device: str = 'cpu', cache_dir: str | None = None) -> list[str]:
+    assert device in {'cpu', 'cuda'}
+    try:
+        main_export(model_id, output_dir, device=device, cache_dir=cache_dir)
+    except Exception as e:
+        logger.error(f'Model ID = {model_id}: Conversion Error - {e} ')
+
+    onnx_model_filenames = list()
+    for filename in os.listdir(output_dir):
+        if os.path.splitext(filename)[1] == '.onnx':
+            onnx_model_filenames.append(filename)
+
+    return onnx_model_filenames
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Create/Update The Young Neural Network Architecture Dataset (YoungBench - Dataset).")
+    parser = argparse.ArgumentParser(description="Create/Update The Young Neural Network Architecture Dataset HuggingFace Hub (YoungBench - Dataset).")
 
     # Dataset Release Version.
     parser.add_argument('--version', type=str, required=True)
 
-    # ONNX Models' Dir
-    parser.add_argument('--onnx-hub-path', type=str, default='')
+    # HuggingFace Hub Cache Dir
+    parser.add_argument('--hf-cache-dirpath', type=str, default='')
+
+    parser.add_argument('--convert-cache-dirpath', type=str, default='')
+
+    # Model IDs File
+    parser.add_argument('--model-id-filepath', type=str, default='')
 
     # Dataset Save/Load Path.
-    parser.add_argument('--load-path', type=str, default='')
-    parser.add_argument('--save-path', type=str, default='')
-    parser.add_argument('--cache-dir', type=str, default='')
+    parser.add_argument('--load-dirpath', type=str, default='')
+    parser.add_argument('--save-dirpath', type=str, default='')
+    parser.add_argument('--process-flag-path', type=str, default='./process.flg')
+
 
     parser.add_argument('--logging-path', type=str, default='')
+
+    parser.add_argument('--device', type=str, default='cpu')
 
     # Mode - Create / Update
     parser.add_argument('--mode', type=str, default='Update', choices=['Update', 'Create'])
@@ -97,59 +86,114 @@ if __name__ == "__main__":
 
     set_logger(path=args.logging_path)
 
-    if args.cache_dir == '':
-        pass
+    if args.hf_cache_dirpath == '':
+        hf_cache_dirpath = None
     else:
-        cache_dir = pathlib.Path(args.cache_dir)
-        set_cache_root(cache_dir)
+        hf_cache_dirpath = pathlib.Path(args.hf_cache_dirpath)
+        assert hf_cache_dirpath.is_dir(), f'Cache Directory Path Does Not Exists.'
+        logger.info(f'HuggingFace Hub Cache directory: {hf_cache_dirpath.absolute()}')
 
-    cache_dir = get_cache_root()
-    logger.info(f'Cache directory is set to be: {cache_dir.absolute()}')
-    cache_dir.mkdir(parents=True, exist_ok=True)
+    model_ids = list()
+    with open(args.model_id_filepath, 'r') as f:
+        for line in f:
+            model_info = json.loads(line)
+            model_ids.append(model_info['model_id'])
 
     dataset = Dataset()
 
     if args.mode == 'Create':
-        if len(args.onnx_hub_path) == 0:
-            logger.info(f'Using default ONNX Hub cache location.')
-        else:
-            onnx_hub_path = pathlib.Path(args.onnx_hub_path)
-            assert onnx_hub_path.is_dir(), f'Directory does not exists at the specified \"ONNX Path\": {onnx_hub_path}.'
-            hub.set_dir(str(onnx_hub_path.absolute()))
-            logger.info(f'ONNX Hub cache location is set to: {hub.get_dir()}')
-
-        save_path = pathlib.Path(args.save_path)
-        assert not save_path.is_dir(), f'Directory exists at the specified \"Save Path\": {save_path}.'
-
-        onnx_models = get_official_onnx_models(onnx=True, pytorch=False, tensorflow=False)
+        save_dirpath = pathlib.Path(args.save_dirpath)
+        assert not save_dirpath.is_dir(), f'Directory exists at the specified \"Save Path\": {save_dirpath}.'
 
     if args.mode == 'Update':
-        onnx_hub_path = pathlib.Path(args.onnx_hub_path)
-        assert onnx_hub_path.is_dir(), f'Directory does not exists at the specified \"ONNX Path\": {onnx_hub_path}.'
-
-        if args.load_path == '':
-            load_path = pathlib.Path('.')
+        if args.load_dirpath == '':
+            load_dirpath = pathlib.Path('.')
         else:
-            load_path = pathlib.Path(args.load_path)
-        assert load_path.is_dir(), f'Directory does not exists at the specified \"Load Path\": {load_path}.'
+            load_dirpath = pathlib.Path(args.load_dirpath)
+        assert load_dirpath.is_dir(), f'Directory does not exists at the specified \"Load Path\": {load_dirpath}.'
 
-        if args.save_path == '':
-            save_path = load_path
+        if args.save_dirpath == '':
+            save_dirpath = load_dirpath
         else:
-            save_path = pathlib.Path(args.save_path)
-        assert not save_path.is_dir(), f'Directory exists at the specified \"Save Path\": {save_path}.'
+            save_dirpath = pathlib.Path(args.save_dirpath)
+        assert not save_dirpath.is_dir(), f'Directory exists at the specified \"Save Path\": {save_dirpath}.'
 
-        dataset.load(load_path)
-
-        onnx_models = get_provided_onnx_models(onnx_hub_path)
+        dataset.load(load_dirpath)
 
     logger.info(f'-> Dataset Initialized.')
 
+    if args.convert_cache_dirpath != '':
+        set_cache_root(pathlib.Path(args.convert_cache_dirpath))
+    convert_cache_dirpath = get_cache_root()
+    
+    assert args.device in {'cpu', 'cuda'}
+    device = args.device
+
+    succ_flags = list()
+    fail_flags = list()
+
+    process_flags = set()
+    process_flag_path = pathlib.Path(args.process_flag_path)
+    if process_flag_path.is_file():
+        with open(process_flag_path, 'r') as f:
+            for line in f:
+                process_json = line.strip()
+                if len(process_json) == 0:
+                    continue
+                process_flag: dict = json.loads(process_json)
+
+                if process_flag['mode'] == 'succ':
+                    succ_flags.append(process_flag['record'])
+                if process_flag['mode'] == 'fail':
+                    fail_flags.append(process_flag['record']) # {'record': list[(model_id, onnx_model_filename)] | model_id }
+
+    logger.info(f'Already Converted: {len(succ_flags)}')
+    logger.info(f'Failed Converted: {len(fail_flags)}')
+
     logger.info(f'-> Dataset Creating ...')
-    for index, (onnx_model_name, onnx_model) in enumerate(onnx_models):
-        opset = get_opset_version(onnx_model)
-        logger.info(f' # {index+1}: Now processing the model: {onnx_model_name} (ONNX opset={opset})')
-        dataset.insert(Instance(model=onnx_model, labels=dict(name=onnx_model_name)))
+    h2o_succ = 0
+    h2o_fail = 0
+    for index, model_id in enumerate(model_ids, start=1):
+        logger.info(f' # {index}: Now processing the model: {model_id} ...')
+        logger.info(f' v - Converting Model into ONNX:')
+        onnx_model_filenames = convert_hf_onnx(model_id, convert_cache_dirpath, device=device, cache_dir=hf_cache_dirpath)
+        logger.info(f' ^ - Converted: Got {len(onnx_model_filenames)} ONNX Models.')
+        if len(onnx_model_filenames) != 0:
+            h2o_succ += 1
+            mode = 'succ'
+        else:
+            h2o_fail += 1
+            mode = 'fail'
+
+        with open(process_flag_path, 'a') as f:
+            process_flag = json.dumps(dict(mode=mode, record=model_id))
+            f.write(f'{process_flag}\n')
+
+        o2n_succ = 0
+        o2n_fail = 0
+        o2n_fail_flags = list()
+        for onnx_model_filename in onnx_model_filenames:
+            onnx_model_filepath = convert_cache_dirpath.joinpath(onnx_model_filename)
+            onnx_model = load_model(onnx_model_filepath)
+            opset = get_opset_version(onnx_model)
+
+            logger.info(f'      > Converting ONNX -> NetworkX: ONNX Filepath - {onnx_model_filepath} (ONNX opset={opset})')
+            try:
+                dataset.insert(Instance(model=onnx_model, labels=dict(source='HuggingFace', model_id=model_id, name=onnx_model_filename)))
+                o2n_succ += 1
+            except Exception as e:
+                logger.error(f'Error! [ONNX -> NetworkX Error] OR [Dataset Insertion Error] - {e}')
+                o2n_fail += 1
+                o2n_fail_flags.append((model_id, onnx_model_filename))
+
+            logger.info(f'      > Converted. Succ/Fail/Total=({o2n_succ}/{o2n_fail}/{len(onnx_model_filenames)})')
+
+        with open(process_flag_path, 'a') as f:
+            process_flag = json.dumps(dict(mode=mode, record=o2n_fail_flags))
+            f.write(f'{process_flag}\n')
+
+        logger.info(f' !# {index}: Finished. Succ/Fail/Total=({h2o_succ}/{h2o_fail}/{len(model_ids)})')
+
     logger.info(f'-> Created.')
 
     logger.info(f'-> Dataset Releasing ...')
@@ -157,5 +201,5 @@ if __name__ == "__main__":
     logger.info(f'-> Released.')
 
     logger.info(f'-> Dataset Saving ...')
-    dataset.save(save_path)
-    logger.info(f'-> Saved: {save_path}.')
+    dataset.save(save_dirpath)
+    logger.info(f'-> Saved: {save_dirpath}.')

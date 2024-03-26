@@ -16,10 +16,11 @@ import tempfile
 from youngbench.constants import YoungBenchHandle
 
 
-cache_root = pathlib.Path(tempfile.gettempdir()).joinpath(f'{YoungBenchHandle.Name}/{YoungBenchHandle.DatasetName}')
+cache_root: pathlib.Path = pathlib.Path(tempfile.gettempdir()).joinpath(f'{YoungBenchHandle.Name}/{YoungBenchHandle.DatasetName}')
 
 
 def set_cache_root(dirpath: pathlib.Path) -> None:
+    assert isinstance(dirpath, pathlib.Path)
     global cache_root
     cache_root = dirpath
     return
