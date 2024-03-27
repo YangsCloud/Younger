@@ -200,12 +200,13 @@ if __name__ == "__main__":
         o2n_fail_flags = list()
         for onnx_model_filename in onnx_model_filenames:
             onnx_model_filepath = convert_cache_dirpath.joinpath(onnx_model_filename)
-            onnx_model = load_model(onnx_model_filepath)
-            opset = get_opset_version(onnx_model)
+            # onnx_model = load_model(onnx_model_filepath)
+            # opset = get_opset_version(onnx_model)
 
-            logger.info(f'      > Converting ONNX -> NetworkX: ONNX Filepath - {onnx_model_filepath} (ONNX opset={opset})')
+            logger.info(f'      > Converting ONNX -> NetworkX: ONNX Filepath - {onnx_model_filepath}')
+            # logger.info(f'      > Converting ONNX -> NetworkX: ONNX Filepath - {onnx_model_filepath} (ONNX opset={opset})')
             try:
-                instance = Instance(model=onnx_model, labels=dict(source='HuggingFace', model_id=model_id, onnx_model_filename=onnx_model_filename))
+                instance = Instance(model=onnx_model_filepath, labels=dict(source='HuggingFace', model_id=model_id, onnx_model_filename=onnx_model_filename))
                 instance_dirpath = save_dirpath.joinpath(get_instance_dirname(model_id, onnx_model_filename))
                 instance.save(instance_dirpath)
                 o2n_succ += 1
