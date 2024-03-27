@@ -119,16 +119,21 @@ def clean_dir(dirpath: pathlib.Path):
 
 def clean_hfmodel_cache(model_id: str, cache_dir: str | None = None):
     repo_type = "model"
+    object_id = model_id.replace("/", "--")
+
     if cache_dir is None:
         cache_dir = HUGGINGFACE_HUB_CACHE
-    
     cache_dirpath = pathlib.Path(cache_dir)
-
-    object_id = model_id.replace("/", "--")
     model_cache = cache_dirpath.joinpath(f"{repo_type}s--{object_id}")
+
+    os_cache_dirpath = pathlib.Path(HUGGINGFACE_HUB_CACHE)
+    os_model_cache = os_cache_dirpath.joinpath(f"{repo_type}s--{object_id}")
+
     if model_cache.is_dir():
         clean_dir(model_cache)
+        clean_dir(os_model_cache)
         os.rmdir(model_cache)
+        os.rmdir(os_model_cache)
 
 
 def clean_convert_cache(convert_cache_dirpath: pathlib.Path = None):
