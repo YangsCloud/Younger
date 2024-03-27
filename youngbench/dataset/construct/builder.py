@@ -18,6 +18,7 @@ import pathlib
 import argparse
 import semantic_version
 
+from huggingface_hub import login
 from optimum.exporters.onnx import main_export
 from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
 
@@ -47,7 +48,7 @@ def get_instance_dirname(model_id: str, onnx_model_filename: str):
 def convert_hf_onnx(model_id: str, output_dir: str, device: str = 'cpu', cache_dir: str | None = None) -> list[str]:
     assert device in {'cpu', 'cuda'}
     try:
-        main_export(model_id, output_dir, device=device, cache_dir=cache_dir)
+        main_export(model_id, output_dir, device=device, cache_dir=cache_dir, monolith=True, do_validation=False, trust_remote_code=True)
     except Exception as e:
         logger.error(f'Model ID = {model_id}: Conversion Error - {e} ')
 
@@ -103,6 +104,7 @@ if __name__ == "__main__":
     parser.add_argument('--save-dirpath', type=str, default='')
     parser.add_argument('--process-flag-path', type=str, default='./process.flg')
 
+    parser.add_argument('--hf-token', type=str, default=None)
 
     parser.add_argument('--logging-path', type=str, default='')
 
@@ -115,6 +117,9 @@ if __name__ == "__main__":
 
     set_logger(path=args.logging_path)
 
+    if args.hf_token is not None:
+        login(token=args.hf_token)
+
     if args.hf_cache_dirpath == '':
         hf_cache_dirpath = None
     else:
@@ -122,11 +127,14 @@ if __name__ == "__main__":
         assert hf_cache_dirpath.is_dir(), f'Cache Directory Path Does Not Exists.'
         logger.info(f'HuggingFace Hub Cache directory: {hf_cache_dirpath.absolute()}')
 
-    model_ids = list()
+    #model_ids = list()
+    #with open(args.model_id_filepath, 'r') as f:
+    #    for line in f:
+    #        model_info = json.loads(line)
+    #        model_ids.append(model_info['model_id'])
+
     with open(args.model_id_filepath, 'r') as f:
-        for line in f:
-            model_info = json.loads(line)
-            model_ids.append(model_info['model_id'])
+        model_ids = json.load(f)
 
     dataset = Dataset()
 
