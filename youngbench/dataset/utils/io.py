@@ -137,7 +137,7 @@ def check_model(model_handler: Union[onnx.ModelProto, pathlib.Path]) -> Optional
     def check_with_external() -> str | None:
         onnx.checker.check_model(str(model_handler))
         model = onnx.load(str(model_handler))
-        check_result = hash_bytes(model)
+        check_result = hash_bytes(model.SerializeToString())
         return check_result
 
     try:
