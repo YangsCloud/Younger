@@ -67,7 +67,7 @@ def convert_hf_onnx(model_id: str, output_dir: str, device: str = 'cpu', cache_d
         infered_model_size = get_directory_size(cache_dir)
         if infered_model_size > MAX_SIZE:
             raise MemoryError(f'Model Size: {infered_model_size} Memory Maybe Occupy Too Much While Exporting')
-        main_export(model_id, output_dir, device=device, cache_dir=cache_dir, monolith=False, do_validation=False, trust_remote_code=True)
+        #main_export(model_id, output_dir, device=device, cache_dir=cache_dir, monolith=False, do_validation=False, trust_remote_code=True)
         main_export(model_id, output_dir, device=device, cache_dir=cache_dir, monolith=True, do_validation=False, trust_remote_code=True)
     except MemoryError as e:
         logger.error(f'Model ID = {model_id}: Skip! Maybe OOM - {e}')
