@@ -124,17 +124,27 @@ def save_pickle(serializable_object: object, filepath: pathlib.Path) -> None:
 
 def check_model(model_handler: Union[onnx.ModelProto, pathlib.Path]) -> Optional[str]:
     assert isinstance(model_handler, onnx.ModelProto) or isinstance(model_handler, pathlib.Path)
-    if isinstance(model_handler, onnx.ModelProto):
+    def check_with_internal() -> str | None:
         model = model_handler
-    if isinstance(model_handler, pathlib.Path):
-        model = onnx.load(str(model_handler))
-    try:
         if len(model.graph.node) == 0:
             check_result = None
         else:
             model = model.SerializeToString()
             onnx.checker.check_model(model)
             check_result = hash_bytes(model)
+        return check_result
+
+    def check_with_external() -> str | None:
+        onnx.checker.check_model(str(model_handler))
+        model = onnx.load(str(model_handler))
+        check_result = hash_bytes(model)
+        return check_result
+
+    try:
+        if isinstance(model_handler, onnx.ModelProto):
+            return check_with_internal()
+        if isinstance(model_handler, pathlib.Path):
+            return check_with_external()
     except onnx.checker.ValidationError as check_error:
         logger.warn(f'The ONNX Model is invalid: {check_error}')
         check_result = None
