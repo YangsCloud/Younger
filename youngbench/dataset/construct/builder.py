@@ -11,6 +11,7 @@
 
 
 import os
+import math
 import json
 import onnx
 import shutil
@@ -18,9 +19,10 @@ import pathlib
 import argparse
 import semantic_version
 
-from huggingface_hub import login
-from optimum.exporters.onnx import main_export
+from huggingface_hub import login, HfFileSystem, get_hf_file_metadata, hf_hub_url
+from huggingface_hub.utils._errors import RepositoryNotFoundError
 from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
+from optimum.exporters.onnx import main_export
 
 from youngbench.dataset.modules import Dataset, Instance
 from youngbench.dataset.modules import Instance
@@ -31,7 +33,31 @@ from youngbench.dataset.construct.utils.get_model import cache_model
 from youngbench.logging import set_logger, logger
 
 
-MAX_SIZE = 4 * 1024 * 1024 * 1024
+MAX_REPO_SIZE = 4 * 1024 * 1024 * 1024
+
+
+def convert_bytes(size_in_bytes):
+    if size_in_bytes == 0:
+        return "0 B"
+    size_name = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
+    i = int(math.floor(math.log(size_in_bytes, 1024)))
+    p = math.pow(1024, i)
+    s = round(size_in_bytes / p, 2)
+    return f'{s} {size_name[i]}'
+
+
+def infer_model_size(model_id: str, cache_dir: str, hf_filesystem: HfFileSystem):
+    filenames = list()
+    filenames.extend(hf_filesystem.glob(model_id+'/*.bin'))
+    filenames.extend(hf_filesystem.glob(model_id+'/*.h5'))
+    filenames.extend(hf_filesystem.glob(model_id+'/*.ckpt'))
+    filenames.extend(hf_filesystem.glob(model_id+'/*.msgpack'))
+    filenames.extend(hf_filesystem.glob(model_id+'/*.safetensors'))
+    infered_model_size = 0
+    for filename in filenames:
+        meta_data = get_hf_file_metadata(hf_hub_url(repo_id=model_id, filename=filename[len(model_id)+1:]))
+        infered_model_size += meta_data.size
+    return infered_model_size
 
 
 def get_directory_size(directory):
@@ -58,19 +84,19 @@ def get_instance_dirname(model_id: str, onnx_model_filename: str):
     return model_name + '--YBDI--' + onnx_model_name
 
 
-def convert_hf_onnx(model_id: str, output_dir: str, device: str = 'cpu', cache_dir: str | None = None) -> list[str]:
+def convert_hf_onnx(model_id: str, output_dir: str, hf_filesystem: HfFileSystem, device: str = 'cpu', cache_dir: str | None = None) -> list[str]:
     assert device in {'cpu', 'cuda'}
+    infered_model_size = 0
     try:
-        # meta_data = huggingface_hub.get_hf_file_metadata(huggingface_hub.hf_hub_url(repo_id="julien-c/EsperBERTo-small", filename="pytorch_model.bin"))
-        # meta_data.size
-        cache_model(model_id, cache_dir=cache_dir, monolith=False)
-        infered_model_size = get_directory_size(cache_dir)
-        if infered_model_size > MAX_SIZE:
-            raise MemoryError(f'Model Size: {infered_model_size} Memory Maybe Occupy Too Much While Exporting')
-        #main_export(model_id, output_dir, device=device, cache_dir=cache_dir, monolith=False, do_validation=False, trust_remote_code=True)
+        infered_model_size = infer_model_size(model_id, cache_dir, hf_filesystem)
+        if infered_model_size > MAX_REPO_SIZE:
+            raise MemoryError(f'Model Size: {convert_bytes(infered_model_size)} Memory Maybe Occupy Too Much While Exporting')
+        #main_export(model_id, output_dir, device=device, cache_dir=cache_dir, monolith=False, do_validation=False, trust_remote_code=True, use_safetensors=False)
         main_export(model_id, output_dir, device=device, cache_dir=cache_dir, monolith=True, do_validation=False, trust_remote_code=True)
     except MemoryError as e:
         logger.error(f'Model ID = {model_id}: Skip! Maybe OOM - {e}')
+    except RepositoryNotFoundError as e:
+        logger.error(f'Model ID = {model_id}: Skip! Maybe Deleted By Author - {e}')
     except Exception as e:
         logger.error(f'Model ID = {model_id}: Conversion Error - {e} ')
 
@@ -79,7 +105,7 @@ def convert_hf_onnx(model_id: str, output_dir: str, device: str = 'cpu', cache_d
         if os.path.splitext(filename)[1] == '.onnx':
             onnx_model_filenames.append(filename)
 
-    return onnx_model_filenames
+    return onnx_model_filenames, infered_model_size
 
 
 def clean_dir(dirpath: pathlib.Path):
@@ -143,6 +169,9 @@ if __name__ == "__main__":
     if args.hf_token is not None:
         login(token=args.hf_token)
 
+    hf_filesystem = HfFileSystem()
+
+
     if args.hf_cache_dirpath == '':
         hf_cache_dirpath = None
     else:
@@ -188,7 +217,7 @@ if __name__ == "__main__":
 
                 if process_flag['mode'] == 'succ': # {'record': model_id (str)}
                     succ_flags.add(process_flag['record'])
-                if process_flag['mode'] == 'fail': # {'record': (model_id (str), list[onnx_model_filename (str)]) | model_id (str)}
+                if process_flag['mode'] in {'fail', 'oom'}: # {'record': (model_id (str), list[onnx_model_filename (str)]) | model_id (str)}
                     record = process_flag['record']
                     if isinstance(record, tuple):
                         assert record[0] not in partial_fail_flags
@@ -217,14 +246,18 @@ if __name__ == "__main__":
 
         logger.info(f' # No.{index}: Now processing the model: {model_id} ...')
         logger.info(f' v - Converting Model into ONNX:')
-        onnx_model_filenames = convert_hf_onnx(model_id, convert_cache_dirpath, device=device, cache_dir=hf_cache_dirpath)
+        onnx_model_filenames, infered_model_size = convert_hf_onnx(model_id, convert_cache_dirpath, hf_filesystem, device=device, cache_dir=hf_cache_dirpath)
+        logger.info(f'     Infered Repo Size = {convert_bytes(infered_model_size)}')
         logger.info(f' ^ - Converted: Got {len(onnx_model_filenames)} ONNX Models.')
         if len(onnx_model_filenames) != 0:
             h2o_succ += 1
             mode = 'succ'
         else:
             h2o_fail += 1
-            mode = 'fail'
+            if infered_model_size > MAX_REPO_SIZE:
+                mode = 'oom'
+            else:
+                mode = 'fail'
 
         o2n_succ = 0
         o2n_fail = 0
