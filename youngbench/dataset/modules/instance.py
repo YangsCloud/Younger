@@ -9,7 +9,7 @@
 # This source code is licensed under the Apache-2.0 license found in the
 # LICENSE file in the root directory of this source tree.
 
-
+import sys
 import onnx
 import pathlib
 import semantic_version
@@ -146,16 +146,18 @@ class Instance(object):
 
     def setup(self, model_handler: onnx.ModelProto | pathlib.Path) -> None:
         assert isinstance(model_handler, onnx.ModelProto) or isinstance(model_handler, pathlib.Path), f'Argument \"model_handler\" must be an ONNX Model Proto (onnx.ModelProto) or a Path (pathlib.Path) instead \"{type(model_handler)}\"!'
+        # Unset Unique Due To OOM and Huge External Data
         if self.meta.is_fresh:
-            unique = check_model(model_handler)
-            if unique is not None:
+            unique = None
+
+            if check_model(model_handler):
                 if isinstance(model_handler, onnx.ModelProto):
                     model = model_handler
                 if isinstance(model_handler, pathlib.Path):
                     model = load_model(model_handler)
 
-            if unique is not None:
                 self._network = Network(trans_model_proto(model, neglect_tensor_values=True))
+            # TODO: Set Unique
             self._unique = unique
         return
 

@@ -9,7 +9,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-
 import sys
 import onnx
 import json
@@ -122,22 +121,25 @@ def save_pickle(serializable_object: object, filepath: pathlib.Path) -> None:
     return
 
 
-def check_model(model_handler: Union[onnx.ModelProto, pathlib.Path]) -> Optional[str]:
+def check_model(model_handler: Union[onnx.ModelProto, pathlib.Path]) -> bool:
     assert isinstance(model_handler, onnx.ModelProto) or isinstance(model_handler, pathlib.Path)
+    # Change Due To Hash May Lead OOM.
     def check_with_internal() -> str | None:
         model = model_handler
         if len(model.graph.node) == 0:
-            check_result = None
+            check_result = False
         else:
-            model = model.SerializeToString()
             onnx.checker.check_model(model)
-            check_result = hash_bytes(model)
+            #check_result = hash_bytes(model)
+            check_result = True
         return check_result
 
     def check_with_external() -> str | None:
         onnx.checker.check_model(str(model_handler))
-        model = onnx.load(str(model_handler))
-        check_result = hash_bytes(model.SerializeToString())
+        #model = onnx.load(str(model_handler))
+        #check_result = hash_bytes(model.SerializeToString())
+        check_result = True
+
         return check_result
 
     try:
@@ -147,7 +149,7 @@ def check_model(model_handler: Union[onnx.ModelProto, pathlib.Path]) -> Optional
             return check_with_external()
     except onnx.checker.ValidationError as check_error:
         logger.warn(f'The ONNX Model is invalid: {check_error}')
-        check_result = None
+        check_result = False
     except Exception as error:
         logger.error(f'An error occurred while checking the ONNX model: {error}')
         sys.exit(1)
@@ -155,7 +157,7 @@ def check_model(model_handler: Union[onnx.ModelProto, pathlib.Path]) -> Optional
 
 
 def load_model(model_filepath: pathlib.Path) -> onnx.ModelProto:
-    model = onnx.load(model_filepath)
+    model = onnx.load(model_filepath, load_external_data=False)
     return model
 
 

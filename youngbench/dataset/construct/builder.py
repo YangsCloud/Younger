@@ -9,7 +9,6 @@
 # This source code is licensed under the Apache-2.0 license found in the
 # LICENSE file in the root directory of this source tree.
 
-
 import os
 import math
 import json
@@ -92,7 +91,7 @@ def convert_hf_onnx(model_id: str, output_dir: str, hf_filesystem: HfFileSystem,
         if infered_model_size > MAX_REPO_SIZE:
             raise MemoryError(f'Model Size: {convert_bytes(infered_model_size)} Memory Maybe Occupy Too Much While Exporting')
         #main_export(model_id, output_dir, device=device, cache_dir=cache_dir, monolith=False, do_validation=False, trust_remote_code=True, use_safetensors=False)
-        main_export(model_id, output_dir, device=device, cache_dir=cache_dir, monolith=True, do_validation=False, trust_remote_code=True)
+        main_export(model_id, output_dir, device=device, cache_dir=cache_dir, monolith=True, do_validation=False, trust_remote_code=True, no_post_process=True)
     except MemoryError as e:
         logger.error(f'Model ID = {model_id}: Skip! Maybe OOM - {e}')
     except RepositoryNotFoundError as e:
@@ -175,7 +174,6 @@ if __name__ == "__main__":
         login(token=args.hf_token)
 
     hf_filesystem = HfFileSystem()
-
 
     if args.hf_cache_dirpath == '':
         hf_cache_dirpath = None
