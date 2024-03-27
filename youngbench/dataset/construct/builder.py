@@ -27,7 +27,20 @@ from youngbench.dataset.modules import Instance
 
 from youngbench.dataset.utils.io import load_model
 from youngbench.dataset.utils.cache import set_cache_root, get_cache_root
+from youngbench.dataset.construct.utils.get_model import cache_model
 from youngbench.logging import set_logger, logger
+
+
+MAX_SIZE = 4 * 1024 * 1024 * 1024
+
+
+def get_directory_size(directory):
+    total_size = 0
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            file_path = os.path.join(root, file)
+            total_size += os.path.getsize(file_path)
+    return total_size
 
 
 def get_opset_version(onnx_model: onnx.ModelProto):
@@ -48,7 +61,16 @@ def get_instance_dirname(model_id: str, onnx_model_filename: str):
 def convert_hf_onnx(model_id: str, output_dir: str, device: str = 'cpu', cache_dir: str | None = None) -> list[str]:
     assert device in {'cpu', 'cuda'}
     try:
+        # meta_data = huggingface_hub.get_hf_file_metadata(huggingface_hub.hf_hub_url(repo_id="julien-c/EsperBERTo-small", filename="pytorch_model.bin"))
+        # meta_data.size
+        cache_model(model_id, cache_dir=cache_dir, monolith=False)
+        infered_model_size = get_directory_size(cache_dir)
+        if infered_model_size > MAX_SIZE:
+            raise MemoryError(f'Model Size: {infered_model_size} Memory Maybe Occupy Too Much While Exporting')
+        main_export(model_id, output_dir, device=device, cache_dir=cache_dir, monolith=False, do_validation=False, trust_remote_code=True)
         main_export(model_id, output_dir, device=device, cache_dir=cache_dir, monolith=True, do_validation=False, trust_remote_code=True)
+    except MemoryError as e:
+        logger.error(f'Model ID = {model_id}: Skip! Maybe OOM - {e}')
     except Exception as e:
         logger.error(f'Model ID = {model_id}: Conversion Error - {e} ')
 
@@ -78,8 +100,9 @@ def clean_hfmodel_cache(model_id: str, cache_dir: str | None = None):
 
     object_id = model_id.replace("/", "--")
     model_cache = cache_dirpath.joinpath(f"{repo_type}s--{object_id}")
-    clean_dir(model_cache)
-    os.rmdir(model_cache)
+    if model_cache.is_dir():
+        clean_dir(model_cache)
+        os.rmdir(model_cache)
 
 
 def clean_convert_cache(convert_cache_dirpath: pathlib.Path = None):
@@ -234,9 +257,8 @@ if __name__ == "__main__":
                 o2n_process_flag = json.dumps(dict(mode='fail', record=(model_id, o2n_fail_flags)))
                 f.write(f'{o2n_process_flag}\n')
 
-        if mode == 'succ':
-            clean_hfmodel_cache(model_id, cache_dir=hf_cache_dirpath)
-            clean_convert_cache(convert_cache_dirpath)
+        clean_hfmodel_cache(model_id, cache_dir=hf_cache_dirpath)
+        clean_convert_cache(convert_cache_dirpath)
         logger.info(f' = # No.{index}: Finished. Succ/Fail/Total=({h2o_succ}/{h2o_fail}/{len(model_ids)})')
 
     logger.info(f'-> Instances Created.')
