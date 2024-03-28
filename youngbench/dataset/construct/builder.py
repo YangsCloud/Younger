@@ -130,8 +130,9 @@ def clean_hfmodel_cache(model_id: str, cache_dir: str | None = None):
 
     if model_cache.is_dir():
         clean_dir(model_cache)
-        clean_dir(os_model_cache)
         os.rmdir(model_cache)
+    if os_model_cache.is_dir():
+        clean_dir(os_model_cache)
         os.rmdir(os_model_cache)
 
 
