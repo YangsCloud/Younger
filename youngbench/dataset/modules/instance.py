@@ -28,9 +28,9 @@ from youngbench.constants import InstanceLabelName
 class Instance(object):
     def __init__(
             self,
-            model: onnx.ModelProto | pathlib.Path | None = None,
-            labels: Dict[str, str] | None = None,
-            version: semantic_version.Version | None = None,
+            model: onnx.ModelProto or pathlib.Path or None = None,
+            labels: Dict[str, str] or None = None,
+            version: semantic_version.Version or None = None,
     ) -> None:
         model = model or onnx.ModelProto()
         labels = labels or dict()
@@ -144,7 +144,7 @@ class Instance(object):
                 self._labels[label_key] = label_value
         return
 
-    def setup(self, model_handler: onnx.ModelProto | pathlib.Path) -> None:
+    def setup(self, model_handler: onnx.ModelProto or pathlib.Path) -> None:
         assert isinstance(model_handler, onnx.ModelProto) or isinstance(model_handler, pathlib.Path), f'Argument \"model_handler\" must be an ONNX Model Proto (onnx.ModelProto) or a Path (pathlib.Path) instead \"{type(model_handler)}\"!'
         # Unset Unique Due To OOM and Huge External Data
         if self.meta.is_fresh:
