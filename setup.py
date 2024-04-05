@@ -61,7 +61,7 @@ REQUIRED = [
 DATASET_EXTRAS = set(['yaml', 'onnx', 'psutil', 'pandas', 'networkx'])
 BENCHMARK_EXTRAS = set([])
 APPLICATION_EXTRAS = set(['pytorch-geometric'])
-FULL = DATASET_EXTRAS + BENCHMARK_EXTRAS + APPLICATION_EXTRAS
+FULL = DATASET_EXTRAS | BENCHMARK_EXTRAS | APPLICATION_EXTRAS
 
 EXTRAS = {
     'dataset': DATASET_EXTRAS,

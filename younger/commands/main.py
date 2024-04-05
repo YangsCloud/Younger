@@ -27,8 +27,8 @@ def get_command_line_argument_parser():
     applications_parser = arguments_subparser.add_parser('applications')
 
     set_datasets_arguments(datasets_parser)
-    set_datasets_arguments(benchmarks_parser)
-    set_datasets_arguments(applications_parser)
+    set_benchmarks_arguments(benchmarks_parser)
+    set_applications_arguments(applications_parser)
 
     return argument_parser
 
