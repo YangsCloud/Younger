@@ -20,8 +20,9 @@ import tarfile
 
 from onnx import version_converter
 
+from younger.commons.logging import logger
+
 from younger.datasets.utils.hash import hash_bytes
-from younger.datasets.utils.logging import logger
 from younger.datasets.utils.constants import ONNX
 
 
