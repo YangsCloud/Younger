@@ -14,22 +14,14 @@ from math import ceil
 
 import torch
 import torch.nn.functional as F
-from torch.nn import Linear
+from torch.nn import Linear, Embedding
 
 from torch_geometric.nn import DenseGraphConv, DMoNPooling, GCNConv
 from torch_geometric.utils import to_dense_adj, to_dense_batch
 
 
-class EmbeddingLayer(torch.nn.Module):
-    def __init__(self, embedding_num: int, embedding_dim: int = 512) -> None:
-        super().__init__()
-        pass
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        pass
-
-
 class NAPPGNNBase(torch.nn.Module):
+    # Neural Architecture Performance Prediction - GNN - Base Model
     def __init__(
         self,
         node_dict: dict,
@@ -41,7 +33,7 @@ class NAPPGNNBase(torch.nn.Module):
         super().__init__()
 
         # GNN Layer
-        self.node_embedding_layer = EmbeddingLayer(len(node_dict), node_dim)
+        self.node_embedding_layer = Embedding(len(node_dict), node_dim)
 
         self.conv1 = DenseGraphConv(node_dim, hidden_dim)
         self.pool1 = DMoNPooling([hidden_dim, hidden_dim], 16)
@@ -53,13 +45,13 @@ class NAPPGNNBase(torch.nn.Module):
         self.lin2 = Linear(hidden_dim, hidden_dim)
 
         # Fuse Layer
-        self.metric_embedding_layer = EmbeddingLayer(len(metric_dict), metric_dim)
+        self.metric_embedding_layer = Embedding(len(metric_dict), metric_dim)
 
         self.lin3 = Linear(metric_dim, hidden_dim)
         self.fuse = Linear(hidden_dim + hidden_dim, hidden_dim)
         self.output = Linear(hidden_dim, 1)
 
-    def forward(self, x, x_mask, edge_index, metric):
+    def forward(self, x: torch.Tensor, edge_index: torch.Tensor, metric: torch.Tensor, batch: torch.Tensor):
 
         x = self.node_embedding_layer(x)
 
