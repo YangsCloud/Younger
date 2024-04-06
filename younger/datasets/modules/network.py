@@ -16,7 +16,7 @@ import networkx
 
 from typing import Any
 
-from younger.datasets.utils.io import load_json, save_json, load_pickle, save_pickle, create_dir
+from younger.commons.io import load_json, save_json, load_pickle, save_pickle, create_dir
 
 
 class Network(object):

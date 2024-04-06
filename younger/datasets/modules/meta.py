@@ -12,9 +12,8 @@
 
 from typing import Callable
 
+from younger.commons.io import load_json, save_json
 from younger.commons.version import semantic_release, check_semantic, str_to_sem, sem_to_str
-
-from younger.datasets.utils.io import load_json, save_json
 
 
 class Meta(object):

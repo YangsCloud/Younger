@@ -20,9 +20,9 @@ from huggingface_hub import utils, HfFileSystem, ModelCard, ModelCardData, get_h
 from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
 from yaml.scanner import ScannerError
 
+from younger.commons.io import delete_dir
 from younger.commons.logging import logger
 
-from younger.datasets.utils.io import delete_dir
 from younger.datasets.utils.constants import READMEPattern
 
 from younger.datasets.constructors.utils import extract_table_related_metrics_from_readme, extract_digit_related_metrics_from_readme

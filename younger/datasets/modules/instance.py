@@ -12,12 +12,13 @@
 import onnx
 import pathlib
 
+from younger.commons.io import load_json, save_json
 from younger.commons.version import semantic_release, str_to_sem
 
 from younger.datasets.modules.meta import Meta
 from younger.datasets.modules.network import Network
 
-from younger.datasets.utils.io import load_json, save_json, load_model, check_model
+from younger.datasets.utils.io import load_model, check_model
 from younger.datasets.utils.constants import InstanceLabelName
 from younger.datasets.utils.translation import trans_model_proto
 
