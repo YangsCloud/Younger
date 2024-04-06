@@ -35,7 +35,6 @@ def run(arguments):
 
 def main():
     argument_parser = argparse.ArgumentParser(allow_abbrev=True, formatter_class=argparse.RawTextHelpFormatter)
-    argument_parser.add_argument('--save-logging', action='store_true', help='Specify a name')
 
     arguments_subparser = argument_parser.add_subparsers()
 
@@ -48,9 +47,13 @@ def main():
     set_applications_arguments(applications_parser)
 
     argument_parser.set_defaults(run=run)
+
     arguments = argument_parser.parse_args()
 
-    arguments.run(arguments)
+    try:
+        arguments.run(arguments)
+    except Exception as error:
+        argument_parser.print_help()
 
 
 if __name__ == '__main__':
