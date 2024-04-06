@@ -46,7 +46,7 @@ def delete_dir(dirpath: pathlib.Path):
     os.rmdir(dirpath)
 
 
-def archive_dir(dirpath: pathlib.Path, archive_filepath, compress: bool = True):
+def tar_archive(dirpath: pathlib.Path, archive_filepath: pathlib.Path, compress: bool = True):
     if compress:
         mode = 'w:gz'
     else:
@@ -54,6 +54,15 @@ def archive_dir(dirpath: pathlib.Path, archive_filepath, compress: bool = True):
 
     with tarfile.open(archive_filepath, mode=mode, dereference=False) as tar:
         tar.add(dirpath, arcname=os.path.basename(dirpath))
+
+def tar_extract(archive_filepath: pathlib.Path, dirpath: pathlib.Path, compress: bool = True):
+    if compress:
+        mode = 'r:gz'
+    else:
+        mode = 'r'
+
+    with tarfile.open(archive_filepath, mode=mode, dereference=False) as tar:
+        tar.extractall(dirpath)
 
 
 def load_json(filepath: pathlib.Path) -> object:
