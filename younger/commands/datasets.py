@@ -13,28 +13,71 @@
 import pathlib
 import argparse
 
-from younger.datasets.constructors.huggingface import convert as hf_convert
-from younger.datasets.constructors.onnx import convert as ox_convert
+from younger.commons.logging import set_logger, use_logger
+from younger.commons.constants import YoungerHandle
 
 
-def convert(args):
-    save_dirpath = pathlib.Path(args.save_dirpath)
-    cache_dirpath = pathlib.Path(args.cache_dirpath)
+def update_logger(arguments):
+    if arguments.logging_filepath:
+        logging_filepath = pathlib.Path(arguments.logging_filepath)
+        set_logger(YoungerHandle.DatasetsName, mode='both', level='INFO', logging_filepath=logging_filepath)
+        use_logger(YoungerHandle.DatasetsName)
 
-    if args.hub == 'huggingface':
-        hf_convert.main(save_dirpath, cache_dirpath, args.library, device=args.device, threshold=args.threshold)
 
-    if args.hub == 'onnx':
-        ox_convert.main(save_dirpath, cache_dirpath)
+def run(arguments):
+    pass
+
+
+def convert_run(arguments):
+    pass
+
+
+def convert_huggingface_run(arguments):
+    update_logger(arguments)
+    save_dirpath = pathlib.Path(arguments.save_dirpath)
+    cache_dirpath = pathlib.Path(arguments.cache_dirpath)
+
+    from younger.datasets.constructors.huggingface import convert
+
+    convert.main(save_dirpath, cache_dirpath, arguments.library, device=arguments.device, threshold=arguments.threshold)
+
+
+def convert_onnx_run(arguments):
+    update_logger(arguments)
+    save_dirpath = pathlib.Path(arguments.save_dirpath)
+    cache_dirpath = pathlib.Path(arguments.cache_dirpath)
+
+    from younger.datasets.constructors.onnx import convert
+
+    convert.main(save_dirpath, cache_dirpath)
+
+
+def set_datasets_convert_arguments(parser: argparse.ArgumentParser):
+    subparser = parser.add_subparsers()
+
+    huggingface_parser = subparser.add_parser('huggingface')
+    huggingface_parser.add_argument('--save-dirpath', type=str, default='.')
+    huggingface_parser.add_argument('--cache-dirpath', type=str, default='.')
+    huggingface_parser.add_argument('--library', type=str, default='transformers')
+    huggingface_parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cpu')
+    huggingface_parser.add_argument('--threshold', type=int, default=3*1024*1024*1024)
+    huggingface_parser.add_argument('--logging-filepath', type=str, default=None)
+    huggingface_parser.set_defaults(run=convert_huggingface_run)
+
+    onnx_parser = subparser.add_parser('onnx')
+    onnx_parser.add_argument('--save-dirpath', type=str, default='.')
+    onnx_parser.add_argument('--cache-dirpath', type=str, default='.')
+    onnx_parser.add_argument('--logging-filepath', type=str, default=None)
+    onnx_parser.set_defaults(run=convert_onnx_run)
+
+    parser.set_defaults(run=convert_run)
 
 
 def set_datasets_arguments(parser: argparse.ArgumentParser):
     subparser = parser.add_subparsers()
+
     convert_parser = subparser.add_parser('convert')
-    convert_parser.add_argument('--hub', type=str, choices=['huggingface', 'onnx'], help='Choose Hub')
-    convert_parser.add_argument('--save-dirpath', type=str, default='.')
-    convert_parser.add_argument('--cache-dirpath', type=str, default='.')
-    convert_parser.add_argument('--library', type=str, default='transformers')
-    convert_parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cpu')
-    convert_parser.add_argument('--threshold', type=int, default=3*1024*1024)
-    convert_parser.set_defaults(func=convert)
+
+    set_datasets_convert_arguments(convert_parser)
+
+    parser.set_defaults(run=run)

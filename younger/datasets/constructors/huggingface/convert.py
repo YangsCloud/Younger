@@ -17,9 +17,9 @@ from typing import Literal
 from optimum.exporters.onnx import main_export
 from huggingface_hub.utils._errors import RepositoryNotFoundError
 
-from younger.datasets.modules import Instance
+from younger.commons.logging import logger
 
-from younger.datasets.utils.logging import logger
+from younger.datasets.modules import Instance
 
 from younger.datasets.constructors.utils import convert_bytes, get_instance_dirname
 from younger.datasets.constructors.huggingface.utils import get_huggingface_model_infos, infer_model_size, clean_default_cache_repo, clean_specify_cache_repo

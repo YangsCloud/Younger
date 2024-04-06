@@ -16,7 +16,7 @@ from onnx import hub
 
 from younger.datasets.modules import Instance
 
-from younger.datasets.utils.logging import logger
+from younger.commons.logging import logger
 
 from younger.datasets.constructors.utils import get_instance_dirname
 from younger.datasets.constructors.onnx.utils import get_onnx_model_infos

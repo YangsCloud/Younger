@@ -54,7 +54,7 @@ except FileNotFoundError:
 # Required
 REQUIRED = [
     'networkx',
-    'semantic_release'
+    'python-semantic-release'
 ]
 
 # Optional
