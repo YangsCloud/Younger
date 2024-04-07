@@ -14,34 +14,66 @@ def get_huggingface_metrics(save_dirpath: pathlib.Path):
     ids = [metric.id for metric in metrics]
     return ids
 
-def get_eval_results_metric_name(readme: str, metrics_list: list[str]):
-    candidate_metrics = extract_candidate_metrics_from_readme(readme)
-    card = ModelCard(readme, ignore_metadata_errors=True)
-    card_data: ModelCardData = card.data
-    eval_results = card_data.eval_results
+def get_eval_results_metric_name(eval_results, hf_metrics_metrics_name: list[str]):
     for eval_result in eval_results:
-        metric_name = eval_result.metric_name
-        metric_name = str(metric_name).lower()
-        if metric_name not in metrics_list:
-            metrics_list.append(metric_name)
-            print(metric_name)
+        metric = eval_result.metric_name
+        metric = str(metric).lower()
+        if metric not in hf_metrics_metrics_name:
+            hf_metrics_metrics_name.append(metric)
+            print(f'new metric name: {metric}')
 
+def get_eval_results_metric_type(eval_results, hf_metrics_metrics_type: list[str]):
+    for eval_result in eval_results:
+        metric = eval_result.metric_type
+        metric = str(metric).lower()
+        if metric not in hf_metrics_metrics_type:
+            hf_metrics_metrics_type.append(metric)
+            print(f'new metric type: {metric}')
+    
 
+def get_metrics(card_data, hf_metrics_metrics: list[str]):
+    eval_metrics = card_data.metrics
+    if not eval_metrics:
+        return
+    for eval_metric in eval_metrics:
+        metric = str(eval_metric).lower()
+        if metric not in hf_metrics_metrics:
+            hf_metrics_metrics.append(metric)
+            print(f'new metric: {metric}')
+    
 
 if __name__ == '__main__':
 
-    # metrics = list_metrics()
-    metrics_list = list()
+    hf_metrics_metrics = list()
+    hf_metrics_metrics_name = list()
+    hf_metrics_metrics_type = list()
+    
 
     with open('20K-Neat.json', 'r') as file:
         data = json.load(file)
 
     readmes = get_huggingface_model_readmes(data)
     for readme in readmes:
-        get_eval_results_metric_name(readme, metrics_list)
+        candidate_metrics = extract_candidate_metrics_from_readme(readme)
+        card = ModelCard(readme, ignore_metadata_errors=True)
+        card_data: ModelCardData = card.data
+        eval_results = card_data.eval_results
+        
+        get_eval_results_metric_name(eval_results, hf_metrics_metrics_name)
+        get_eval_results_metric_type(eval_results,hf_metrics_metrics_type)
+        get_metrics(card_data, hf_metrics_metrics)
 
-    with open(save_dir.joinpath('metrics.json'), 'w') as f:
-        json.dump(metrics_list, f, indent=4)
+
+
+    with open(save_dir.joinpath('hf_metrics_metrics_type.json'), 'w') as f:
+        json.dump(hf_metrics_metrics_type, f, indent=4)
+
+    with open(save_dir.joinpath('hf_metrics_metrics.json'), 'w') as f:
+        json.dump(hf_metrics_metrics, f, indent=4)
+
+
+    with open(save_dir.joinpath('hf_metrics_metrics_name.json'), 'w') as f:
+        json.dump(hf_metrics_metrics_name, f, indent=4)
 
 
 
