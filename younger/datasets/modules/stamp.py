@@ -10,9 +10,8 @@
 # LICENSE file in the root directory of this source tree.
 
 
+from younger.commons.hash import hash_string
 from younger.commons.version import semantic_release, check_semantic, str_to_sem
-
-from younger.datasets.utils.hash import hash_string
 
 
 class Stamp(object):

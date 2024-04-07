@@ -18,9 +18,9 @@ import os.path as osp
 from typing import Callable, Literal, Any
 from torch_geometric.data import Data, Dataset, download_url
 
-from younger.datasets.modules import Instance
+from younger.commons.io import load_json, tar_extract
 
-from younger.datasets.utils.io import load_json, tar_extract
+from younger.datasets.modules import Instance
 from younger.datasets.utils.constants import YoungerDatasetAddress, YoungerDatasetNodeType
 
 

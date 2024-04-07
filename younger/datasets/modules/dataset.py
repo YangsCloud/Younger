@@ -12,14 +12,13 @@
 
 import pathlib
 
+from younger.commons.io import load_json, save_json
+from younger.commons.hash import hash_strings
 from younger.commons.logging import logger
 from younger.commons.version import semantic_release, str_to_sem
 
 from younger.datasets.modules.stamp import Stamp
 from younger.datasets.modules.instance import Instance
-
-from younger.datasets.utils.io import load_json, save_json
-from younger.datasets.utils.hash import hash_strings
 
 
 class Dataset(object):
