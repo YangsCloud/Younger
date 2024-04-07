@@ -45,6 +45,18 @@ def get_metrics(card_data, hf_metrics_metrics: list[str]):
             hf_metrics_metrics.append(metric)
             print(f'new metric: {metric}')
 
+def get_combined_name_type(eval_results, combined_name_type_list: list[str]):
+    for eval_result in eval_results:
+        type = str(eval_result.metric_type).lower()
+        name = str(eval_result.metric_name).lower()
+        name_and_type = {
+            "name": type,
+            "type": name
+        }
+        if name_and_type not in combined_name_type_list:
+            combined_name_type_list.append(name_and_type)
+
+
 
 if __name__ == '__main__':
 
@@ -52,7 +64,6 @@ if __name__ == '__main__':
     hf_metrics_metrics_name = list()
     hf_metrics_metrics_type = list()
     combined_name_type_list = list()
-    name_and_type = {}
 
     with open(model_ids, 'r') as file:
         data = json.load(file)
@@ -67,15 +78,16 @@ if __name__ == '__main__':
         get_eval_results_metric_name(eval_results, hf_metrics_metrics_name)
         get_eval_results_metric_type(eval_results, hf_metrics_metrics_type)
         get_metrics(card_data, hf_metrics_metrics)
+        get_combined_name_type(eval_results, combined_name_type_list)
 
-    with open(save_dir.joinpath('hf_metrics_metrics_type.json'), 'w') as f:
+    with open(save_dir.joinpath('hf_metrics_metrics_type.json'), 'w', encoding='latin-1') as f:
         json.dump(hf_metrics_metrics_type, f, indent=4)
 
-    with open(save_dir.joinpath('hf_metrics_metrics.json'), 'w') as f:
+    with open(save_dir.joinpath('hf_metrics_metrics.json'), 'w', encoding='latin-1') as f:
         json.dump(hf_metrics_metrics, f, indent=4)
 
-    with open(save_dir.joinpath('hf_metrics_metrics_name.json'), 'w') as f:
+    with open(save_dir.joinpath('hf_metrics_metrics_name.json'), 'w', encoding='latin-1') as f:
         json.dump(hf_metrics_metrics_name, f, indent=4)
 
-    # with open(save_dir.joinpath('combined_name_type_list.json'), 'w') as f:
-    #     json.dump(combined_name_type_list, f, indent=4)
+    with open(save_dir.joinpath('combined_name_type_list.json'), 'w', encoding='latin-1') as f:
+        json.dump(combined_name_type_list, f, indent=4)
