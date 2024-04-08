@@ -35,7 +35,7 @@ class NAPPGNNBase(torch.nn.Module):
     ):
         super().__init__()
 
-        assert mode in ['Supervised', 'Unsupervised']
+        assert mode in {'Supervised', 'Unsupervised'}
         self.mode = mode
 
         self.activation_layer = resolver.activation_resolver('ELU')
@@ -94,12 +94,16 @@ class NAPPGNNBase(torch.nn.Module):
         )
 
     def forward(self, x: torch.Tensor, edge_index: torch.Tensor, metric: torch.Tensor, batch: torch.Tensor):
+        # x - [ batch_size * max(node_number_of_graphs) X num_node_features ] (Current Version: num_node_features=1)
         x = self.node_embedding_layer(x)
+        # x - [ batch_size * max(node_number_of_graphs) X node_dim ]
 
         x = self.gnn_head_mp_layer(x, edge_index)
         x = self.activation_layer(x)
 
+        # x - [ batch_size * max(node_number_of_graphs) X hidden_dim ]
         (x, mask), adj = to_dense_batch(x, batch), to_dense_adj(edge_index, batch)
+        # x - [ batch_size X max(node_number_of_graphs) X hidden_dim ]
 
         _, x, adj, spectral_loss, orthogonality_loss, cluster_loss = self.gnn_pooling_layer(x, adj, mask)
 
@@ -111,11 +115,22 @@ class NAPPGNNBase(torch.nn.Module):
         x = self.gnn_tail_mp_layer(x, adj)
         x = self.activation_layer(x)
 
-        metric = self.metric_embedding_layer(metric)
-        metric = self.metric_layer(metric)
+        # x - [ batch_size X max(node_number_of_graphs) X hidden_dim ]
+        x = self.gnn_readout_layer(x)
+        # x - [ batch_size X max(node_number_of_graphs) X readout_dim ]
+        x = x.sum(dim=1)
+        # x - [ batch_size X readout_dim ]
 
-        fused_information = self.fuse_layer(torch.concat([x.sum(dim=1), metric], dim=-1))
+        # metric - [ batch_size ]
+        metric = self.metric_embedding_layer(metric)
+        # metric - [ batch_size X metric_dim ]
+        metric = self.metric_layer(metric)
+        # metric - [ batch_size X hidden_dim ]
+
+        fused_information = self.fuse_layer(torch.concat([x, metric], dim=-1))
+        # fused_information - [ batch_size X hidden_dim ]
 
         output = self.output_layer(fused_information)
+        # output - [ batch_size X 1 ]
 
         return output, gnn_pooling_loss

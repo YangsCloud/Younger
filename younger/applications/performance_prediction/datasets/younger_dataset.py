@@ -34,124 +34,96 @@ class YoungerDataset(Dataset):
         log: bool = True,
         force_reload: bool = False,
         mode: Literal['Supervised', 'Unsupervised'] = 'Unsupervised',
-        x_encode_method: Literal['OnlyOp'] = 'OnlyOp',
-        y_encode_method: Literal['OnlyMt'] = 'OnlyMt'
+        split: Literal['Train', 'Valid', 'Test'] = 'Train',
+        x_feature_get_type: Literal['OnlyOp'] = 'OnlyOp',
+        y_feature_get_type: Literal['OnlyMt'] = 'OnlyMt'
     ):
-        assert mode in ['Supervised', 'Unsupervised'], f'Dataset Mode Not Support - {mode}!'
+        assert mode in {'Supervised', 'Unsupervised'}, f'Dataset Mode Not Support - {mode}!'
+        assert split in {'Train', 'Valid', 'Test'}, f'Dataset Split Not Support - {split}!'
 
         super().__init__(root, transform, pre_transform, pre_filter, log, force_reload)
 
         self.mode = mode
-        self.x_encode_method = x_encode_method
-        self.y_encode_method = y_encode_method
+        self.split = split
+        self.x_feature_get_type = x_feature_get_type
+        self.y_feature_get_type = y_feature_get_type
+
+        self.split_name = f'{self.mode}{f"_{self.split}" if self.mode == "Supervised" else ""}'
+        self.onnx_operators_filename = 'onnx_operators.json'
+        self.metrics_filename = 'metrics.json'
+        self.indicator_filename = 'indicator.json'
     
     @property
-    def node_type_indices(self) -> dict[str, int]:
-        return self._node_type_indices
+    def node_dict(self) -> dict[str, int]:
+        return self._node_dict
 
     @property
-    def metric_indices(self) -> dict[str, int]:
-        return self._metric_indices
+    def metric_dict(self) -> dict[str, int]:
+        return self._metric_dict
 
     @property
     def raw_dir(self) -> str:
-        name = f'raw'
-        return osp.join(self.root, name, self.mode)
+        name = f'younger_raw'
+        return osp.join(self.root, name)
 
     @property
     def processed_dir(self) -> str:
-        name = f'processed'
-        return osp.join(self.root, name, self.mode)
+        name = f'younger_processed'
+        return osp.join(self.root, name)
 
     @property
     def raw_file_names(self):
-        onnx_operators_path = osp.join(self.raw_dir, 'onnx_operators.json')
-        onnx_operators: list[str] = load_json(onnx_operators_path)
-        node_types = [f'__{node_type}__' for node_type in YoungerDatasetNodeType.attributes] + onnx_operators
-        self._node_type_indices = {node_type: index for index, node_type in enumerate(node_types)}
-
-        metrics_path = osp.join(self.raw_dir, 'metrics.json')
-        metrics: list[str] = load_json(metrics_path)
-        self._metric_indices = {metric: index for index, metric in enumerate(metrics)}
-
-        indicator_path = osp.join(self.raw_dir, 'indicator.json')
-        assert osp.exists(indicator_path)
-        indicator: dict[str, Any] = load_json(indicator_path)
-        tar_filenames = indicator['tar_filenames'] # without suffix '.tar.gz'
-        return tar_filenames
+        return [self.onnx_operators_filename, self.metrics_filename, self.split_name+'.tar.gz']
 
     @property
     def processed_file_names(self):
-        return [f'data_{i}.pt' for i in range(self.total_processed_data)]
+        return [osp.join(self.split_name, self.instances_dirname, f'data_{i}.pt') for i in range(self.total_instances)]
 
     def download(self):
-        if self.mode == 'Supervised':
-            raw_dataset_tar_path = download_url(YoungerDatasetAddress.SUPERVISED, self.raw_dir)
+        # {self.raw_dir}/{xxx}
+        download_url(YoungerDatasetAddress.ONNX_OPERATORS, self.raw_dir)
+        download_url(YoungerDatasetAddress.METRICS, self.raw_dir)
 
-        if self.mode == 'Unsupervised':
-            raw_dataset_tar_path = download_url(YoungerDatasetAddress.UNSUPERVISED, self.raw_dir)
+        # {self.raw_dir}/{xxx}
+        main_url = getattr(YoungerDatasetAddress, f'{self.mode.upper()}_{self.split.upper()}')
+        raw_dataset_tar_path = download_url(main_url, self.raw_dir)
+        # {self.raw_dir}/{self.split_name}/{xxx}
+        tar_extract(raw_dataset_tar_path, self.raw_dir)
 
-        tar_extract(raw_dataset_tar_path, self.mode)
-    
-    def encode_node_features(self, node_labels: dict) -> list:
-        node_type: str = node_labels['type']
-        node_feature = list()
-        if node_type == 'operator':
-            node_feature.append(self.node_type_indices[node_labels['operator']['op_type']])
-        else:
-            node_feature.append(self.node_type_indices[f'__{node_type.upper()}__'])
-        return node_feature
+        indicator_filepath = osp.join(self.raw_dir, self.split_name, self.indicator_filename)
+        assert osp.exists(indicator_filepath)
+        indicator: dict[str, Any] = load_json(indicator_filepath)
 
-    def get_x(self, instance: Instance) -> torch.Tensor:
-        node_indices = list(instance.network.graph.nodes)
-        node_features = list()
-        for node_index in node_indices:
-            node_feature = self.encode_node_feature(instance.network.graph.nodes[node_index])
-            node_features.append(node_feature)
-        return torch.tensor(node_features)
-
-    def get_edge_index(self, instance: Instance) -> torch.Tensor:
-        edges = list(instance.network.graph.edges)
-        src = [int(edge[0]) for edge in edges]
-        dst = [int(edge[1]) for edge in edges]
-        edge_index = torch.tensor([src, dst])
-        return edge_index
-    
-    def encode_graph_feature(self, graph_labels: dict) -> list:
-        task_name = graph_labels['task_name']
-        dataset_name = graph_labels['dataset_name']
-        metric_name = graph_labels['metric_name']
-        metric_value = graph_labels['metric_value']
-
-        if self.y_encode_method == 'OnlyMt':
-            graph_feature = [self.metric_indices[metric_name], metric_value]
-        
-        return graph_feature
-
-    def get_y(self, instance: Instance) -> torch.Tensor | None:
-        if self.mode == 'Supervised':
-            graph_feature = self.encode_graph_feature(instance.labels)
-            return torch.tensor(graph_feature)
-        if self.mode == 'Unsupervised':
-            return None
+        # {self.raw_dir}/{self.split_name}/{xxx}
+        split_dirpath = osp.join(self.raw_dir, self.split_name)
+        for tar_filename in indicator['tar_filenames']:
+            # {self.raw_dir}/{self.split_name}/{instances_dirname}
+            tar_extract(osp.join(split_dirpath, tar_filename+'.tar.gz'), split_dirpath)
+        total_instances = 0
+        self.instances_dirname = indicator['instances_dirname']
+        instances_dirpath = pathlib.Path(osp.join(split_dirpath, self.instances_dirname))
+        for path in instances_dirpath.iterdir():
+                if path.is_dir():
+                    total_instances += 1
+        assert total_instances == indicator['instances_number']
+        self.total_instances = indicator['instances_number']
 
     def process(self):
-        idx = 0
-        for raw_path in self.raw_paths:
-            tar_extract(raw_path+'.tar.gz', raw_path)
+        onnx_operators_filepath = osp.join(self.raw_dir, self.onnx_operators_filename)
+        self._node_dict = self.__class__.load_node_dict(onnx_operators_filepath)
 
-            raw_path = pathlib.Path(raw_path)
-            instances = list()
-            for path in raw_path.iterdir():
-                if path.is_dir():
-                    instance = Instance()
-                    instance.load(path)
-                    instances.append(instance)
+        metrics_filepath = osp.join(self.raw_dir, self.metrics_filename)
+        self._metric_dict = self.__class__.load_metric_dict(metrics_filepath)
 
-            for instance in instances:
-                x = self.get_x(instance)
-                edge_index = self.get_edge_index(instance)
-                y = self.get_y(instance)
+        raw_instances_dirpath = pathlib.Path(osp.join(self.raw_dir, self.split_name, self.instances_dirname))
+        for index, raw_instance_dirpath in enumerate(raw_instances_dirpath.iterdir()):
+            if raw_instance_dirpath.is_dir():
+                instance = Instance()
+                instance.load(raw_instance_dirpath)
+
+                x = self.__class__.get_x(instance, self.node_dict, self.x_feature_get_type)
+                edge_index = self.__class__.get_edge_index(instance)
+                y = self.__class__.get_y(instance, self.metric_dict, self.y_feature_get_type, self.mode)
                 data = Data(x=x, edge_index=edge_index, y=y)
 
                 if self.pre_filter is not None and not self.pre_filter(data):
@@ -160,14 +132,69 @@ class YoungerDataset(Dataset):
                 if self.pre_transform is not None:
                     data = self.pre_transform(data)
 
-                torch.save(data, osp.join(self.processed_dir, f'data_{idx}.pt'))
-                idx += 1
-        
-        self.total_processed_data = idx
+                torch.save(data, osp.join(self.processed_dir, self.split_name, self.instances_dirname, f'data_{index}.pt'))
 
-    def len(self):
+    def len(self) -> int:
         return len(self.processed_file_names)
 
-    def get(self, idx):
-        data = torch.load(osp.join(self.processed_dir, f'data_{idx}.pt'))
-        return data
+    def get(self, index: int):
+        return torch.load(osp.join(self.processed_dir, self.split_name, self.instances_dirname, f'data_{index}.pt'))
+    
+    @classmethod
+    def load_node_dict(cls, node_dict_filepath: str) -> dict[str, int]:
+        onnx_operators: list[str] = load_json(node_dict_filepath)
+        node_types = [f'__{node_type}__' for node_type in YoungerDatasetNodeType.attributes] + onnx_operators
+        return {node_type: index for index, node_type in enumerate(node_types)}
+
+    @classmethod
+    def load_metric_dict(cls, metric_dict_filepath: str) -> dict[str, int]:
+        metrics: list[str] = load_json(metric_dict_filepath)
+        return {metric: index for index, metric in enumerate(metrics)}
+
+    @classmethod
+    def get_node_feature(cls, node_labels: dict, node_dict: dict[str, int], x_feature_get_type: Literal['OnlyOp']) -> list:
+        node_type: str = node_labels['type']
+        node_feature = list()
+        if x_feature_get_type == 'OnlyOp':
+            if node_type == 'operator':
+                node_feature.append(node_dict[node_labels['operator']['op_type']])
+            else:
+                node_feature.append(node_dict[f'__{node_type.upper()}__'])
+        return node_feature
+
+    @classmethod
+    def get_x(cls, instance: Instance, node_dict: dict[str, int], x_feature_get_type: Literal['OnlyOp']) -> torch.Tensor:
+        node_indices = list(instance.network.graph.nodes)
+        node_features = list()
+        for node_index in node_indices:
+            node_feature = cls.get_node_feature(instance.network.graph.nodes[node_index], node_dict, x_feature_get_type)
+            node_features.append(node_feature)
+        return torch.tensor(node_features)
+
+    @classmethod
+    def get_edge_index(cls, instance: Instance) -> torch.Tensor:
+        edges = list(instance.network.graph.edges)
+        src = [int(edge[0]) for edge in edges]
+        dst = [int(edge[1]) for edge in edges]
+        edge_index = torch.tensor([src, dst])
+        return edge_index
+
+    @classmethod
+    def get_graph_feature(cls, graph_labels: dict, metric_dict: dict[str, int], y_feature_get_type: Literal['OnlyMt']) -> list:
+        task_name = graph_labels['task_name']
+        dataset_name = graph_labels['dataset_name']
+        metric_name = graph_labels['metric_name']
+        metric_value = graph_labels['metric_value']
+
+        if y_feature_get_type == 'OnlyMt':
+            graph_feature = [metric_dict[metric_name], metric_value]
+
+        return graph_feature
+
+    @classmethod
+    def get_y(cls, instance: Instance, metric_dict: dict[str, int], y_feature_get_type: Literal['OnlyMt'], mode: Literal['Supervised', 'Unsupervised']) -> torch.Tensor | None:
+        if mode == 'Supervised':
+            graph_feature = cls.get_graph_feature(instance.labels, metric_dict, y_feature_get_type)
+            return torch.tensor(graph_feature)
+        if mode == 'Unsupervised':
+            return None
