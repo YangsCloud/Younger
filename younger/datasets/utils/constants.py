@@ -132,12 +132,12 @@ YoungerAPI.freeze()
 
 class YOUNGER_DATASET_ADDRESS(Constant):
     def initialize(self) -> None:
-        self.ONNX_OPERATORS = 'https://datasets.yangs.cloud/onnx_operators.json'
-        self.METRICS = 'https://datasets.yangs.cloud/metrics.json'
-        self.SUPERVISED_TRAIN = 'https://datasets.yangs.cloud/Supervised_Train.tar.gz'
-        self.SUPERVISED_VALID = 'https://datasets.yangs.cloud/Supervised_Valid.tar.gz'
-        self.SUPERVISED_TEST = 'https://datasets.yangs.cloud/Supervised_Test.tar.gz'
-        self.UNSUPERVISED = 'https://datasets.yangs.cloud/Unsupervised.tar.gz'
+        self.ONNX_OPERATORS = 'https://datasets.yangs.cloud/Younger/onnx_operators.json'
+        self.METRICS = 'https://datasets.yangs.cloud/Younger/metrics.json'
+        self.SUPERVISED_TRAIN = 'https://datasets.yangs.cloud/Younger/Supervised_Train.tar.gz'
+        self.SUPERVISED_VALID = 'https://datasets.yangs.cloud/Younger/Supervised_Valid.tar.gz'
+        self.SUPERVISED_TEST = 'https://datasets.yangs.cloud/Younger/Supervised_Test.tar.gz'
+        self.UNSUPERVISED = 'https://datasets.yangs.cloud/Younger/Unsupervised.tar.gz'
 
 YoungerDatasetAddress = YOUNGER_DATASET_ADDRESS()
 YoungerDatasetAddress.initialize()
