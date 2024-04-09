@@ -10,6 +10,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import tqdm
 import torch
 import pathlib
 
@@ -124,8 +125,9 @@ class YoungerDataset(Dataset):
         assert total_instances == self.indicators[self.split_name]['instances_number']
 
     def process(self):
-        raw_instances_dirpath = pathlib.Path(osp.join(self.raw_dir, self.split_name, self.indicators[self.split_name]['instances_number']))
-        for index, raw_instance_dirpath in enumerate(raw_instances_dirpath.iterdir()):
+        fs.makedirs(osp.join(self.processed_dir, self.split_name), exist_ok=True)
+        raw_instances_dirpath = pathlib.Path(osp.join(self.raw_dir, self.split_name, self.indicators[self.split_name]['instances_dirname']))
+        for index, raw_instance_dirpath in tqdm.tqdm(enumerate(raw_instances_dirpath.iterdir()), total=self.indicators[self.split_name]['instances_number']):
             if raw_instance_dirpath.is_dir():
                 instance = Instance()
                 instance.load(raw_instance_dirpath)
