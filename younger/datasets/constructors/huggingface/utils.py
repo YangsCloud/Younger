@@ -124,6 +124,15 @@ def get_huggingface_model_readme(model_id: str, hf_file_system: HfFileSystem) ->
         logger.info(f"REPO: {model_id}. No README.md, skip.")
 
 
+def get_huggingface_model_ids(library: str | None = None):
+    filter_list = [library] if library else None
+    model_infos = get_huggingface_model_infos(filter_list=filter_list, full=True, config=True)
+    model_ids = list()
+    for model_info in model_infos:
+        model_ids.append(model_info['id'])
+    return model_ids
+
+
 def remove_card_related_from_readme(readme: str) -> str:
     readme_lines = readme.split('\n')
     split_pattern = '---'
