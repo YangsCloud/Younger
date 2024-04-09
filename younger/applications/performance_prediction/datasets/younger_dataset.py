@@ -199,12 +199,12 @@ class YoungerDataset(Dataset):
 
     @classmethod
     def get_graph_feature(cls, graph_labels: dict, metric_dict: dict[str, int], y_feature_get_type: Literal['OnlyMt']) -> list:
-        task_name = graph_labels['task_name']
-        dataset_name = graph_labels['dataset_name']
+        #task_name = graph_labels['task_name']
+        #dataset_name = graph_labels['dataset_name']
         metrics: list[dict] = graph_labels['metrics']
 
         if y_feature_get_type == 'OnlyMt':
-            graph_feature = [metric_dict[clean_metric(metrics[0]['metric_type'], metrics[0]['metric_name'])], float(metrics['metric_value'])]
+            graph_feature = [metric_dict[clean_metric(metrics[0]['metric_type'], metrics[0]['metric_name'])], float(metrics[0]['metric_value'])]
 
         return graph_feature
 

@@ -307,8 +307,17 @@ def train(
 
     fix_random_procedure(seed)
     if mode == 'Supervised':
-        train_dataset = YoungerDataset(str(dataset_dirpath), mode=mode, split='Train', x_feature_get_type=x_feature_get_type, y_feature_get_type=y_feature_get_type)
-        valid_dataset = YoungerDataset(str(dataset_dirpath).absolute(), mode=mode, split='Valid', x_feature_get_type=x_feature_get_type, y_feature_get_type=y_feature_get_type)
+        #train_dataset = YoungerDataset(str(dataset_dirpath), mode=mode, split='Train', x_feature_get_type=x_feature_get_type, y_feature_get_type=y_feature_get_type)
+        #valid_dataset = YoungerDataset(str(dataset_dirpath).absolute(), mode=mode, split='Valid', x_feature_get_type=x_feature_get_type, y_feature_get_type=y_feature_get_type)
+        random_generator = numpy.random.default_rng(seed=seed)
+        dataset = YoungerDataset(str(dataset_dirpath), mode=mode, split='Train', x_feature_get_type=x_feature_get_type, y_feature_get_type=y_feature_get_type)
+        dataset_size = len(dataset)
+
+        random_index = list(random_generator.permutation(dataset_size))
+        dataset = dataset[random_index]
+
+        train_dataset = dataset[ dataset_size // 12 :                    ]
+        valid_dataset = dataset[                    : dataset_size // 12 ]
 
     if mode == 'Unsupervised':
         random_generator = numpy.random.default_rng(seed=seed)
