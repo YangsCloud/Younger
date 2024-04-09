@@ -351,13 +351,8 @@ def train(
         )
 
 
-def exact_test(model: torch.nn.Module, test_dataloader: DataLoader, checkpoint_filepath: str, device_descriptor: torch.device):
-    pass
-
-
 def test(
     dataset_dirpath: pathlib.Path,
-    mode: Literal['Supervised', 'Unsupervised'] = 'Unsupervised',
     x_feature_get_type: Literal['OnlyOp'] = 'OnlyOp',
     y_feature_get_type: Literal['OnlyMt'] = 'OnlyMt',
 
@@ -372,18 +367,13 @@ def test(
 
     device: Literal['CPU', 'GPU'] = 'GPU',
 ):
-    assert mode in {'Supervised', 'Unsupervised'}
     assert device in {'CPU', 'GPU'}
     device_descriptor = get_device_descriptor(device, 0)
     assert torch.cuda.is_available() or device == 'CPU'
 
-    if mode == 'Unsupervised':
-        logger.error(f'Do not support Unsupervised mode.')
-        return
-
     logger.info(f'Using Device: {device};')
 
-    logger.info(f'  v Building Younger Datasets ...')
+    logger.info(f'  v Building Younger Datasets (Supervised)...')
     test_dataset = YoungerDataset(dataset_dirpath, mode='Supervised', split='Test', x_feature_get_type=x_feature_get_type, y_feature_get_type=y_feature_get_type)
     node_dict = test_dataset.node_dict
     metric_dict = test_dataset.metric_dict
@@ -401,7 +391,7 @@ def test(
         hidden_dim=hidden_dim,
         readout_dim=readout_dim,
         cluster_num=cluster_num,
-        mode=mode
+        mode='Supervised'
     )
 
     parameters_number = get_model_parameters_number(model)
