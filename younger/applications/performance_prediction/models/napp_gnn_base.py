@@ -95,7 +95,8 @@ class NAPPGNNBase(torch.nn.Module):
 
     def forward(self, x: torch.Tensor, edge_index: torch.Tensor, batch: torch.Tensor, metric: torch.Tensor | None = None):
         # x - [ batch_size * max(node_number_of_graphs) X num_node_features ] (Current Version: num_node_features=1)
-        x = self.node_embedding_layer(x)
+        main_feature = x[:, 0]
+        x = self.node_embedding_layer(main_feature)
         # x - [ batch_size * max(node_number_of_graphs) X node_dim ]
 
         x = self.gnn_head_mp_layer(x, edge_index)

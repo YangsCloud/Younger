@@ -23,6 +23,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torch_geometric.data import Dataset, Data
 from torch_geometric.loader import DataLoader
 
+from younger.commons.io import create_dir
 from younger.commons.logging import logger
 
 from younger.applications.utils.neural_network import get_model_parameters_number, get_device_descriptor, fix_random_procedure, load_checkpoint, save_checkpoint
@@ -42,15 +43,15 @@ def get_logging_metrics_str(metric_names: list[str], metric_values: list[str]) -
 
 
 def period_operation(
-    mode: Literal['Supervised', 'Unsupervised'],
+    checkpoint_dirpath: pathlib.Path, mode: Literal['Supervised', 'Unsupervised'],
     is_master: bool, world_size: int,
     epoch: int, step: int, train_period: int, valid_period: int, report_period: int, start_position: int,
     record_unit: Literal['Epoch', 'Step'], current_unit: Literal['Epoch', 'Step'],
-    model: torch.nn.Module, optimizer: torch.optim.Optimizer, checkpoint_dirpath: str, checkpoint_name: str, keep_number: int,
-    valid_dataloader: DataLoader,
+    model: torch.nn.Module, optimizer: torch.optim.Optimizer, checkpoint_name: str, keep_number: int,
+    valid_dataloader: DataLoader | None,
     digits: torch.Tensor, digit_names: list[str],
     device_descriptor: torch.device,
-    is_distribution
+    is_distribution: bool
 ):
     if current_unit != record_unit:
         return
@@ -71,21 +72,22 @@ def period_operation(
         toc = time.time()
         logger.info(f'  -> Checkpoint is saved to \'{checkpoint_dirpath}\' at {position} {record_unit} (Take: {toc-tic:2.0f}s)')        
 
-    if position % valid_period == 0:
-        distributed.barrier()
-        if is_master:
-            exact_check(device_descriptor, model, valid_dataloader, 'Valid', mode)
-        distributed.barrier()
-
     if position % report_period == 0:
         if is_distribution:
-            distributed.all_reduce(losses, op = distributed.ReduceOp.SUM)
-            losses = losses / world_size
+            distributed.all_reduce(digits, op = distributed.ReduceOp.SUM)
+            digits = digits / world_size
         digits = [f'{float(digit):.4f}' for digit in digits]
         logger.info(f'  {record_unit}@{position} - {get_logging_metrics_str(digit_names, digits)}')
 
+    if position % valid_period == 0:
+        if is_distribution:
+            distributed.barrier()
+        exact_check(device_descriptor, model, valid_dataloader, 'Valid', mode, is_distribution, world_size)
+        if is_distribution:
+            distributed.barrier()
 
-def exact_check(device_descriptor: torch.device, model: torch.nn.Module, dataloader: DataLoader, split: Literal['Valid', 'Test'], mode: Literal['Supervised', 'Unsupervised']):
+
+def exact_check(device_descriptor: torch.device, model: torch.nn.Module, dataloader: DataLoader, split: Literal['Valid', 'Test'], mode: Literal['Supervised', 'Unsupervised'], is_distribution: bool = False, world_size: int = 1):
     model.eval()
     logger.info(f'  v {split} Begin ...')
     overall_loss = 0
@@ -111,20 +113,27 @@ def exact_check(device_descriptor: torch.device, model: torch.nn.Module, dataloa
                 gnn_pooling_loss = model(data.x, data.edge_index, data.batch)
                 digits = [f'{float(gnn_pooling_loss):.4f}']
                 overall_gnn_pooling_loss += gnn_pooling_loss
-            logger.info(f'  Process No.{index} - {get_logging_metrics_str(digit_names, digits)}')
     toc = time.time()
+
     if mode == 'Supervised':
-        digits = [f'{float(overall_loss/index):.4f}', f'{float(overall_main_loss/index):.4f}', f'{float(overall_gnn_pooling_loss/index):.4f}']
+        digits = torch.tensor([overall_loss/index, overall_main_loss/index, overall_gnn_pooling_loss/index]).to(device_descriptor)
     else:
-        digits = [f'{float(overall_gnn_pooling_loss/index):.4f}']
+        digits = torch.tensor([overall_gnn_pooling_loss/index]).to(device_descriptor)
+
+    if is_distribution:
+        distributed.all_reduce(digits, op = distributed.ReduceOp.SUM)
+        digits = digits / world_size
+
+    digits = [f'{float(digit):.4f}' for digit in digits]
+
     logger.info(f'  ^  {split} Finished. Overall Result - {get_logging_metrics_str(digit_names, digits)} (Time Cost = {toc-tic:.2f}s)')
 
 
 def exact_train(
     rank: int,
-    mode: Literal['Supervised', 'Unsupervised'],
+    checkpoint_dirpath: pathlib.Path, mode: Literal['Supervised', 'Unsupervised'],
     model: torch.nn.Module, train_dataset: Dataset, valid_dataset: Dataset,
-    checkpoint_filepath: str, checkpoint_dirpath: str, checkpoint_name: str, keep_number: int, reset_optimizer: bool, reset_period: bool, fine_tune: bool,
+    checkpoint_filepath: str, checkpoint_name: str, keep_number: int, reset_optimizer: bool, reset_period: bool, fine_tune: bool,
     life_cycle:int, train_period: int, valid_period: int, report_period: int, record_unit: Literal['Epoch', 'Step'],
     train_batch_size: int, valid_batch_size: int, learning_rate: float, weight_decay: float,
     seed: int, device: Literal['CPU', 'GPU'], world_size: int, master_rank: int, is_distribution: bool,
@@ -133,28 +142,28 @@ def exact_train(
     fix_random_procedure(seed)
     device_descriptor = get_device_descriptor(device, rank)
 
+    model.to(device_descriptor)
+    logger.info(f'  Model Moved to Device \'{device_descriptor}\'')
+
     if is_master:
         logger.disabled = False
     else:
         logger.disabled = True
 
-    model.to(device_descriptor)
-    logger.info(f'  Model Moved to Device \'{device_descriptor}\'')
-
     if is_distribution:
         distributed.init_process_group('nccl', rank=rank, world_size=world_size)
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank], find_unused_parameters=True)
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank], find_unused_parameters=False)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     criterion = torch.nn.MSELoss()
 
     if is_distribution:
         train_sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=rank, shuffle=True, seed=seed, drop_last=False)
-        train_dataloader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=True, sampler=train_sampler)
+        valid_sampler = DistributedSampler(valid_dataset, num_replicas=world_size, rank=rank, shuffle=False, seed=seed, drop_last=False)
+        train_dataloader = DataLoader(train_dataset, batch_size=train_batch_size, sampler=train_sampler)
+        valid_dataloader = DataLoader(valid_dataset, batch_size=valid_batch_size, sampler=valid_sampler)
     else:
         train_dataloader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=True)
-
-    if rank == master_rank:
         valid_dataloader = DataLoader(valid_dataset, batch_size=valid_batch_size, shuffle=False)
 
     if checkpoint_filepath:
@@ -164,6 +173,7 @@ def exact_train(
 
     if checkpoint is None:
         logger.info(f'  Train from scratch.')
+        start_position = 0
     else:
         logger.info(f'  Train from checkpoint [\'{checkpoint_filepath}\'] at [{checkpoint[record_unit]}] {record_unit}.')
 
@@ -210,11 +220,11 @@ def exact_train(
                 average_digit_names = ['Cluster-loss']
 
             period_operation(
-                mode,
+                checkpoint_dirpath, mode,
                 is_master, world_size,
                 epoch, step, train_period, valid_period, report_period, start_position,
                 record_unit, 'Step',
-                model, optimizer, checkpoint_dirpath, checkpoint_name, keep_number,
+                model, optimizer, checkpoint_name, keep_number,
                 valid_dataloader,
                 average_digits, average_digit_names,
                 device_descriptor,
@@ -224,11 +234,11 @@ def exact_train(
         toc = time.time()
         logger.info(f'  Epoch@{epoch+start_position} Finished. Time Cost = {toc-tic:.2f}s')
         period_operation(
-            mode,
+            checkpoint_dirpath, mode,
             is_master, world_size,
             epoch, step, train_period, valid_period, report_period, start_position,
             record_unit, 'Epoch',
-            model, optimizer, checkpoint_dirpath, checkpoint_name, keep_number,
+            model, optimizer, checkpoint_name, keep_number,
             valid_dataloader,
             average_digits, average_digit_names,
             device_descriptor,
@@ -241,6 +251,7 @@ def exact_train(
 
 def train(
     dataset_dirpath: pathlib.Path,
+    checkpoint_dirpath: pathlib.Path,
     mode: Literal['Supervised', 'Unsupervised'] = 'Unsupervised',
     x_feature_get_type: Literal['OnlyOp'] = 'OnlyOp',
     y_feature_get_type: Literal['OnlyMt'] = 'OnlyMt',
@@ -252,7 +263,6 @@ def train(
     cluster_num: int | None = None,
 
     checkpoint_filepath: str | None = None,
-    checkpoint_dirpath: str = 'checkpoints',
     checkpoint_name: str = 'checkpoint',
     keep_number: int = 50,
     reset_optimizer: bool = True,
@@ -295,20 +305,21 @@ def train(
     logger.info(f'  Mode: {mode}')
     logger.info(f'  v Building Younger Datasets ...')
 
+    fix_random_procedure(seed)
     if mode == 'Supervised':
-        train_dataset = YoungerDataset(dataset_dirpath, mode=mode, split='Train', x_feature_get_type=x_feature_get_type, y_feature_get_type=y_feature_get_type)
-        valid_dataset = YoungerDataset(dataset_dirpath, mode=mode, split='Valid', x_feature_get_type=x_feature_get_type, y_feature_get_type=y_feature_get_type)
+        train_dataset = YoungerDataset(str(dataset_dirpath), mode=mode, split='Train', x_feature_get_type=x_feature_get_type, y_feature_get_type=y_feature_get_type)
+        valid_dataset = YoungerDataset(str(dataset_dirpath).absolute(), mode=mode, split='Valid', x_feature_get_type=x_feature_get_type, y_feature_get_type=y_feature_get_type)
 
     if mode == 'Unsupervised':
-        dataset = YoungerDataset(dataset_dirpath, mode=mode, x_feature_get_type=x_feature_get_type, y_feature_get_type=y_feature_get_type)
+        random_generator = numpy.random.default_rng(seed=seed)
+        dataset = YoungerDataset(str(dataset_dirpath), mode=mode, x_feature_get_type=x_feature_get_type, y_feature_get_type=y_feature_get_type)
         dataset_size = len(dataset)
 
-        random_generator = numpy.random.default_rng(seed=seed)
         random_index = list(random_generator.permutation(dataset_size))
         dataset = dataset[random_index]
 
-        train_dataset = dataset[                    : dataset_size // 12 ]
-        valid_dataset = dataset[ dataset_size // 12 :                    ]
+        train_dataset = dataset[ dataset_size // 12 :                    ]
+        valid_dataset = dataset[                    : dataset_size // 12 ]
 
     node_dict = train_dataset.node_dict
     metric_dict = train_dataset.metric_dict
@@ -351,15 +362,16 @@ def train(
         f'\n  ^ Built.'
     )
 
+    create_dir(checkpoint_dirpath)
     if is_distribution:
         os.environ['MASTER_ADDR'] = master_addr
         os.environ['MASTER_PORT'] = master_port
         torch.multiprocessing.spawn(
             exact_train,
             args=(
-                mode,
+                checkpoint_dirpath, mode,
                 model, train_dataset, valid_dataset,
-                checkpoint_filepath, checkpoint_dirpath, checkpoint_name, keep_number, reset_optimizer, reset_period, fine_tune,
+                checkpoint_filepath, checkpoint_name, keep_number, reset_optimizer, reset_period, fine_tune,
                 life_cycle, train_period, valid_period, report_period, record_unit,
                 train_batch_size, valid_batch_size, learning_rate, weight_decay,
                 seed, device, world_size, master_rank, is_distribution,
@@ -369,9 +381,9 @@ def train(
         )
     else:
         exact_train(0,
-            mode,
+            checkpoint_dirpath, mode,
             model, train_dataset, valid_dataset,
-            checkpoint_filepath, checkpoint_dirpath, checkpoint_name, keep_number, reset_optimizer, reset_period, fine_tune,
+            checkpoint_filepath, checkpoint_name, keep_number, reset_optimizer, reset_period, fine_tune,
             life_cycle, train_period, valid_period, report_period, record_unit,
             train_batch_size, valid_batch_size, learning_rate, weight_decay,
             seed, device, world_size, master_rank, is_distribution,
@@ -401,7 +413,7 @@ def test(
     logger.info(f'Using Device: {device};')
 
     logger.info(f'  v Building Younger Datasets (Supervised)...')
-    test_dataset = YoungerDataset(dataset_dirpath, mode='Supervised', split='Test', x_feature_get_type=x_feature_get_type, y_feature_get_type=y_feature_get_type)
+    test_dataset = YoungerDataset(str(dataset_dirpath), mode='Supervised', split='Test', x_feature_get_type=x_feature_get_type, y_feature_get_type=y_feature_get_type)
     node_dict = test_dataset.node_dict
     metric_dict = test_dataset.metric_dict
     logger.info(f'    -> Node Dict Size: {len(node_dict)}')

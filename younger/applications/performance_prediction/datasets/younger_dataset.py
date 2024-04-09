@@ -75,7 +75,6 @@ class YoungerDataset(Dataset):
 
         super().__init__(root, transform, pre_transform, pre_filter, log, force_reload)
 
-    
     @property
     def node_dict(self) -> dict[str, int]:
         return self._node_dict

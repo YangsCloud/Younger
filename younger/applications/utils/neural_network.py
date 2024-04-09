@@ -108,15 +108,16 @@ def save_checkpoint(checkpoint, checkpoint_path: pathlib.Path, checkpoint_name: 
         assert len(checkpoint_name) != 0, f'Invalid checkpoint name.'
         position = checkpoint[record_unit]
         checkpoint_filename = f'{checkpoint_name}_{record_unit}_{position}.cp'
-        checkpoint_path = checkpoint_path.joinpath(checkpoint_filename)
-        torch.save(checkpoint, checkpoint_path)
+        checkpoint_filepath = checkpoint_path.joinpath(checkpoint_filename)
+        torch.save(checkpoint, checkpoint_filepath)
 
         checkpoints = find_all_checkpoints(checkpoint_path, checkpoint_name, record_unit=record_unit)
         positions = sorted(list(checkpoints.keys()), reverse=True)
         for position in positions[keep_number:]:
             remove_checkpoint(checkpoints[position])
     else:
-        torch.save(checkpoint, checkpoint_path)
+        checkpoint_filepath = checkpoint_path
+        torch.save(checkpoint, checkpoint_filepath)
 
 
 def remove_checkpoint(checkpoint_path: pathlib.Path):

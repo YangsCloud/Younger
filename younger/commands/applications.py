@@ -34,11 +34,14 @@ def performance_prediction_run(arguments):
 
 def performance_prediction_train_run(arguments):
     update_logger(arguments)
+    dataset_dirpath = pathlib.Path(arguments.dataset_dirpath)
+    checkpoint_dirpath = pathlib.Path(arguments.checkpoint_dirpath)
 
     from younger.applications.performance_prediction.run import train
 
     train(
-        arguments.dataset_dirpath,
+        dataset_dirpath,
+        checkpoint_dirpath,
         arguments.mode,
         arguments.x_feature_get_type,
         arguments.y_feature_get_type,
@@ -50,7 +53,6 @@ def performance_prediction_train_run(arguments):
         arguments.cluster_num,
 
         arguments.checkpoint_filepath,
-        arguments.checkpoint_dirpath,
         arguments.checkpoint_name,
         arguments.keep_number,
         arguments.reset_optimizer,
@@ -107,6 +109,7 @@ def set_applications_performance_perdiction_arguments(parser: argparse.ArgumentP
 
     train_parser = subparser.add_parser('train')
     train_parser.add_argument('--dataset-dirpath', type=str, default='./YoungerDataset')
+    train_parser.add_argument('--checkpoint-dirpath', type=str, default='./checkpoints')
     train_parser.add_argument('--mode', type=str, choices=['Supervised', 'Unsupervised'], default='Unsupervised')
     train_parser.add_argument('--x-feature-get-type', type=str, choices=['OnlyOp'], default='OnlyOp')
     train_parser.add_argument('--y-feature-get-type', type=str, choices=['OnlyMt'], default='OnlyMt')
@@ -118,7 +121,6 @@ def set_applications_performance_perdiction_arguments(parser: argparse.ArgumentP
     train_parser.add_argument('--cluster-num', type=int, default=16)
 
     train_parser.add_argument('--checkpoint-filepath', type=str, default=None)
-    train_parser.add_argument('--checkpoint-dirpath', type=str, default='./checkpoints')
     train_parser.add_argument('--checkpoint-name', type=str, default='checkpoint')
     train_parser.add_argument('--keep-number', type=int, default=50)
     train_parser.add_argument('--reset-optimizer', action='store_true')
