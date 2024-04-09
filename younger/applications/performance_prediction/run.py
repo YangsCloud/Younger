@@ -42,12 +42,13 @@ def get_logging_metrics_str(metric_names: list[str], metric_values: list[str]) -
 
 
 def period_operation(
+    mode: Literal['Supervised', 'Unsupervised'],
     is_master: bool, world_size: int,
     epoch: int, step: int, train_period: int, valid_period: int, report_period: int, start_position: int,
     record_unit: Literal['Epoch', 'Step'], current_unit: Literal['Epoch', 'Step'],
     model: torch.nn.Module, optimizer: torch.optim.Optimizer, checkpoint_dirpath: str, checkpoint_name: str, keep_number: int,
     valid_dataloader: DataLoader,
-    losses: torch.Tensor, loss_names: list[str],
+    digits: torch.Tensor, digit_names: list[str],
     device_descriptor: torch.device,
     is_distribution
 ):
@@ -73,44 +74,55 @@ def period_operation(
     if position % valid_period == 0:
         distributed.barrier()
         if is_master:
-            exact_check(device_descriptor, model, valid_dataloader, 'Valid')
+            exact_check(device_descriptor, model, valid_dataloader, 'Valid', mode)
         distributed.barrier()
 
     if position % report_period == 0:
         if is_distribution:
             distributed.all_reduce(losses, op = distributed.ReduceOp.SUM)
             losses = losses / world_size
-        metric_names = ['Total-Loss', 'Regression-Loss (MSE)', 'Cluster-loss']
-        metric_values = [f'{float(loss):.4f}' for loss in losses]
-        logger.info(f'  {record_unit}@{position} - {get_logging_metrics_str(metric_names, metric_values)}')
+        digits = [f'{float(digit):.4f}' for digit in digits]
+        logger.info(f'  {record_unit}@{position} - {get_logging_metrics_str(digit_names, digits)}')
 
 
-def exact_check(device_descriptor: torch.device, model: torch.nn.Module, dataloader: DataLoader, split: Literal['Valid', 'Test']):
+def exact_check(device_descriptor: torch.device, model: torch.nn.Module, dataloader: DataLoader, split: Literal['Valid', 'Test'], mode: Literal['Supervised', 'Unsupervised']):
     model.eval()
     logger.info(f'  v {split} Begin ...')
     overall_loss = 0
     overall_main_loss = 0
     overall_gnn_pooling_loss = 0
-    metric_names = ['Total-Loss', 'Regression-Loss (MSE)', 'Cluster-loss']
     tic = time.time()
+    if mode == 'Supervised':
+        digit_names = ['Total-Loss', 'Regression-Loss (MSE)', 'Cluster-loss']
+    else:
+        digit_names = ['Cluster-loss']
     with torch.no_grad():
         for index, data in enumerate(dataloader, start=1):
             data: Data = data.to(device_descriptor)
-            output, gnn_pooling_loss = model(data.x, data.edge_index, data.y[:, 0], data.batch)
-            main_loss = torch.nn.functional.mse_loss(output, data.y[:, 1])
-            loss = main_loss + gnn_pooling_loss
-            metric_values = [f'{float(loss):.4f}', f'{float(main_loss):.4f}', f'{float(gnn_pooling_loss):.4f}']
-            logger.info(f'  Process No.{index} - {get_logging_metrics_str(metric_names, metric_values)}')
-            overall_loss += loss
-            overall_main_loss += main_loss
-            overall_gnn_pooling_loss += gnn_pooling_loss
+            if mode == 'Supervised':
+                output, gnn_pooling_loss = model(data.x, data.edge_index, data.batch, data.y[:, 0])
+                main_loss = torch.nn.functional.mse_loss(output, data.y[:, 1])
+                loss = main_loss + gnn_pooling_loss
+                digits = [f'{float(loss):.4f}', f'{float(main_loss):.4f}', f'{float(gnn_pooling_loss):.4f}']
+                overall_loss += loss
+                overall_main_loss += main_loss
+                overall_gnn_pooling_loss += gnn_pooling_loss
+            else:
+                gnn_pooling_loss = model(data.x, data.edge_index, data.batch)
+                digits = [f'{float(gnn_pooling_loss):.4f}']
+                overall_gnn_pooling_loss += gnn_pooling_loss
+            logger.info(f'  Process No.{index} - {get_logging_metrics_str(digit_names, digits)}')
     toc = time.time()
-    metric_values = [f'{float(overall_loss/index):.4f}', f'{float(overall_main_loss/index):.4f}', f'{float(overall_gnn_pooling_loss/index):.4f}']
-    logger.info(f'  ^  {split} Finished. Overall Result - {get_logging_metrics_str(metric_names, metric_values)} (Time Cost = {toc-tic:.2f}s)')
+    if mode == 'Supervised':
+        digits = [f'{float(overall_loss/index):.4f}', f'{float(overall_main_loss/index):.4f}', f'{float(overall_gnn_pooling_loss/index):.4f}']
+    else:
+        digits = [f'{float(overall_gnn_pooling_loss/index):.4f}']
+    logger.info(f'  ^  {split} Finished. Overall Result - {get_logging_metrics_str(digit_names, digits)} (Time Cost = {toc-tic:.2f}s)')
 
 
 def exact_train(
     rank: int,
+    mode: Literal['Supervised', 'Unsupervised'],
     model: torch.nn.Module, train_dataset: Dataset, valid_dataset: Dataset,
     checkpoint_filepath: str, checkpoint_dirpath: str, checkpoint_name: str, keep_number: int, reset_optimizer: bool, reset_period: bool, fine_tune: bool,
     life_cycle:int, train_period: int, valid_period: int, report_period: int, record_unit: Literal['Epoch', 'Step'],
@@ -179,22 +191,29 @@ def exact_train(
         for step, data in enumerate(train_dataloader, start=1):
             data: Data = data.to(device_descriptor)
             optimizer.zero_grad()
-            output, gnn_pooling_loss = model(data.x, data.edge_index, data.y[:, 0], data.batch)
-            main_loss = criterion(output, data.y[:, 1])
-            loss = main_loss + gnn_pooling_loss
-            loss.backward()
-            optimizer.step()
-
-            average_losses = torch.tensor([float(loss), float(main_loss), float(gnn_pooling_loss)]).to(device_descriptor)
-            average_loss_names = ['Total-Loss', 'Regression-Loss (MSE)', 'Cluster-loss']
+            if mode == 'Supervised':
+                output, gnn_pooling_loss = model(data.x, data.edge_index, data.batch, data.y[:, 0])
+                main_loss = criterion(output, data.y[:, 1])
+                loss = main_loss + gnn_pooling_loss
+                loss.backward()
+                optimizer.step()
+                average_digits = torch.tensor([float(loss), float(main_loss), float(gnn_pooling_loss)]).to(device_descriptor)
+                average_digit_names = ['Total-Loss', 'Regression-Loss (MSE)', 'Cluster-loss']
+            else:
+                gnn_pooling_loss = model(data.x, data.edge_index, data.batch)
+                gnn_pooling_loss.backward()
+                optimizer.step()
+                average_digits = torch.tensor([float(gnn_pooling_loss)]).to(device_descriptor)
+                average_digit_names = ['Cluster-loss']
 
             period_operation(
-                rank, master_rank, world_size,
+                mode,
+                is_master, world_size,
                 epoch, step, train_period, valid_period, report_period, start_position,
                 record_unit, 'Step',
                 model, optimizer, checkpoint_dirpath, checkpoint_name, keep_number,
                 valid_dataloader,
-                average_losses, average_loss_names,
+                average_digits, average_digit_names,
                 device_descriptor,
                 is_distribution
             )
@@ -202,11 +221,14 @@ def exact_train(
         toc = time.time()
         logger.info(f'  Epoch@{epoch+start_position} Finished. Time Cost = {toc-tic:.2f}s')
         period_operation(
+            mode,
             is_master, world_size,
             epoch, step, train_period, valid_period, report_period, start_position,
             record_unit, 'Epoch',
             model, optimizer, checkpoint_dirpath, checkpoint_name, keep_number,
-            average_losses, average_loss_names,
+            valid_dataloader,
+            average_digits, average_digit_names,
+            device_descriptor,
             is_distribution
         )
     
@@ -332,6 +354,7 @@ def train(
         torch.multiprocessing.spawn(
             exact_train,
             args=(
+                mode,
                 model, train_dataset, valid_dataset,
                 checkpoint_filepath, checkpoint_dirpath, checkpoint_name, keep_number, reset_optimizer, reset_period, fine_tune,
                 life_cycle, train_period, valid_period, report_period, record_unit,
@@ -343,6 +366,7 @@ def train(
         )
     else:
         exact_train(0,
+            mode,
             model, train_dataset, valid_dataset,
             checkpoint_filepath, checkpoint_dirpath, checkpoint_name, keep_number, reset_optimizer, reset_period, fine_tune,
             life_cycle, train_period, valid_period, report_period, record_unit,

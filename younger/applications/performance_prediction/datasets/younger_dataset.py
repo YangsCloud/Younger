@@ -22,6 +22,7 @@ from younger.commons.io import load_json, tar_extract
 
 from younger.datasets.modules import Instance
 from younger.datasets.utils.constants import YoungerDatasetAddress, YoungerDatasetNodeType
+from younger.datasets.utils.metric_cleaner import clean_metric
 
 
 class YoungerDataset(Dataset):
@@ -52,6 +53,10 @@ class YoungerDataset(Dataset):
         self.onnx_operators_filename = 'onnx_operators.json'
         self.metrics_filename = 'metrics.json'
         self.indicator_filename = 'indicator.json'
+        self.raw_file_names_by_mode = dict(
+            Supervised = [self.onnx_operators_filename, self.metrics_filename, self.split_name+'.tar.gz'],
+            Unsupervised = [self.onnx_operators_filename, self.split_name+'.tar.gz']
+        )
     
     @property
     def node_dict(self) -> dict[str, int]:
@@ -73,7 +78,7 @@ class YoungerDataset(Dataset):
 
     @property
     def raw_file_names(self):
-        return [self.onnx_operators_filename, self.metrics_filename, self.split_name+'.tar.gz']
+        return self.raw_file_names_by_mode[self.mode]
 
     @property
     def processed_file_names(self):
@@ -112,8 +117,9 @@ class YoungerDataset(Dataset):
         onnx_operators_filepath = osp.join(self.raw_dir, self.onnx_operators_filename)
         self._node_dict = self.__class__.load_node_dict(onnx_operators_filepath)
 
-        metrics_filepath = osp.join(self.raw_dir, self.metrics_filename)
-        self._metric_dict = self.__class__.load_metric_dict(metrics_filepath)
+        if self.mode == 'Supervised':
+            metrics_filepath = osp.join(self.raw_dir, self.metrics_filename)
+            self._metric_dict = self.__class__.load_metric_dict(metrics_filepath)
 
         raw_instances_dirpath = pathlib.Path(osp.join(self.raw_dir, self.split_name, self.instances_dirname))
         for index, raw_instance_dirpath in enumerate(raw_instances_dirpath.iterdir()):
@@ -123,8 +129,11 @@ class YoungerDataset(Dataset):
 
                 x = self.__class__.get_x(instance, self.node_dict, self.x_feature_get_type)
                 edge_index = self.__class__.get_edge_index(instance)
-                y = self.__class__.get_y(instance, self.metric_dict, self.y_feature_get_type, self.mode)
-                data = Data(x=x, edge_index=edge_index, y=y)
+                if self.mode == 'Supervised':
+                    y = self.__class__.get_y(instance, self.metric_dict, self.y_feature_get_type)
+                    data = Data(x=x, edge_index=edge_index, y=y)
+                else:
+                    data = Data(x=x, edge_index=edge_index)
 
                 if self.pre_filter is not None and not self.pre_filter(data):
                     continue
@@ -143,7 +152,13 @@ class YoungerDataset(Dataset):
     @classmethod
     def load_node_dict(cls, node_dict_filepath: str) -> dict[str, int]:
         onnx_operators: list[str] = load_json(node_dict_filepath)
-        node_types = [f'__{node_type}__' for node_type in YoungerDatasetNodeType.attributes] + onnx_operators
+        node_types = [
+            YoungerDatasetNodeType.UNK,
+            YoungerDatasetNodeType.OUTER,
+            YoungerDatasetNodeType.INPUT,
+            YoungerDatasetNodeType.OUTPUT,
+            YoungerDatasetNodeType.CONSTANT
+        ] + onnx_operators
         return {node_type: index for index, node_type in enumerate(node_types)}
 
     @classmethod
@@ -157,9 +172,9 @@ class YoungerDataset(Dataset):
         node_feature = list()
         if x_feature_get_type == 'OnlyOp':
             if node_type == 'operator':
-                node_feature.append(node_dict[node_labels['operator']['op_type']])
+                node_feature.append(node_dict.get(node_labels['operator']['op_type'], node_dict[YoungerDatasetNodeType.UNK]))
             else:
-                node_feature.append(node_dict[f'__{node_type.upper()}__'])
+                node_feature.append(node_dict[getattr(YoungerDatasetNodeType, node_type.upper())])
         return node_feature
 
     @classmethod
@@ -183,18 +198,14 @@ class YoungerDataset(Dataset):
     def get_graph_feature(cls, graph_labels: dict, metric_dict: dict[str, int], y_feature_get_type: Literal['OnlyMt']) -> list:
         task_name = graph_labels['task_name']
         dataset_name = graph_labels['dataset_name']
-        metric_name = graph_labels['metric_name']
-        metric_value = graph_labels['metric_value']
+        metrics: list[dict] = graph_labels['metrics']
 
         if y_feature_get_type == 'OnlyMt':
-            graph_feature = [metric_dict[metric_name], metric_value]
+            graph_feature = [metric_dict[clean_metric(metrics[0]['metric_type'], metrics[0]['metric_name'])], float(metrics['metric_value'])]
 
         return graph_feature
 
     @classmethod
-    def get_y(cls, instance: Instance, metric_dict: dict[str, int], y_feature_get_type: Literal['OnlyMt'], mode: Literal['Supervised', 'Unsupervised']) -> torch.Tensor | None:
-        if mode == 'Supervised':
-            graph_feature = cls.get_graph_feature(instance.labels, metric_dict, y_feature_get_type)
-            return torch.tensor(graph_feature)
-        if mode == 'Unsupervised':
-            return None
+    def get_y(cls, instance: Instance, metric_dict: dict[str, int], y_feature_get_type: Literal['OnlyMt']) -> torch.Tensor:
+        graph_feature = cls.get_graph_feature(instance.labels, metric_dict, y_feature_get_type)
+        return torch.tensor(graph_feature)

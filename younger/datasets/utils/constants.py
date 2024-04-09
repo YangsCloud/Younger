@@ -173,11 +173,12 @@ YoungerDatasetAddress.freeze()
 
 class YOUNGER_DATASET_NODE_TYPE(Constant):
     def initialize(self) -> None:
-        self.OUTER = 'outer'
-        self.INPUT = 'input'
-        self.OUTPUT = 'output'
-        self.CONSTANT = 'constant'
-        self.OPERATOR = 'operator'
+        self.UNK = '__UNK__'
+        self.OUTER = '__OUTER__'
+        self.INPUT = '__INPUT__'
+        self.OUTPUT = '__OUTPUT__'
+        self.CONSTANT = '__CONSTANT__'
+        self.OPERATOR = '__OPERATOR__'
 
 YoungerDatasetNodeType = YOUNGER_DATASET_NODE_TYPE()
 YoungerDatasetNodeType.initialize()
