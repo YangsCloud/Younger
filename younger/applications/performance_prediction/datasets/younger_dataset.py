@@ -16,6 +16,7 @@ import pathlib
 import os.path as osp
 
 from typing import Callable, Literal, Any
+from torch_geometric.io import fs
 from torch_geometric.data import Data, Dataset, download_url
 
 from younger.commons.io import load_json, tar_extract
@@ -25,10 +26,17 @@ from younger.datasets.utils.constants import YoungerDatasetAddress, YoungerDatas
 from younger.datasets.utils.metric_cleaner import clean_metric
 
 
+def download_aux_file(aux_filepath, url, folder):
+    if osp.exists(aux_filepath):
+        return aux_filepath
+    else:
+        return download_url(url, folder)
+
+
 class YoungerDataset(Dataset):
     def __init__(
         self,
-        root: str | None = None,
+        root: str,
         transform: Callable | None = None,
         pre_transform: Callable | None = None,
         pre_filter: Callable | None = None,
@@ -42,7 +50,7 @@ class YoungerDataset(Dataset):
         assert mode in {'Supervised', 'Unsupervised'}, f'Dataset Mode Not Support - {mode}!'
         assert split in {'Train', 'Valid', 'Test'}, f'Dataset Split Not Support - {split}!'
 
-        super().__init__(root, transform, pre_transform, pre_filter, log, force_reload)
+        self.root = osp.expanduser(fs.normpath(root))
 
         self.mode = mode
         self.split = split
@@ -50,13 +58,23 @@ class YoungerDataset(Dataset):
         self.y_feature_get_type = y_feature_get_type
 
         self.split_name = f'{self.mode}{f"_{self.split}" if self.mode == "Supervised" else ""}'
+
+        self.indicators_filename = 'indicators.json'
         self.onnx_operators_filename = 'onnx_operators.json'
         self.metrics_filename = 'metrics.json'
-        self.indicator_filename = 'indicator.json'
-        self.raw_file_names_by_mode = dict(
-            Supervised = [self.onnx_operators_filename, self.metrics_filename, self.split_name+'.tar.gz'],
-            Unsupervised = [self.onnx_operators_filename, self.split_name+'.tar.gz']
-        )
+
+        indicators_filepath = download_aux_file(osp.join(self.root, self.indicators_filename), YoungerDatasetAddress.INDICATORS, self.root)
+        self.indicators: dict[str, Any] = load_json(indicators_filepath)
+
+        onnx_operators_filepath = download_aux_file(osp.join(self.root, self.onnx_operators_filename), YoungerDatasetAddress.ONNX_OPERATORS, self.root)
+        self._node_dict = self.__class__.load_node_dict(onnx_operators_filepath)
+
+        if self.mode == 'Supervised':
+            metrics_filepath = download_aux_file(osp.join(self.root, self.metrics_filename), YoungerDatasetAddress.METRICS, self.root)
+            self._metric_dict = self.__class__.load_metric_dict(metrics_filepath)
+
+        super().__init__(root, transform, pre_transform, pre_filter, log, force_reload)
+
     
     @property
     def node_dict(self) -> dict[str, int]:
@@ -78,50 +96,35 @@ class YoungerDataset(Dataset):
 
     @property
     def raw_file_names(self):
-        return self.raw_file_names_by_mode[self.mode]
+        return [self.split_name+'.tar.gz']
 
     @property
     def processed_file_names(self):
-        return [osp.join(self.split_name, self.instances_dirname, f'data_{i}.pt') for i in range(self.total_instances)]
+        return [osp.join(self.split_name, f'data_{i}.pt') for i in range(self.indicators[self.split_name]['instances_number'])]
 
     def download(self):
-        # {self.raw_dir}/{xxx}
-        download_url(YoungerDatasetAddress.ONNX_OPERATORS, self.raw_dir)
-        download_url(YoungerDatasetAddress.METRICS, self.raw_dir)
-
-        # {self.raw_dir}/{xxx}
-        main_url = getattr(YoungerDatasetAddress, f'{self.mode.upper()}_{self.split.upper()}')
+        # {self.raw_dir}/
+        main_url = getattr(YoungerDatasetAddress, f'{self.split_name.upper()}')
+        # {self.raw_dir}/{self.split_name}.tar.gz
         raw_dataset_tar_path = download_url(main_url, self.raw_dir)
-        # {self.raw_dir}/{self.split_name}/{xxx}
+        # {self.raw_dir}/{self.split_name}/
         tar_extract(raw_dataset_tar_path, self.raw_dir)
 
-        indicator_filepath = osp.join(self.raw_dir, self.split_name, self.indicator_filename)
-        assert osp.exists(indicator_filepath)
-        indicator: dict[str, Any] = load_json(indicator_filepath)
-
-        # {self.raw_dir}/{self.split_name}/{xxx}
+        # {self.raw_dir}/{self.split_name}/
         split_dirpath = osp.join(self.raw_dir, self.split_name)
-        for tar_filename in indicator['tar_filenames']:
+        # {self.raw_dir}/{self.split_name}/{tar_filename}
+        for tar_filename in self.indicators[self.split_name]['tar_filenames']:
             # {self.raw_dir}/{self.split_name}/{instances_dirname}
             tar_extract(osp.join(split_dirpath, tar_filename+'.tar.gz'), split_dirpath)
         total_instances = 0
-        self.instances_dirname = indicator['instances_dirname']
-        instances_dirpath = pathlib.Path(osp.join(split_dirpath, self.instances_dirname))
+        instances_dirpath = pathlib.Path(osp.join(split_dirpath, self.indicators[self.split_name]['instances_dirname']))
         for path in instances_dirpath.iterdir():
                 if path.is_dir():
                     total_instances += 1
-        assert total_instances == indicator['instances_number']
-        self.total_instances = indicator['instances_number']
+        assert total_instances == self.indicators[self.split_name]['instances_number']
 
     def process(self):
-        onnx_operators_filepath = osp.join(self.raw_dir, self.onnx_operators_filename)
-        self._node_dict = self.__class__.load_node_dict(onnx_operators_filepath)
-
-        if self.mode == 'Supervised':
-            metrics_filepath = osp.join(self.raw_dir, self.metrics_filename)
-            self._metric_dict = self.__class__.load_metric_dict(metrics_filepath)
-
-        raw_instances_dirpath = pathlib.Path(osp.join(self.raw_dir, self.split_name, self.instances_dirname))
+        raw_instances_dirpath = pathlib.Path(osp.join(self.raw_dir, self.split_name, self.indicators[self.split_name]['instances_number']))
         for index, raw_instance_dirpath in enumerate(raw_instances_dirpath.iterdir()):
             if raw_instance_dirpath.is_dir():
                 instance = Instance()
@@ -141,13 +144,13 @@ class YoungerDataset(Dataset):
                 if self.pre_transform is not None:
                     data = self.pre_transform(data)
 
-                torch.save(data, osp.join(self.processed_dir, self.split_name, self.instances_dirname, f'data_{index}.pt'))
+                torch.save(data, osp.join(self.processed_dir, self.split_name, f'data_{index}.pt'))
 
     def len(self) -> int:
         return len(self.processed_file_names)
 
     def get(self, index: int):
-        return torch.load(osp.join(self.processed_dir, self.split_name, self.instances_dirname, f'data_{index}.pt'))
+        return torch.load(osp.join(self.processed_dir, self.split_name, f'data_{index}.pt'))
     
     @classmethod
     def load_node_dict(cls, node_dict_filepath: str) -> dict[str, int]:

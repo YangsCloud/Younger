@@ -159,6 +159,7 @@ YoungerAPI.freeze()
 
 class YOUNGER_DATASET_ADDRESS(Constant):
     def initialize(self) -> None:
+        self.INDICATORS = 'https://datasets.yangs.cloud/Younger/indicators.json'
         self.ONNX_OPERATORS = 'https://datasets.yangs.cloud/Younger/onnx_operators.json'
         self.METRICS = 'https://datasets.yangs.cloud/Younger/metrics.json'
         self.SUPERVISED_TRAIN = 'https://datasets.yangs.cloud/Younger/Supervised_Train.tar.gz'
