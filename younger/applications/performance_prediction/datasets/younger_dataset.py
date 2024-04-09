@@ -70,9 +70,8 @@ class YoungerDataset(Dataset):
         onnx_operators_filepath = download_aux_file(osp.join(self.root, self.onnx_operators_filename), YoungerDatasetAddress.ONNX_OPERATORS, self.root)
         self._node_dict = self.__class__.load_node_dict(onnx_operators_filepath)
 
-        if self.mode == 'Supervised':
-            metrics_filepath = download_aux_file(osp.join(self.root, self.metrics_filename), YoungerDatasetAddress.METRICS, self.root)
-            self._metric_dict = self.__class__.load_metric_dict(metrics_filepath)
+        metrics_filepath = download_aux_file(osp.join(self.root, self.metrics_filename), YoungerDatasetAddress.METRICS, self.root)
+        self._metric_dict = self.__class__.load_metric_dict(metrics_filepath)
 
         super().__init__(root, transform, pre_transform, pre_filter, log, force_reload)
 

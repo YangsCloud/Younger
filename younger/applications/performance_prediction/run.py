@@ -157,7 +157,10 @@ def exact_train(
     if rank == master_rank:
         valid_dataloader = DataLoader(valid_dataset, batch_size=valid_batch_size, shuffle=False)
 
-    checkpoint = load_checkpoint(pathlib.Path(checkpoint_filepath), checkpoint_name, record_unit=record_unit)
+    if checkpoint_filepath:
+        checkpoint = load_checkpoint(pathlib.Path(checkpoint_filepath), checkpoint_name, record_unit=record_unit)
+    else:
+        checkpoint = None
 
     if checkpoint is None:
         logger.info(f'  Train from scratch.')
