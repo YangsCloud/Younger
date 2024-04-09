@@ -40,10 +40,9 @@ class NAPPGNNBase(torch.nn.Module):
 
         self.activation_layer = resolver.activation_resolver('ELU')
 
-        self.node_embedding_layer = Embedding(len(node_dict), node_dim)
-        self.metric_embedding_layer = Embedding(len(metric_dict), metric_dim)
-
         # GNN Layers
+        self.node_embedding_layer = Embedding(len(node_dict), node_dim)
+
         self.gnn_head_mp_layer = GINConv(
             nn=MLP(
                 channel_list=[node_dim, hidden_dim, hidden_dim],
@@ -76,6 +75,7 @@ class NAPPGNNBase(torch.nn.Module):
         )
 
         # Metric Layers
+        self.metric_embedding_layer = Embedding(len(metric_dict), metric_dim)
         self.metric_layer = MLP(
             channel_list=[metric_dim, hidden_dim, hidden_dim],
             act='RELU',
