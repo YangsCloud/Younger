@@ -35,9 +35,9 @@ def performance_prediction_run(arguments):
 def performance_prediction_train_run(arguments):
     update_logger(arguments)
 
-    from younger.applications.performance_prediction import run
+    from younger.applications.performance_prediction.run import train
 
-    run.train(
+    train(
         arguments.dataset_dirpath,
         arguments.mode,
         arguments.x_feature_get_type,
@@ -81,9 +81,9 @@ def performance_prediction_train_run(arguments):
 def performance_prediction_test_run(arguments):
     update_logger(arguments)
 
-    from younger.applications.performance_prediction import run
+    from younger.applications.performance_prediction.run import test
 
-    run.test(
+    test(
         arguments.dataset_dirpath,
         arguments.mode,
         arguments.x_feature_get_type,
@@ -115,7 +115,7 @@ def set_applications_performance_perdiction_arguments(parser: argparse.ArgumentP
     train_parser.add_argument('--metric-dim', type=int, default=512)
     train_parser.add_argument('--hidden-dim', type=int, default=512)
     train_parser.add_argument('--readout-dim', type=int, default=256)
-    train_parser.add_argument('--cluster-dim', type=int, default=16)
+    train_parser.add_argument('--cluster-num', type=int, default=16)
 
     train_parser.add_argument('--checkpoint-filepath', type=str, default=None)
     train_parser.add_argument('--checkpoint-dirpath', type=str, default='./checkpoints')
@@ -161,7 +161,7 @@ def set_applications_performance_perdiction_arguments(parser: argparse.ArgumentP
     test_parser.add_argument('--metric-dim', type=int, default=512)
     test_parser.add_argument('--hidden-dim', type=int, default=512)
     test_parser.add_argument('--readout-dim', type=int, default=256)
-    test_parser.add_argument('--cluster-dim', type=int, default=16)
+    test_parser.add_argument('--cluster-num', type=int, default=16)
 
     test_parser.add_argument('--device', type=str, choices=['CPU', 'GPU'], default='GPU')
 
