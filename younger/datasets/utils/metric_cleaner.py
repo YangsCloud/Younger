@@ -192,9 +192,14 @@ def parse_metric(metric: str) -> str | None:
     return parsed_result
 
 
+def format_metric_string(metric_string: str) -> str:
+    metric_string = metric_string.lower()
+    return metric_string
+
+
 def clean_metric(metric_type: str, metric_name: str | None = None, metric_class: str | None = None) -> str | None:
-    metric_type = metric_type.lower()
-    metric_name = metric_name.lower()
+    metric_type = format_metric_string(metric_type)
+    metric_name = format_metric_string(metric_name) if metric_name else None
     if metric_name is None:
         detailed_metric = metric_type
     else:
@@ -203,5 +208,4 @@ def clean_metric(metric_type: str, metric_name: str | None = None, metric_class:
         else:
             detailed_metric = metric_type
 
-    detailed_metric = metric_name
     return parse_metric(detailed_metric)
