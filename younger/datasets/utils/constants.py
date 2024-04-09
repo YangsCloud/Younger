@@ -10,6 +10,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import re
 import onnx
 
 from younger.commons.constants import Constant
@@ -107,6 +108,8 @@ ONNX = Constant()
 ONNX.OPSetVersions = sorted(set(schema.since_version for schema in onnx.defs.get_all_schemas_with_history()))
 
 
+# ^^^^^^^^^^^ Above Code Should Be Rewrite ^^^^^^^^^^^^^^
+
 class README_PATTERN(Constant):
     def initialize(self) -> None:
         self.TABLE = r'(\|?(?:[^\r\n\|]*\|)+(?:[^\r\n]*\|?))\r?\n(\|?(?:(?:\s*:?-+:?\s*)\|)+(?:(?:\s*:?-+:?\s*)\|?))\r?\n((?:\|?(?:(?:[^\r\n\|]*)\|)+(?:(?:(?:[^\r\n\|]*)\|?))\r?\n)+)'
@@ -117,6 +120,30 @@ class README_PATTERN(Constant):
 READMEPattern = README_PATTERN()
 READMEPattern.initialize()
 READMEPattern.freeze()
+
+
+class METRIC_PATTERN(Constant):
+    def initialize(self) -> None:
+        self.ACC = re.compile(r'acc', re.IGNORECASE)
+        self.F1 = re.compile(r'f1', re.IGNORECASE)
+        self.RECALL = re.compile(r'recall', re.IGNORECASE)
+        self.PRECISION = re.compile(r'precision', re.IGNORECASE)
+        self.BLEU = re.compile(r'bleu', re.IGNORECASE)
+        self.ROUGE = re.compile(r'rouge-?', re.IGNORECASE)
+        self.ROGUE = re.compile(r'rogue-?', re.IGNORECASE)
+        self.BERTSCORE = re.compile(r'bertscore', re.IGNORECASE)
+        self.WER = re.compile(r'wer', re.IGNORECASE)
+        self.CER = re.compile(r'cer', re.IGNORECASE)
+        self.MAP = re.compile(r'map', re.IGNORECASE)
+        self.MATCH = re.compile(r'match', re.IGNORECASE)
+
+        self.MACRO = re.compile(r'macro', re.IGNORECASE)
+        self.MICRO = re.compile(r'micro', re.IGNORECASE)
+        self.WEIGHTED = re.compile(r'weighted', re.IGNORECASE)
+
+MetricPattern = METRIC_PATTERN()
+MetricPattern.initialize()
+MetricPattern.freeze()
 
 
 class YOUNGER_API(Constant):
