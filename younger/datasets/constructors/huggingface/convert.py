@@ -17,25 +17,25 @@ from typing import Literal
 from optimum.exporters.onnx import main_export
 from huggingface_hub.utils._errors import RepositoryNotFoundError
 
+from younger.commons.io import load_json
 from younger.commons.logging import logger
 
 from younger.datasets.modules import Instance
 
 from younger.datasets.constructors.utils import convert_bytes, get_instance_dirname
-from younger.datasets.constructors.huggingface.utils import get_huggingface_model_infos, infer_model_size, clean_default_cache_repo, clean_specify_cache_repo
+from younger.datasets.constructors.huggingface.utils import infer_model_size, clean_default_cache_repo, clean_specify_cache_repo
 
 
-def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, library: str, device: Literal['cpu', 'cuda'] = 'cpu', threshold: int | None = None):
+def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_filepath: pathlib.Path, device: Literal['cpu', 'cuda'] = 'cpu', threshold: int | None = None):
     assert device in {'cpu', 'cuda'}
 
     huggingface_cache_dirpath = cache_dirpath.joinpath('HuggingFace')
     convert_cache_dirpath = cache_dirpath.joinpath('Convert')
 
-    model_infos = get_huggingface_model_infos(filter_list=[library], full=True, limit=1000, config=True)
+    model_ids = load_json(model_ids_filepath)
 
     logger.info(f'-> Instances Creating ...')
-    for index, model_info in enumerate(model_infos, start=1):
-        model_id = model_info['id']
+    for index, model_id in enumerate(model_ids, start=1):
         infered_model_size = infer_model_size(model_id)
         if threshold is None:
             pass

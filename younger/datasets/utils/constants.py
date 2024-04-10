@@ -10,6 +10,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import re
 import onnx
 
 from younger.commons.constants import Constant
@@ -107,6 +108,8 @@ ONNX = Constant()
 ONNX.OPSetVersions = sorted(set(schema.since_version for schema in onnx.defs.get_all_schemas_with_history()))
 
 
+# ^^^^^^^^^^^ Above Code Should Be Rewrite ^^^^^^^^^^^^^^
+
 class README_PATTERN(Constant):
     def initialize(self) -> None:
         self.TABLE = r'(\|?(?:[^\r\n\|]*\|)+(?:[^\r\n]*\|?))\r?\n(\|?(?:(?:\s*:?-+:?\s*)\|)+(?:(?:\s*:?-+:?\s*)\|?))\r?\n((?:\|?(?:(?:[^\r\n\|]*)\|)+(?:(?:(?:[^\r\n\|]*)\|?))\r?\n)+)'
@@ -117,6 +120,30 @@ class README_PATTERN(Constant):
 READMEPattern = README_PATTERN()
 READMEPattern.initialize()
 READMEPattern.freeze()
+
+
+class METRIC_PATTERN(Constant):
+    def initialize(self) -> None:
+        self.ACC = re.compile(r'acc', re.IGNORECASE)
+        self.F1 = re.compile(r'f1', re.IGNORECASE)
+        self.RECALL = re.compile(r'recall', re.IGNORECASE)
+        self.PRECISION = re.compile(r'precision', re.IGNORECASE)
+        self.BLEU = re.compile(r'bleu', re.IGNORECASE)
+        self.ROUGE = re.compile(r'rouge-?', re.IGNORECASE)
+        self.ROGUE = re.compile(r'rogue-?', re.IGNORECASE)
+        self.BERTSCORE = re.compile(r'bertscore', re.IGNORECASE)
+        self.WER = re.compile(r'wer', re.IGNORECASE)
+        self.CER = re.compile(r'cer', re.IGNORECASE)
+        self.MAP = re.compile(r'map', re.IGNORECASE)
+        self.MATCH = re.compile(r'match', re.IGNORECASE)
+
+        self.MACRO = re.compile(r'macro', re.IGNORECASE)
+        self.MICRO = re.compile(r'micro', re.IGNORECASE)
+        self.WEIGHTED = re.compile(r'weighted', re.IGNORECASE)
+
+MetricPattern = METRIC_PATTERN()
+MetricPattern.initialize()
+MetricPattern.freeze()
 
 
 class YOUNGER_API(Constant):
@@ -132,8 +159,13 @@ YoungerAPI.freeze()
 
 class YOUNGER_DATASET_ADDRESS(Constant):
     def initialize(self) -> None:
-        self.SUPERVISED = 'https://datasets.yangs.cloud/Supervised.tar.gz'
-        self.UNSUPERVISED = 'https://datasets.yangs.cloud/Unsupervised.tar.gz'
+        self.INDICATORS = 'https://datasets.yangs.cloud/Younger/indicators.json'
+        self.ONNX_OPERATORS = 'https://datasets.yangs.cloud/Younger/onnx_operators.json'
+        self.METRICS = 'https://datasets.yangs.cloud/Younger/metrics.json'
+        self.SUPERVISED_TRAIN = 'https://datasets.yangs.cloud/Younger/Supervised_Train.tar.gz'
+        self.SUPERVISED_VALID = 'https://datasets.yangs.cloud/Younger/Supervised_Valid.tar.gz'
+        self.SUPERVISED_TEST = 'https://datasets.yangs.cloud/Younger/Supervised_Test.tar.gz'
+        self.UNSUPERVISED = 'https://datasets.yangs.cloud/Younger/Unsupervised.tar.gz'
 
 YoungerDatasetAddress = YOUNGER_DATASET_ADDRESS()
 YoungerDatasetAddress.initialize()
@@ -142,11 +174,12 @@ YoungerDatasetAddress.freeze()
 
 class YOUNGER_DATASET_NODE_TYPE(Constant):
     def initialize(self) -> None:
-        self.OUTER = 'outer'
-        self.INPUT = 'input'
-        self.OUTPUT = 'output'
-        self.CONSTANT = 'constant'
-        self.OPERATOR = 'operator'
+        self.UNK = '__UNK__'
+        self.OUTER = '__OUTER__'
+        self.INPUT = '__INPUT__'
+        self.OUTPUT = '__OUTPUT__'
+        self.CONSTANT = '__CONSTANT__'
+        self.OPERATOR = '__OPERATOR__'
 
 YoungerDatasetNodeType = YOUNGER_DATASET_NODE_TYPE()
 YoungerDatasetNodeType.initialize()

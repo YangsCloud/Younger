@@ -10,13 +10,13 @@
 # LICENSE file in the root directory of this source tree.
 
 
-from math import ceil
-
 import torch
-import torch.nn.functional as F
-from torch.nn import Linear, Embedding
 
-from torch_geometric.nn import DenseGraphConv, DMoNPooling, GCNConv
+from typing import Literal
+
+from torch.nn import Embedding
+
+from torch_geometric.nn import resolver, MLP, DMoNPooling, GINConv, DenseGINConv, GraphConv, DenseGraphConv, GCNConv, DenseGCNConv, SAGEConv, DenseSAGEConv
 from torch_geometric.utils import to_dense_adj, to_dense_batch
 
 
@@ -29,44 +29,109 @@ class NAPPGNNBase(torch.nn.Module):
         node_dim: int = 512,
         metric_dim: int = 512,
         hidden_dim: int = 512,
+        readout_dim: int = 256,
+        cluster_num: int = 16,
+        mode: Literal['Supervised', 'Unsupervised'] = 'Unsupervised'
     ):
         super().__init__()
 
-        # GNN Layer
+        assert mode in {'Supervised', 'Unsupervised'}
+        self.mode = mode
+
+        self.activation_layer = resolver.activation_resolver('ELU')
+
+        # GNN Layers
         self.node_embedding_layer = Embedding(len(node_dict), node_dim)
 
-        self.conv1 = DenseGraphConv(node_dim, hidden_dim)
-        self.pool1 = DMoNPooling([hidden_dim, hidden_dim], 16)
+        self.gnn_head_mp_layer = GINConv(
+            nn=MLP(
+                channel_list=[node_dim, hidden_dim, hidden_dim],
+                act='ELU',
+            ),
+            eps=0,
+            train_eps=False
+        )
 
-        self.conv1 = DenseGraphConv(node_dim, hidden_dim)
-        self.pool1 = DMoNPooling([hidden_dim, hidden_dim], 8)
+        self.gnn_pooling_layer = DMoNPooling(hidden_dim, cluster_num)
 
-        self.lin1 = Linear(hidden_dim, hidden_dim)
-        self.lin2 = Linear(hidden_dim, hidden_dim)
+        if self.mode == 'Unsupervised':
+            return
 
-        # Fuse Layer
+        self.gnn_tail_mp_layer = DenseGINConv(
+            nn=MLP(
+                channel_list=[hidden_dim, hidden_dim, hidden_dim],
+                act='ELU',
+                norm=None,
+            ),
+            eps=0,
+            train_eps=False
+        )
+
+        self.gnn_readout_layer = MLP(
+            channel_list=[hidden_dim, hidden_dim, readout_dim],
+            act='ELU',
+            norm=None,
+            dropout=0.5
+        )
+
+        # Metric Layers
         self.metric_embedding_layer = Embedding(len(metric_dict), metric_dim)
+        self.metric_layer = MLP(
+            channel_list=[metric_dim, hidden_dim, hidden_dim],
+            act='RELU',
+        )
 
-        self.lin3 = Linear(metric_dim, hidden_dim)
-        self.fuse = Linear(hidden_dim + hidden_dim, hidden_dim)
-        self.output = Linear(hidden_dim, 1)
+        # Fuse Layers
+        self.fuse_layer = MLP(
+            channel_list=[readout_dim + hidden_dim, hidden_dim, hidden_dim],
+            act='ELU'
+        )
+        # Output Layer
+        self.output_layer = MLP(
+            channel_list=[hidden_dim, 1],
+            act=None,
+            norm=None,
+        )
 
-    def forward(self, x: torch.Tensor, edge_index: torch.Tensor, metric: torch.Tensor, batch: torch.Tensor):
+    def forward(self, x: torch.Tensor, edge_index: torch.Tensor, batch: torch.Tensor, metric: torch.Tensor | None = None):
+        # x - [ batch_size * max(node_number_of_graphs) X num_node_features ] (Current Version: num_node_features=1)
+        main_feature = x[:, 0]
+        x = self.node_embedding_layer(main_feature)
+        # x - [ batch_size * max(node_number_of_graphs) X node_dim ]
 
-        x = self.node_embedding_layer(x)
+        x = self.gnn_head_mp_layer(x, edge_index)
+        x = self.activation_layer(x)
 
-        x = self.conv1(x, edge_index).relu()
-        _, x, adj, sp1, o1, c1 = self.pool1(x, adj, x_mask)
+        # x - [ batch_size * max(node_number_of_graphs) X hidden_dim ]
+        (x, mask), adj = to_dense_batch(x, batch), to_dense_adj(edge_index, batch)
+        # x - [ batch_size X max(node_number_of_graphs) X hidden_dim ]
 
-        x = self.conv2(x, edge_index).relu()
-        _, x, adj, sp2, o2, c2 = self.pool2(x, adj, x_mask)
+        _, x, adj, spectral_loss, orthogonality_loss, cluster_loss = self.gnn_pooling_layer(x, adj, mask)
 
-        x = x.mean(dim=1)
-        x = self.lin1(x).relu()
-        x = self.lin2(x)
+        gnn_pooling_loss = spectral_loss + orthogonality_loss + cluster_loss
 
-        m = self.metric_embedding_layer(metric)
-        m = self.lin3(m)
+        if self.mode == 'Unsupervised':
+            return gnn_pooling_loss
 
-        out = self.output(self.fuse(torch.concat(x, m)))
-        return out, sp1 + sp2 + o1 + o2 + c1 + c2
+        x = self.gnn_tail_mp_layer(x, adj)
+        x = self.activation_layer(x)
+
+        # x - [ batch_size X max(node_number_of_graphs) X hidden_dim ]
+        x = self.gnn_readout_layer(x)
+        # x - [ batch_size X max(node_number_of_graphs) X readout_dim ]
+        x = x.sum(dim=1)
+        # x - [ batch_size X readout_dim ]
+
+        # metric - [ batch_size ]
+        metric = self.metric_embedding_layer(metric)
+        # metric - [ batch_size X metric_dim ]
+        metric = self.metric_layer(metric)
+        # metric - [ batch_size X hidden_dim ]
+
+        fused_information = self.fuse_layer(torch.concat([x, metric], dim=-1))
+        # fused_information - [ batch_size X hidden_dim ]
+
+        output = self.output_layer(fused_information)
+        # output - [ batch_size X 1 ]
+
+        return output, gnn_pooling_loss

@@ -51,9 +51,9 @@ def get_huggingface_model_infos(
     limit: int | None = None,
     config: bool | None = None,
     sort: str | None = None,
-    direction: Literal[-1] = None,
-    token: str = None,
-) -> Iterable[dict]:
+    direction: Literal[-1] | None = None,
+    token: str | None = None,
+) -> Iterable[dict[str, Any]]:
     # [NOTE] The Code are modified based on the official Hugging Face Hub source codes. (https://github.com/huggingface/huggingface_hub/blob/main/src/huggingface_hub/hf_api.py [Method: list_models])
 
     huggingface_path = 'https://huggingface.co/api/models'
@@ -83,27 +83,54 @@ def get_huggingface_model_infos(
 
     if limit is not None:
         huggingface_model_infos = itertools.islice(huggingface_model_infos, limit)
+        # In Offical Source Code, huggingface_model_info will be instantiated as a ModelInfo object: model_info = ModelInfo(**huggingface_model_info)
     return huggingface_model_infos
 
 
-def get_huggingface_model_readmes(model_ids: list[str]) -> Generator[str, None, None]:
+def get_huggingface_model_readmes(model_ids: list[str], ignore_errors: bool = False) -> Generator[str, None, None]:
     hf_file_system = HfFileSystem()
     for model_id in model_ids:
-        if hf_file_system.exists(f'{model_id}/README.md'):
-            try:
-                with hf_file_system.open(f'{model_id}/README.md', mode='r', encoding='utf-8') as readme_file:
-                    readme = readme_file.read()
-                    readme = readme.replace('\t', ' ')
-                    yield readme
-            except UnicodeDecodeError as error:
-                logger.error(f"REPO: {model_id}. Encoding Error - The Encoding [UTF-8] are Invalid. - Error: {error}")
+        try:
+            yield get_huggingface_model_readme(model_id, hf_file_system)
+        except Exception as error:
+            if ignore_errors:
+                continue
+            else:
                 raise error
-            except Exception as error:
-                logger.error(f"REPO: {model_id}. Encounter An Error {error}.")
-                raise error
-        else:
-            logger.info(f"REPO: {model_id}. No README.md, skip.")
-            continue
+
+
+def get_huggingface_model_info(model_id: str, token: str | None = None) -> dict[str, Any]:
+    huggingface_path = 'https://huggingface.co/api/models'
+    headers = utils.build_hf_headers(token=token)
+    session = requests.Session()
+    response = session.get(f"{huggingface_path}/{model_id}", headers=headers)
+    return response.json()
+
+
+def get_huggingface_model_readme(model_id: str, hf_file_system: HfFileSystem) -> str:
+    if hf_file_system.exists(f'{model_id}/README.md'):
+        try:
+            with hf_file_system.open(f'{model_id}/README.md', mode='r', encoding='utf-8') as readme_file:
+                readme = readme_file.read()
+                readme = readme.replace('\t', ' ')
+                return readme
+        except UnicodeDecodeError as error:
+            logger.error(f"REPO: {model_id}. Encoding Error - The Encoding [UTF-8] are Invalid. - Error: {error}")
+            raise error
+        except Exception as error:
+            logger.error(f"REPO: {model_id}. Encounter An Error {error}.")
+            raise error
+    else:
+        logger.info(f"REPO: {model_id}. No README.md, skip.")
+
+
+def get_huggingface_model_ids(library: str | None = None):
+    filter_list = [library] if library else None
+    model_infos = get_huggingface_model_infos(filter_list=filter_list, full=True, config=True)
+    model_ids = list()
+    for model_info in model_infos:
+        model_ids.append(model_info['id'])
+    return model_ids
 
 
 def remove_card_related_from_readme(readme: str) -> str:
