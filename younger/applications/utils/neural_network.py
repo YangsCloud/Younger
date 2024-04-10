@@ -20,6 +20,11 @@ import pathlib
 from typing import Any, Iterable
 
 
+def set_deterministic(make_deterministic: bool = True):
+    if make_deterministic:
+        torch.use_deterministic_algorithms(True)
+
+
 def shuffled(sequence: Iterable) -> Iterable:
     indices = list(range(len(sequence)))
     random.shuffle(indices)

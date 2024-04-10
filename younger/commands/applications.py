@@ -77,6 +77,7 @@ def performance_prediction_train_run(arguments):
         arguments.master_rank,
 
         arguments.seed,
+        arguments.make_deterministic,
     )
 
 
@@ -144,6 +145,8 @@ def set_applications_performance_perdiction_arguments(parser: argparse.ArgumentP
     train_parser.add_argument('--master-rank', type=int, default=0)
 
     train_parser.add_argument('--seed', type=int, default=1234)
+
+    train_parser.add_argument('--make-deterministic', action='store_true')
 
     train_parser.add_argument('--device', type=str, choices=['CPU', 'GPU'], default='GPU')
 

@@ -26,7 +26,7 @@ from torch_geometric.loader import DataLoader
 from younger.commons.io import create_dir
 from younger.commons.logging import logger
 
-from younger.applications.utils.neural_network import get_model_parameters_number, get_device_descriptor, fix_random_procedure, load_checkpoint, save_checkpoint
+from younger.applications.utils.neural_network import get_model_parameters_number, get_device_descriptor, fix_random_procedure, set_deterministic, load_checkpoint, save_checkpoint
 from younger.applications.performance_prediction.models import NAPPGNNBase
 from younger.applications.performance_prediction.datasets import YoungerDataset
 
@@ -85,6 +85,7 @@ def period_operation(
         exact_check(device_descriptor, model, valid_dataloader, 'Valid', mode, is_distribution, world_size)
         if is_distribution:
             distributed.barrier()
+        model.train()
 
 
 def exact_check(device_descriptor: torch.device, model: torch.nn.Module, dataloader: DataLoader, split: Literal['Valid', 'Test'], mode: Literal['Supervised', 'Unsupervised'], is_distribution: bool = False, world_size: int = 1):
@@ -137,9 +138,11 @@ def exact_train(
     life_cycle:int, train_period: int, valid_period: int, report_period: int, record_unit: Literal['Epoch', 'Step'],
     train_batch_size: int, valid_batch_size: int, learning_rate: float, weight_decay: float,
     seed: int, device: Literal['CPU', 'GPU'], world_size: int, master_rank: int, is_distribution: bool,
+    make_deterministic: bool
 ):
     is_master = rank == master_rank
     fix_random_procedure(seed)
+    set_deterministic(make_deterministic)
     device_descriptor = get_device_descriptor(device, rank)
 
     model.to(device_descriptor)
@@ -160,11 +163,12 @@ def exact_train(
     if is_distribution:
         train_sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=rank, shuffle=True, seed=seed, drop_last=False)
         valid_sampler = DistributedSampler(valid_dataset, num_replicas=world_size, rank=rank, shuffle=False, seed=seed, drop_last=False)
-        train_dataloader = DataLoader(train_dataset, batch_size=train_batch_size, sampler=train_sampler)
-        valid_dataloader = DataLoader(valid_dataset, batch_size=valid_batch_size, sampler=valid_sampler)
     else:
-        train_dataloader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=True)
-        valid_dataloader = DataLoader(valid_dataset, batch_size=valid_batch_size, shuffle=False)
+        train_sampler = RandomSampler(train_dataset)
+        valid_sampler = Sampler(valid_dataset)
+
+    train_dataloader = DataLoader(train_dataset, batch_size=train_batch_size, sampler=train_sampler)
+    valid_dataloader = DataLoader(valid_dataset, batch_size=valid_batch_size, sampler=valid_sampler)
 
     if checkpoint_filepath:
         checkpoint = load_checkpoint(pathlib.Path(checkpoint_filepath), checkpoint_name, record_unit=record_unit)
@@ -198,8 +202,8 @@ def exact_train(
     logger.info(f'  Validate every {valid_period} {record_unit};')
     logger.info(f'  Report every {report_period} {record_unit}.')
 
+    model.train()
     for epoch in range(1, life_cycle + 1):
-        model.train()
         tic = time.time()
         for step, data in enumerate(train_dataloader, start=1):
             data: Data = data.to(device_descriptor)
@@ -287,6 +291,7 @@ def train(
     master_rank: int = 0,
 
     seed: int = 1234,
+    make_deterministic: bool = False,
 ):
     assert mode in {'Supervised', 'Unsupervised'}
     assert record_unit in {'Epoch', 'Step'}
@@ -384,6 +389,7 @@ def train(
                 life_cycle, train_period, valid_period, report_period, record_unit,
                 train_batch_size, valid_batch_size, learning_rate, weight_decay,
                 seed, device, world_size, master_rank, is_distribution,
+                make_deterministic,
             ),
             nprocs=world_size,
             join=True
@@ -396,6 +402,7 @@ def train(
             life_cycle, train_period, valid_period, report_period, record_unit,
             train_batch_size, valid_batch_size, learning_rate, weight_decay,
             seed, device, world_size, master_rank, is_distribution,
+            make_deterministic,
         )
 
 
