@@ -20,6 +20,7 @@ from torch import distributed
 from typing import Literal
 
 from torch.utils.data.distributed import DistributedSampler
+from torch.utils.data import Sampler, RandomSampler
 from torch_geometric.data import Dataset, Data
 from torch_geometric.loader import DataLoader
 
@@ -38,7 +39,7 @@ def infer_cluster_num(dataset: Dataset) -> int:
 def get_logging_metrics_str(metric_names: list[str], metric_values: list[str]) -> str:
     metrics_str = str()
     for metric_name, metric_value in zip(metric_names, metric_values):
-        metrics_str += f'{metric_name}: {metric_value}'
+        metrics_str += f' {metric_name}: {metric_value} '
     return metrics_str
 
 
@@ -103,8 +104,9 @@ def exact_check(device_descriptor: torch.device, model: torch.nn.Module, dataloa
         for index, data in enumerate(dataloader, start=1):
             data: Data = data.to(device_descriptor)
             if mode == 'Supervised':
-                output, gnn_pooling_loss = model(data.x, data.edge_index, data.batch, data.y[:, 0])
-                main_loss = torch.nn.functional.mse_loss(output, data.y[:, 1])
+                y = data.y.reshape(len(data), -1)
+                output, gnn_pooling_loss = model(data.x, data.edge_index, data.batch, y[:, 0].int())
+                main_loss = torch.nn.functional.mse_loss(output.reshape(-1), y[:, 1])
                 loss = main_loss + gnn_pooling_loss
                 digits = [f'{float(loss):.4f}', f'{float(main_loss):.4f}', f'{float(gnn_pooling_loss):.4f}']
                 overall_loss += loss
@@ -209,8 +211,9 @@ def exact_train(
             data: Data = data.to(device_descriptor)
             optimizer.zero_grad()
             if mode == 'Supervised':
-                output, gnn_pooling_loss = model(data.x, data.edge_index, data.batch, data.y[:, 0])
-                main_loss = criterion(output, data.y[:, 1])
+                y = data.y.reshape(len(data), -1)
+                output, gnn_pooling_loss = model(data.x, data.edge_index, data.batch, y[:, 0].int())
+                main_loss = criterion(output.reshape(-1), y[:, 1])
                 loss = main_loss + gnn_pooling_loss
                 loss.backward()
                 optimizer.step()
