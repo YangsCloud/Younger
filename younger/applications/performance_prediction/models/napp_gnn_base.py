@@ -52,7 +52,30 @@ class NAPPGNNBase(torch.nn.Module):
             train_eps=False
         )
 
+        # v Other Layers
+        self.gnn_o_layer_1 = GINConv(
+            nn=MLP(
+                channel_list=[hidden_dim, hidden_dim, hidden_dim],
+                act='ELU',
+            ),
+            eps=0,
+            train_eps=False
+        )
+        # ^ Other Layers
+
         self.gnn_pooling_layer = DMoNPooling(hidden_dim, cluster_num)
+
+        self.gnn_dense_o_layer_1 = DenseGINConv(
+            nn=MLP(
+                channel_list=[hidden_dim, hidden_dim, hidden_dim],
+                act='ELU',
+                norm=None,
+            ),
+            eps=0,
+            train_eps=False
+        )
+
+        self.gnn_op_layer_1 = DMoNPooling(hidden_dim, cluster_num)
 
         if self.mode == 'Unsupervised':
             return
@@ -101,6 +124,8 @@ class NAPPGNNBase(torch.nn.Module):
 
         x = self.gnn_head_mp_layer(x, edge_index)
         x = self.activation_layer(x)
+        x = self.gnn_o_layer_1(x, edge_index)
+        x = self.activation_layer(x)
 
         # x - [ batch_size * max(node_number_of_graphs) X hidden_dim ]
         (x, mask), adj = to_dense_batch(x, batch), to_dense_adj(edge_index, batch)
@@ -109,6 +134,13 @@ class NAPPGNNBase(torch.nn.Module):
         _, x, adj, spectral_loss, orthogonality_loss, cluster_loss = self.gnn_pooling_layer(x, adj, mask)
 
         gnn_pooling_loss = spectral_loss + orthogonality_loss + cluster_loss
+
+        x = self.gnn_dense_o_layer_1(x, adj)
+        x = self.activation_layer(x)
+
+        _, x, adj, spectral_loss_1, orthogonality_loss_1, cluster_loss_1 = self.gnn_op_layer_1(x, adj)
+
+        gnn_pooling_loss += gnn_pooling_loss + spectral_loss_1 + orthogonality_loss_1 + cluster_loss_1
 
         if self.mode == 'Unsupervised':
             return gnn_pooling_loss
