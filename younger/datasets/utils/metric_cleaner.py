@@ -157,45 +157,50 @@ def try_clean_rogue(metric) -> str | None:  # perceive rogue as rouge
 def try_clean_bertscore(metric) -> str | None:
     key = "bertscore"
     prefix = ''
+    suffix = ''
     if MetricPattern.BERTSCORE.search(metric):
         prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
-        key = (prefix + key).strip()
+        key = (prefix + key + suffix).strip()
         return key
 
 
 def try_clean_match(metric) -> str | None:
     key = "match"
     prefix = ''
+    suffix = ''
     if MetricPattern.MATCH.search(metric):
         prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
-        key = (prefix + key).strip()
+        key = (prefix + key + suffix).strip()
         return key
 
 
 def try_clean_accuracy(metric) -> str | None:
     key = "accuracy"
     prefix = ''
+    suffix = ''
     if MetricPattern.ACC.search(metric):
         prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
-        key = (prefix + key).strip()
+        key = (prefix + key + suffix).strip()
         return key
 
 
 def try_clean_wer(metric) -> str | None:
     key = "wer"
     prefix = ''
+    suffix = ''
     if MetricPattern.WER.search(metric) and "answer" not in metric:
         prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
-        key = (prefix + key).strip()
+        key = (prefix + key + suffix).strip()
         return key
 
 
 def try_clean_cer(metric) -> str | None:
     key = "cer"
     prefix = ''
+    suffix = ''
     if MetricPattern.CER.search(metric):
         prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
-        key = (prefix + key).strip()
+        key = (prefix + key + suffix).strip()
         return key
 
 
