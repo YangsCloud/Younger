@@ -146,6 +146,7 @@ class METRIC_PATTERN(Constant):
         self.TEST = re.compile(r'test', re.IGNORECASE)
         self.VALIDATION = re.compile(r'validation', re.IGNORECASE)
         self.TRAIN = re.compile(r'train', re.IGNORECASE)
+        self.EVAL = re.compile(r'eval', re.IGNORECASE)
 
 MetricPattern = METRIC_PATTERN()
 MetricPattern.initialize()

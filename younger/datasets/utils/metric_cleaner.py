@@ -31,6 +31,8 @@ def try_clean_split(metric) -> str | None:
         pattern = MetricPattern.VALIDATION.pattern
     elif MetricPattern.TRAIN.search(metric):
         pattern = MetricPattern.TRAIN.pattern
+    elif MetricPattern.EVAL.search(metric):
+        pattern = MetricPattern.EVAL.pattern
     return pattern
 
 
