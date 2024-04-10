@@ -1,57 +1,18 @@
-from youngbench.dataset.modules.instance import Instance
-import argparse
-import pathlib
-import onnx
 import json
-
-INSTANCE_DIR = "/Users/zrsion/instance-task/instances-Tasks-No-0/2en--HF--distilbert-base-uncased-finetuned-emotion--YBDI--model"
+from pengbench.metric_to_target import get_target_metric
+from younger.datasets.utils.metric_cleaner import clean_metric
 
 if __name__ == '__main__':
-    # parser = argparse.ArgumentParser(description=" ")
-    # parser.add_argument('--instance-dir', type=pathlib.Path, default=None)
-    # args = parser.parse_args()
-    #print(INSTANCE_DIR)
-    instance_obj = Instance()
-    instance_obj.load(pathlib.Path(INSTANCE_DIR))
-    instance_obj._load_network
+    metrics_path = "/Users/zrsion/YoungBench/pengbench/test_data_process/mapping/metrics.json"
+    metric_name = "recall_at_7"
+    metric_type = "Recall"
 
-    network = instance_obj.network
-    graph = network.graph
+    with open("/Users/zrsion/YoungBench/pengbench/test_data_process/combined_name_type_list.json",'r') as f:
+        datas = json.load(f)
 
-    nodes = graph.nodes
-
-
-
-
-
-    for node in nodes.data(data = 'attributes'):
-        if not node[1]:
-            continue
-        for key in node[1]:
-            if node[1][key]['attr_type']==onnx.defs.OpSchema.AttrType.INT or node[1][key]['attr_type']==onnx.defs.OpSchema.AttrType.INT:
-                print(node[1][key]['attr_type'])
-
-
-    # for op_type, attribute in zip(nodes(data = 'operator'),nodes(data = 'attributes')):
-    #      print(op_type,attribute)
-
-
-
-
-    #
-    # print(nodes(data = 'attributes'))
-    #
-    # attributes = nodes(data = 'attributes')
-    #
-    # for attribute in attributes:
-    #     print(attribute)
-
-
-    # for node in nodes(data = 'operator'):
-    #     print(node[1]['op_type'])
-
-
-
-    # print(instance_obj.network.graph.adj)
-
-
+    for data in datas:
+        metric_name = data['name']
+        metric_name = data['type']
+        print(
+            f'target : {clean_metric(metric_name=metric_name,metric_type=metric_type)}'
+        )
