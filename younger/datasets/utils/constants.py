@@ -140,6 +140,8 @@ class METRIC_PATTERN(Constant):
         self.MACRO = re.compile(r'macro', re.IGNORECASE)
         self.MICRO = re.compile(r'micro', re.IGNORECASE)
         self.WEIGHTED = re.compile(r'weighted', re.IGNORECASE)
+        self.AT = re.compile(r'_at_', re.IGNORECASE)
+        self.DIGIT = re.compile(r'\d+', re.IGNORECASE)
 
 MetricPattern = METRIC_PATTERN()
 MetricPattern.initialize()
