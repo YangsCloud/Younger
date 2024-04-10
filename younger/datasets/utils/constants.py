@@ -143,6 +143,10 @@ class METRIC_PATTERN(Constant):
         self.AT = re.compile(r'_at_', re.IGNORECASE)
         self.DIGIT = re.compile(r'\d+', re.IGNORECASE)
 
+        self.TEST = re.compile(r'test', re.IGNORECASE)
+        self.VALIDATION = re.compile(r'validation', re.IGNORECASE)
+        self.TRAIN = re.compile(r'train', re.IGNORECASE)
+
 MetricPattern = METRIC_PATTERN()
 MetricPattern.initialize()
 MetricPattern.freeze()

@@ -23,6 +23,17 @@ def try_clean_at(metric) -> str | None:
         return pattern
 
 
+def try_clean_split(metric) -> str | None:
+    pattern = None
+    if MetricPattern.TEST.search(metric):
+        pattern = MetricPattern.TEST.pattern
+    elif MetricPattern.VALIDATION.search(metric):
+        pattern = MetricPattern.VALIDATION.pattern
+    elif MetricPattern.TRAIN.search(metric):
+        pattern = MetricPattern.TRAIN.pattern
+    return pattern
+
+
 def try_clean_digit(metric) -> str | None:
     digit = MetricPattern.DIGIT.search(metric)
     return digit.group() if digit else ''
@@ -32,15 +43,16 @@ def try_clean_f1(metric) -> str | None:
     key = "f1"
     prefix = ''
     if MetricPattern.F1.search(metric):
+        prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
         if MetricPattern.MACRO.search(metric):
-            prefix += MetricPattern.MACRO.pattern
+            prefix += MetricPattern.MACRO.pattern + ' '
         elif MetricPattern.MICRO.search(metric):
-            prefix += MetricPattern.MICRO.pattern
+            prefix += MetricPattern.MICRO.pattern + ' '
         elif MetricPattern.WEIGHTED.search(metric):
-            prefix += MetricPattern.WEIGHTED.pattern
+            prefix += MetricPattern.WEIGHTED.pattern + ' '
         else:
             prefix += ""
-        key = (prefix + " " + key).strip()
+        key = (prefix + key).strip()
         return key
 
 
@@ -49,16 +61,17 @@ def try_clean_recall(metric) -> str | None:
     prefix = ''
     suffix = ''
     if MetricPattern.RECALL.search(metric):
+        prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
         if MetricPattern.MACRO.search(metric):
-            prefix += MetricPattern.MACRO.pattern
+            prefix += MetricPattern.MACRO.pattern + ' '
         elif MetricPattern.MICRO.search(metric):
-            prefix += MetricPattern.MICRO.pattern
+            prefix += MetricPattern.MICRO.pattern + ' '
         elif MetricPattern.WEIGHTED.search(metric):
-            prefix += MetricPattern.WEIGHTED.pattern
+            prefix += MetricPattern.WEIGHTED.pattern + ' '
         else:
             prefix += ""
         suffix += try_clean_at(metric) if try_clean_at(metric) else ''
-        key = (prefix + " " + key + suffix).strip()
+        key = (prefix + key + suffix).strip()
         return key
 
 
@@ -67,23 +80,26 @@ def try_clean_precision(metric) -> str | None:
     prefix = ''
     suffix = ''
     if MetricPattern.PRECISION.search(metric):
+        prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
         if MetricPattern.MACRO.search(metric):
-            prefix += MetricPattern.MACRO.pattern
+            prefix += MetricPattern.MACRO.pattern + ' '
         elif MetricPattern.MICRO.search(metric):
-            prefix += MetricPattern.MICRO.pattern
+            prefix += MetricPattern.MICRO.pattern + ' '
         elif MetricPattern.WEIGHTED.search(metric):
-            prefix += MetricPattern.WEIGHTED.pattern
+            prefix += MetricPattern.WEIGHTED.pattern + ' '
         else:
             prefix += ""
         suffix += try_clean_at(metric) if try_clean_at(metric) else ''
-        key = (prefix + " " + key + suffix).strip()
+        key = (prefix + key + suffix).strip()
         return key
 
 
 def try_clean_bleu(metric) -> str | None:
     key = "bleu"
+    prefix = ''
     suffix = ''
     if MetricPattern.BLEU.search(metric):
+        prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
         if re.compile(r'1', re.IGNORECASE).search(metric):
             suffix += "1"
         if re.compile(r'2', re.IGNORECASE).search(metric):
@@ -94,14 +110,16 @@ def try_clean_bleu(metric) -> str | None:
             suffix += "4"
         else:
             suffix += ""
-        key = (key + suffix).strip()
+        key = (prefix + key + suffix).strip()
         return key
 
 
 def try_clean_rouge(metric) -> str | None:
     key = "rouge"
+    prefix = ''
     suffix = ''
     if MetricPattern.ROUGE.search(metric):
+        prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
         if re.compile(r'rouge-?1', re.IGNORECASE).search(metric):
             suffix += "1"
         elif re.compile(r'rouge-?lsum', re.IGNORECASE).search(metric):
@@ -112,14 +130,16 @@ def try_clean_rouge(metric) -> str | None:
             suffix += "2"
         else:
             suffix += "1"  # perceive rouge as rouge1
-        key = (key + suffix).strip()
+        key = (prefix + key + suffix).strip()
         return key
 
 
 def try_clean_rogue(metric) -> str | None:  # perceive rogue as rouge
     key = "rouge"
+    prefix = ''
     suffix = ''
     if MetricPattern.ROGUE.search(metric):
+        prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
         if re.compile(r'rogue-?1', re.IGNORECASE).search(metric):
             suffix += "1"
         elif re.compile(r'rogue-?lsum', re.IGNORECASE).search(metric):
@@ -130,7 +150,7 @@ def try_clean_rogue(metric) -> str | None:  # perceive rogue as rouge
             suffix += "2"
         else:
             suffix += "1"  # perceive rouge as rouge1
-        key = (key + suffix).strip()
+        key = (prefix + key + suffix).strip()
         return key
 
 
@@ -138,7 +158,8 @@ def try_clean_bertscore(metric) -> str | None:
     key = "bertscore"
     prefix = ''
     if MetricPattern.BERTSCORE.search(metric):
-        key = (prefix + " " + key).strip()
+        prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
+        key = (prefix + key).strip()
         return key
 
 
@@ -146,7 +167,8 @@ def try_clean_match(metric) -> str | None:
     key = "match"
     prefix = ''
     if MetricPattern.MATCH.search(metric):
-        key = (prefix + " " + key).strip()
+        prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
+        key = (prefix + key).strip()
         return key
 
 
@@ -154,7 +176,8 @@ def try_clean_accuracy(metric) -> str | None:
     key = "accuracy"
     prefix = ''
     if MetricPattern.ACC.search(metric):
-        key = (prefix + " " + key).strip()
+        prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
+        key = (prefix + key).strip()
         return key
 
 
@@ -162,7 +185,8 @@ def try_clean_wer(metric) -> str | None:
     key = "wer"
     prefix = ''
     if MetricPattern.WER.search(metric) and "answer" not in metric:
-        key = (prefix + " " + key).strip()
+        prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
+        key = (prefix + key).strip()
         return key
 
 
@@ -170,7 +194,8 @@ def try_clean_cer(metric) -> str | None:
     key = "cer"
     prefix = ''
     if MetricPattern.CER.search(metric):
-        key = (prefix + " " + key).strip()
+        prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
+        key = (prefix + key).strip()
         return key
 
 
@@ -179,8 +204,9 @@ def try_clean_map(metric) -> str | None:
     prefix = ''
     suffix = ''
     if MetricPattern.MAP.search(metric):
+        prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
         suffix += try_clean_at(metric) if try_clean_at(metric) else ''
-        key = (prefix + " " + key + suffix).strip()
+        key = (prefix + key + suffix).strip()
         return key
 
 
