@@ -13,7 +13,7 @@
 import re
 import sys
 
-from younger.datasets.utils.constants import MetricPattern
+from younger.datasets.utils.metrics.metric_constants import MetricPattern
 
 
 def try_clean_at(metric) -> str | None:
