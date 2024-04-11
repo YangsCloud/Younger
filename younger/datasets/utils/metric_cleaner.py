@@ -16,153 +16,204 @@ import sys
 from younger.datasets.utils.constants import MetricPattern
 
 
+def try_clean_at(metric) -> str | None:
+    if MetricPattern.AT.search(metric):
+        pattern = MetricPattern.AT.pattern
+        pattern += try_clean_digit(metric) if try_clean_digit(metric) else ''
+        return pattern
+
+
+def try_clean_split(metric) -> str | None:
+    pattern = None
+    if MetricPattern.TEST.search(metric):
+        pattern = MetricPattern.TEST.pattern
+    elif MetricPattern.VALIDATION.search(metric):
+        pattern = MetricPattern.VALIDATION.pattern
+    elif MetricPattern.TRAIN.search(metric):
+        pattern = MetricPattern.TRAIN.pattern
+    elif MetricPattern.EVAL.search(metric):
+        pattern = MetricPattern.EVAL.pattern
+    return pattern
+
+
+def try_clean_digit(metric) -> str | None:
+    digit = MetricPattern.DIGIT.search(metric)
+    return digit.group() if digit else ''
+
+
 def try_clean_f1(metric) -> str | None:
     key = "f1"
-    pattern = ''
+    prefix = ''
     if MetricPattern.F1.search(metric):
+        prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
         if MetricPattern.MACRO.search(metric):
-            pattern += MetricPattern.MACRO.pattern
+            prefix += MetricPattern.MACRO.pattern + ' '
         elif MetricPattern.MICRO.search(metric):
-            pattern += MetricPattern.MICRO.pattern
+            prefix += MetricPattern.MICRO.pattern + ' '
         elif MetricPattern.WEIGHTED.search(metric):
-            pattern += MetricPattern.WEIGHTED.pattern
+            prefix += MetricPattern.WEIGHTED.pattern + ' '
         else:
-            pattern += ""
-        key = (pattern + " " + key).strip()
+            prefix += ""
+        key = (prefix + key).strip()
         return key
 
 
 def try_clean_recall(metric) -> str | None:
     key = "recall"
-    pattern = ''
+    prefix = ''
+    suffix = ''
     if MetricPattern.RECALL.search(metric):
+        prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
         if MetricPattern.MACRO.search(metric):
-            pattern += MetricPattern.MACRO.pattern
+            prefix += MetricPattern.MACRO.pattern + ' '
         elif MetricPattern.MICRO.search(metric):
-            pattern += MetricPattern.MICRO.pattern
+            prefix += MetricPattern.MICRO.pattern + ' '
         elif MetricPattern.WEIGHTED.search(metric):
-            pattern += MetricPattern.WEIGHTED.pattern
+            prefix += MetricPattern.WEIGHTED.pattern + ' '
         else:
-            pattern += ""
-        key = (pattern + " " + key).strip()
+            prefix += ""
+        suffix += try_clean_at(metric) if try_clean_at(metric) else ''
+        key = (prefix + key + suffix).strip()
         return key
 
 
 def try_clean_precision(metric) -> str | None:
     key = "precision"
-    pattern = ''
+    prefix = ''
+    suffix = ''
     if MetricPattern.PRECISION.search(metric):
+        prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
         if MetricPattern.MACRO.search(metric):
-            pattern += MetricPattern.MACRO.pattern
+            prefix += MetricPattern.MACRO.pattern + ' '
         elif MetricPattern.MICRO.search(metric):
-            pattern += MetricPattern.MICRO.pattern
+            prefix += MetricPattern.MICRO.pattern + ' '
         elif MetricPattern.WEIGHTED.search(metric):
-            pattern += MetricPattern.WEIGHTED.pattern
+            prefix += MetricPattern.WEIGHTED.pattern + ' '
         else:
-            pattern += ""
-        key = (pattern + " " + key).strip()
+            prefix += ""
+        suffix += try_clean_at(metric) if try_clean_at(metric) else ''
+        key = (prefix + key + suffix).strip()
         return key
 
 
 def try_clean_bleu(metric) -> str | None:
     key = "bleu"
-    pattern = ''
+    prefix = ''
+    suffix = ''
     if MetricPattern.BLEU.search(metric):
+        prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
         if re.compile(r'1', re.IGNORECASE).search(metric):
-            pattern += "1"
+            suffix += "1"
         if re.compile(r'2', re.IGNORECASE).search(metric):
-            pattern += "2"
+            suffix += "2"
         if re.compile(r'3', re.IGNORECASE).search(metric):
-            pattern += "3"
+            suffix += "3"
         if re.compile(r'4', re.IGNORECASE).search(metric):
-            pattern += "4"
+            suffix += "4"
         else:
-            pattern += ""
-        key = (key + pattern).strip()
+            suffix += ""
+        key = (prefix + key + suffix).strip()
         return key
 
 
 def try_clean_rouge(metric) -> str | None:
     key = "rouge"
-    pattern = ''
+    prefix = ''
+    suffix = ''
     if MetricPattern.ROUGE.search(metric):
+        prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
         if re.compile(r'rouge-?1', re.IGNORECASE).search(metric):
-            pattern += "1"
+            suffix += "1"
         elif re.compile(r'rouge-?lsum', re.IGNORECASE).search(metric):
-            pattern += "lsum"
+            suffix += "lsum"
         elif re.compile(r'rouge-?l', re.IGNORECASE).search(metric):
-            pattern += "l"
+            suffix += "l"
         elif re.compile(r'rouge-?2', re.IGNORECASE).search(metric):
-            pattern += "2"
+            suffix += "2"
         else:
-            pattern += "1"  # perceive rouge as rouge1
-        key = (key + pattern).strip()
+            suffix += "1"  # perceive rouge as rouge1
+        key = (prefix + key + suffix).strip()
         return key
 
 
 def try_clean_rogue(metric) -> str | None:  # perceive rogue as rouge
     key = "rouge"
-    pattern = ''
+    prefix = ''
+    suffix = ''
     if MetricPattern.ROGUE.search(metric):
+        prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
         if re.compile(r'rogue-?1', re.IGNORECASE).search(metric):
-            pattern += "1"
+            suffix += "1"
         elif re.compile(r'rogue-?lsum', re.IGNORECASE).search(metric):
-            pattern += "lsum"
+            suffix += "lsum"
         elif re.compile(r'rogue-?l', re.IGNORECASE).search(metric):
-            pattern += "l"
+            suffix += "l"
         elif re.compile(r'rogue-?2', re.IGNORECASE).search(metric):
-            pattern += "2"
+            suffix += "2"
         else:
-            pattern += "1"  # perceive rouge as rouge1
-        key = (key + pattern).strip()
+            suffix += "1"  # perceive rouge as rouge1
+        key = (prefix + key + suffix).strip()
         return key
 
 
 def try_clean_bertscore(metric) -> str | None:
     key = "bertscore"
-    pattern = ''
+    prefix = ''
+    suffix = ''
     if MetricPattern.BERTSCORE.search(metric):
-        key = (pattern + " " + key).strip()
+        prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
+        key = (prefix + key + suffix).strip()
         return key
 
 
 def try_clean_match(metric) -> str | None:
     key = "match"
-    pattern = ''
+    prefix = ''
+    suffix = ''
     if MetricPattern.MATCH.search(metric):
-        key = (pattern + " " + key).strip()
+        prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
+        key = (prefix + key + suffix).strip()
         return key
 
 
 def try_clean_accuracy(metric) -> str | None:
     key = "accuracy"
-    pattern = ''
+    prefix = ''
+    suffix = ''
     if MetricPattern.ACC.search(metric):
-        key = (pattern + " " + key).strip()
+        prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
+        key = (prefix + key + suffix).strip()
         return key
 
 
 def try_clean_wer(metric) -> str | None:
     key = "wer"
-    pattern = ''
+    prefix = ''
+    suffix = ''
     if MetricPattern.WER.search(metric) and "answer" not in metric:
-        key = (pattern + " " + key).strip()
+        prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
+        key = (prefix + key + suffix).strip()
         return key
 
 
 def try_clean_cer(metric) -> str | None:
     key = "cer"
-    pattern = ''
+    prefix = ''
+    suffix = ''
     if MetricPattern.CER.search(metric):
-        key = (pattern + " " + key).strip()
+        prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
+        key = (prefix + key + suffix).strip()
         return key
 
 
 def try_clean_map(metric) -> str | None:
     key = "map"
-    pattern = ''
+    prefix = ''
+    suffix = ''
     if MetricPattern.MAP.search(metric):
-        key = (pattern + " " + key).strip()
+        prefix += try_clean_split(metric) + ' ' if try_clean_split(metric) else ''
+        suffix += try_clean_at(metric) if try_clean_at(metric) else ''
+        key = (prefix + key + suffix).strip()
         return key
 
 
