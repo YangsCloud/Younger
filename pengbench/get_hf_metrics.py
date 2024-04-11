@@ -65,6 +65,17 @@ def get_huggingface_model_readmes(model_ids) -> Generator[str, None, None]:
             continue
 
 
+def add_element(value: Dict[str, str], final_dic: Dict[str, str | int], compared_str: str, target_list: list[Dict]):
+    if len(target_list) == 0:
+        target_list.append(final_dic)
+    else:
+        for d in target_list:
+            if value == d[compared_str]:
+                d["count"] += 1
+                break
+        target_list.append(final_dic)
+
+
 def get_huggingface_metrics():
     metrics = list_metrics()
     ids = [metric.id for metric in metrics]
@@ -79,7 +90,6 @@ def get_eval_results_metric_name(eval_results, hf_metrics_metrics_name):
         metric = str(metric).lower()
         if metric not in hf_metrics_metrics_name:
             hf_metrics_metrics_name.append(metric)
-            print(f'new metric name: {metric}')
 
 
 def get_eval_results_metric_type(eval_results, hf_metrics_metrics_type):
@@ -90,7 +100,6 @@ def get_eval_results_metric_type(eval_results, hf_metrics_metrics_type):
         metric = str(metric).lower()
         if metric not in hf_metrics_metrics_type:
             hf_metrics_metrics_type.append(metric)
-            print(f'new metric type: {metric}')
 
 
 def get_metrics(card_data, hf_metrics_metrics):
@@ -101,7 +110,6 @@ def get_metrics(card_data, hf_metrics_metrics):
         metric = str(eval_metric).lower()
         if metric not in hf_metrics_metrics:
             hf_metrics_metrics.append(metric)
-            print(f'new metric: {metric}')
 
 
 def get_merge_name_and_type(eval_results, merge_name_and_type_dic: Dict[str,int]):
@@ -118,6 +126,20 @@ def get_merge_name_and_type(eval_results, merge_name_and_type_dic: Dict[str,int]
             merge_name_and_type_dic[metric] = 1
 
 
+def get_metric_value(eval_results, metric_value_dict: Dict[str, list]):
+    if not eval_results:
+        return
+    for eval_result in eval_results:
+        metric_type = str(eval_result.metric_type).lower()
+        metric_name = str(eval_result.metric_name).lower()
+        metric = metric_name if len(metric_name) > len(metric_type) and metric_name != 'none' else metric_type
+        value = eval_result.metric_value if eval_result else 'none'
+
+        if metric not in metric_value_dict or not metric_value_dict[metric]:
+            metric_value_dict[metric] = []
+        metric_value_dict[metric].append(value)
+
+
 def get_combined_name_type(eval_results, combined_name_type_list):
     if not eval_results:
         return
@@ -132,16 +154,8 @@ def get_combined_name_type(eval_results, combined_name_type_list):
             "name_and_type": name_and_type,
             "count": 1
         }
-        if len(combined_name_type_list) == 0:
-            combined_name_type_list.append(final_dic)
-        else:
-            for d in combined_name_type_list:
-                if name_and_type == d["name_and_type"]:
-                    d["count"] += 1
-                else:
-                    combined_name_type_list.append(final_dic)
-                    # print(final_dic)
-                    break
+
+        add_element(name_and_type, final_dic, "name_and_type", combined_name_type_list)
 
 
 def get_full_list(model_name, eval_results, full_list):
@@ -159,12 +173,14 @@ def get_full_list(model_name, eval_results, full_list):
         dataset = dataset_name if len(dataset_name) > len(dataset_type) and dataset_name != 'none' else dataset_type
         metric = metric_name if len(metric_name) > len(metric_type) and metric_name != 'none' else metric_type
         value = eval_result.metric_value if eval_result else 'none'
+        split = eval_result.dataset_split if eval_result.dataset_split else 'none'
 
         task_dataset_metric_value = {
             "model_name": model_name,
             "metric": metric,
             "task": task,
             "dataset": dataset,
+            "split": split,
             "value": value
         }
 
@@ -197,16 +213,7 @@ def get_combined_metric_task_dataset(eval_results, combined_metric_task_dataset_
             "count": 1
         }
 
-        if len(combined_metric_task_dataset_list) == 0:
-            combined_metric_task_dataset_list.append(final_dic)
-        else:
-            for d in combined_metric_task_dataset_list:
-                if task_dataset_metric == d["task_dataset_metric"]:
-                    d["count"] += 1
-                else:
-                    combined_metric_task_dataset_list.append(final_dic)
-                    # print(final_dic)
-                    break
+        add_element(task_dataset_metric, final_dic, "task_dataset_metric", combined_metric_task_dataset_list)
 
 
 def get_combined_metric_task(eval_results, combined_metric_task_list):
@@ -231,17 +238,7 @@ def get_combined_metric_task(eval_results, combined_metric_task_list):
             "count": 1
         }
 
-        if len(combined_metric_task_list) == 0:
-            combined_metric_task_list.append(final_dic)
-        else:
-            for d in combined_metric_task_list:
-                if task_metric == d["task_metric"]:
-                    d["count"] += 1
-                else:
-                    combined_metric_task_list.append(final_dic)
-                    # print(final_dic)
-                    break
-
+        add_element(task_metric, final_dic, "task_metric", combined_metric_task_list)
 
 def get_combined_metric_dataset(eval_results, combined_metric_dataset_list):
     if not eval_results:
@@ -265,16 +262,29 @@ def get_combined_metric_dataset(eval_results, combined_metric_dataset_list):
             "count": 1
         }
 
-        if len(combined_metric_dataset_list) == 0:
-            combined_metric_dataset_list.append(final_dic)
-        else:
-            for d in combined_metric_dataset_list:
-                if dataset_metric == d["dataset_metric"]:
-                    d["count"] += 1
-                else:
-                    combined_metric_dataset_list.append(final_dic)
-                    # print(final_dic)
-                    break
+        add_element(dataset_metric, final_dic, "dataset_metric", combined_metric_dataset_list)
+
+
+def get_metric_split(eval_results, combined_metric_split_list):
+    if not eval_results:
+        return
+    for eval_result in eval_results:
+        metric_name = str(eval_result.metric_name).lower()
+        metric_type = str(eval_result.metric_type).lower()
+        metric = metric_name if len(metric_name) > len(metric_type) and metric_name != 'none' else metric_type
+        split = eval_result.dataset_split if eval_result.dataset_split else 'none'
+
+        metric_split = {
+            "metric": metric,
+            "split": split
+        }
+
+        final_dic = {
+            "metric_split": metric_split,
+            "count": 1
+        }
+
+        add_element(metric_split, final_dic, "metric_split", combined_metric_split_list)
 
 
 
@@ -288,6 +298,8 @@ if __name__ == '__main__':
     combined_metric_task_dataset_list = list()
     combined_metric_task_list = list()
     combined_metric_dataset_list = list()
+    metric_value_dict = dict()
+    combined_metric_split_list = list()
 
     with open(model_ids, 'r') as file:
         data = json.load(file)
@@ -311,6 +323,8 @@ if __name__ == '__main__':
             get_combined_metric_task_dataset(eval_results, combined_metric_task_dataset_list)
             get_combined_metric_task(eval_results, combined_metric_task_list)
             get_combined_metric_dataset(eval_results, combined_metric_dataset_list)
+            get_metric_value(eval_results, metric_value_dict)
+            get_metric_split(eval_results, combined_metric_split_list)
 
         except Exception as error:
             with open(save_dir.joinpath("skip.log"), 'a') as f:
@@ -346,3 +360,9 @@ if __name__ == '__main__':
 
     with open(save_dir.joinpath('combined_metric_dataset.json'), 'w') as f:
         json.dump(combined_metric_dataset_list, f, indent=4)
+        
+    with open(save_dir.joinpath('metric_value.json'), 'w') as f:
+        json.dump(metric_value_dict, f, indent=4)
+
+    with open(save_dir.joinpath('combined_metric_split_list.json'), 'w') as f:
+        json.dump(combined_metric_split_list, f, indent=4)
