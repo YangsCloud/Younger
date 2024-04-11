@@ -24,7 +24,7 @@ from younger.datasets.utils.constants import ONNX
 def check_model(model_handler: onnx.ModelProto | pathlib.Path) -> bool:
     assert isinstance(model_handler, onnx.ModelProto) or isinstance(model_handler, pathlib.Path)
     # Change Due To Hash May Lead OOM.
-    def check_with_internal() -> str or None:
+    def check_with_internal() -> str | None:
         model = model_handler
         if len(model.graph.node) == 0:
             check_result = False
@@ -34,7 +34,7 @@ def check_model(model_handler: onnx.ModelProto | pathlib.Path) -> bool:
             check_result = True
         return check_result
 
-    def check_with_external() -> str or None:
+    def check_with_external() -> str | None:
         onnx.checker.check_model(str(model_handler))
         #model = onnx.load(str(model_handler))
         #check_result = hash_bytes(model.SerializeToString())
