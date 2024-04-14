@@ -13,6 +13,7 @@
 import tqdm
 import torch
 import pathlib
+import multiprocessing
 
 import os.path as osp
 
@@ -46,7 +47,8 @@ class YoungerDataset(Dataset):
         mode: Literal['Supervised', 'Unsupervised'] = 'Unsupervised',
         split: Literal['Train', 'Valid', 'Test'] = 'Train',
         x_feature_get_type: Literal['OnlyOp'] = 'OnlyOp',
-        y_feature_get_type: Literal['OnlyMt'] = 'OnlyMt'
+        y_feature_get_type: Literal['OnlyMt'] = 'OnlyMt',
+        worker_number: int = 4,
     ):
         assert mode in {'Supervised', 'Unsupervised'}, f'Dataset Mode Not Support - {mode}!'
         assert split in {'Train', 'Valid', 'Test'}, f'Dataset Split Not Support - {split}!'
@@ -72,6 +74,8 @@ class YoungerDataset(Dataset):
 
         metrics_filepath = download_aux_file(osp.join(self.root, self.metrics_filename), YoungerDatasetAddress.METRICS, self.root)
         self._metric_dict = self.__class__.load_metric_dict(metrics_filepath)
+
+        self.worker_number = worker_number
 
         super().__init__(root, transform, pre_transform, pre_filter, log, force_reload)
 
@@ -122,13 +126,11 @@ class YoungerDataset(Dataset):
                     total_instances += 1
         assert total_instances == self.indicators[self.split_name]['instances_number']
 
-    def process(self):
-        fs.makedirs(osp.join(self.processed_dir, self.split_name), exist_ok=True)
-        raw_instances_dirpath = pathlib.Path(osp.join(self.raw_dir, self.split_name, self.indicators[self.split_name]['instances_dirname']))
-        for index, raw_instance_dirpath in tqdm.tqdm(enumerate(raw_instances_dirpath.iterdir()), total=self.indicators[self.split_name]['instances_number']):
-            if raw_instance_dirpath.is_dir():
+    def sub_process(self, sub_process_paths: list[pathlib.Path]):
+        for index, sub_process_path in tqdm.tqdm(enumerate(sub_process_paths), total=len(sub_process_paths)):
+            if sub_process_path.is_dir():
                 instance = Instance()
-                instance.load(raw_instance_dirpath)
+                instance.load(sub_process_path)
 
                 x = self.__class__.get_x(instance, self.node_dict, self.x_feature_get_type)
                 edge_index = self.__class__.get_edge_index(instance)
@@ -145,6 +147,16 @@ class YoungerDataset(Dataset):
                     data = self.pre_transform(data)
 
                 torch.save(data, osp.join(self.processed_dir, self.split_name, f'data_{index}.pt'))
+
+    def process(self):
+        fs.makedirs(osp.join(self.processed_dir, self.split_name), exist_ok=True)
+        raw_instances_dirpath = pathlib.Path(osp.join(self.raw_dir, self.split_name, self.indicators[self.split_name]['instances_dirname']))
+        paths = list(raw_instances_dirpath.iterdir())
+        quotient, remainder = divmod(len(paths), self.worker_number)
+        step = quotient + (remainder != 0)
+        sub_process_paths = [paths[index: index+step] for index in range(0, len(paths), step)]
+        with multiprocessing.Pool(self.worker_number) as pool:
+            pool.map(self.sub_process, sub_process_paths)
 
     def len(self) -> int:
         return len(self.processed_file_names)
