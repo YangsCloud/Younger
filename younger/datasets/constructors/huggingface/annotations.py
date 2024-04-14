@@ -30,7 +30,7 @@ def split_camel_case_string(camel_case_string: str) -> list[str]:
     return [word.group(0) for word in words]
 
 
-def initial_parse_string(string: str) -> tuple[str, list[str], list[str]]:
+def split_string_info(string: str) -> tuple[str, list[str], list[str]]:
     # 1. Split All Camel Case Words:
     words = list()
     for word in string.split():
@@ -39,7 +39,7 @@ def initial_parse_string(string: str) -> tuple[str, list[str], list[str]]:
 
     # 2. Get All Note Strings Wrapped in Parentheses:
     note_pattern = r'\(([^()]*?)\)'
-    note_strings = re.findall(note_pattern, string)
+    note_strings = [note_string.lower() for note_string in re.findall(note_pattern, string)]
 
     # 3. Remove Note Strings
     tidy_string = re.sub(note_pattern, '', string)
@@ -63,11 +63,15 @@ def initial_parse_string(string: str) -> tuple[str, list[str], list[str]]:
 
     return main_string, note_strings, other_strings
 
+def initial_parse_string(string: str) -> str:
+    main_string, note_strings, other_strings = split_string_info(string)
+    strings = main_string.split() + note_strings + other_strings
+    string = ' '.join(strings)
+    return string
+
 
 def parse_task(task_name: str) -> str:
-    main_string, note_strings, other_strings = initial_parse_string(task_name)
-    strings = main_string.split() + note_strings + other_strings
-    tn_string = ' '.join(strings)
+    tn_string = initial_parse_string(task_name)
 
     tn_string = tn_string.replace('-', ' ')
     tn_string = tn_string.replace('label', ' class ')
@@ -78,9 +82,7 @@ def parse_task(task_name: str) -> str:
 
 
 def parse_dataset(dataset_name: str) -> tuple[str, Literal['train', 'valid', 'test']]:
-    main_string, note_strings, other_strings = initial_parse_string(dataset_name)
-    strings = main_string.split() + note_strings + other_strings
-    dn_string = ' '.join(strings)
+    dn_string = initial_parse_string(dataset_name)
 
     if 'humaneval' in dn_string:
         # No More Process
@@ -118,9 +120,7 @@ def parse_dataset(dataset_name: str) -> tuple[str, Literal['train', 'valid', 'te
 
 
 def parse_metric(metric_name: str):
-    main_string, note_strings, other_strings = initial_parse_string(metric_name)
-    strings = main_string.split() + note_strings + other_strings
-    mn_string = ' '.join(strings)
+    mn_string = initial_parse_string(metric_name)
     mn_string = mn_string.replace('language model', 'lm')
     mn_string = mn_string.replace('no ', '-')
     mn_string = mn_string.replace('w/o ', '-')
@@ -203,10 +203,10 @@ def get_heuristic_annotations(model_id: str, model_card_data: ModelCardData) -> 
                 hf_task_name, hf_dataset_name = hf_task_type, hf_task_name
                 hf_task_type, hf_dataset_type = '', ''
             else:
-                _, tn_notes, _ = initial_parse_string(hf_task_name)
+                _, tn_notes, _ = split_string_info(hf_task_name)
                 if len(tn_notes):
-                    dn_main, dn_notes, dn_others = initial_parse_string(hf_dataset_name)
-                    dt_main, dt_notes, dt_others = initial_parse_string(hf_dataset_type)
+                    dn_main, dn_notes, dn_others = split_string_info(hf_dataset_name)
+                    dt_main, dt_notes, dt_others = split_string_info(hf_dataset_type)
                     words = (
                         [word for word in dn_main.split()] +
                         [word for dn_note in dn_notes for word in dn_note.split()] +
@@ -222,15 +222,15 @@ def get_heuristic_annotations(model_id: str, model_card_data: ModelCardData) -> 
                             hf_task_type, hf_dataset_type = '', ''
                             break
 
-            task_name = parse_task(get_detailed_string([hf_task_name, hf_task_type]))
+            detailed_task_name = get_detailed_string([hf_task_name, hf_task_type])
+            task_name = parse_task(detailed_task_name)
 
-            dataset_name = parse_dataset(get_detailed_string([hf_dataset_type, hf_dataset_name]))
+            detailed_dataset_name = get_detailed_string([hf_dataset_type, hf_dataset_name])
+            dataset_name = parse_dataset(detailed_dataset_name)
 
             split = detect_split(hf_dataset_split)
             if split == '':
-                split = detect_split(get_detailed_string([hf_metric_type, hf_metric_name]))
-            if split == '':
-                split = 'test'
+                split = detect_split(initial_parse_string(detailed_dataset_name))
 
             if isinstance(hf_metric_value, list):
                 logger.warn(f'Skip. Useless Metric Value. Model ID {model_id} {eval_result.metric_value}')
@@ -251,15 +251,22 @@ def get_heuristic_annotations(model_id: str, model_card_data: ModelCardData) -> 
                 candidate_hf_metrics = [(get_detailed_string([hf_metric_type, hf_metric_name]), str(hf_metric_value))]
 
             for mname, mvalue in candidate_hf_metrics:
+                if split == '':
+                    split = detect_split(initial_parse_string(mname))
+
                 parsed_mname = parse_metric(mname)
                 parsed_mname = mname if parsed_mname == '' else parsed_mname
                 norm_mvalue = normalize_metric_value(parsed_mname, mvalue)
-                metric_info = (mname, norm_mvalue)
+                metric_info = (parsed_mname, norm_mvalue)
+
+                if split == '':
+                    split = 'test'
+                dataset_info = (dataset_name, split)
 
                 annotations.append(
                     dict(
                         task=task_name,
-                        dataset=dataset_name,
+                        dataset=dataset_info,
                         metric=metric_info,
                     )
                 )
