@@ -92,7 +92,7 @@ def set_datasets_retrieve_arguments(parser: argparse.ArgumentParser):
     subparser = parser.add_subparsers()
 
     huggingface_parser = subparser.add_parser('huggingface')
-    huggingface_parser.add_argument('--mode', type=str, choices=['Models', 'Model_Infos', 'Model_IDs', 'Metrics'], required=True)
+    huggingface_parser.add_argument('--mode', type=str, choices=['Models', 'Model_Infos', 'Model_IDs', 'Metrics', 'Tasks'], required=True)
     huggingface_parser.add_argument('--save-dirpath', type=str, default='.')
     huggingface_parser.add_argument('--cache-dirpath', type=str, default='.')
     huggingface_parser.add_argument('--library', type=str, default='transformers')

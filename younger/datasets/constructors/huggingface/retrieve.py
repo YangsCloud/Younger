@@ -19,16 +19,7 @@ from huggingface_hub import list_metrics
 from younger.commons.io import save_json
 from younger.commons.logging import logger
 
-from younger.datasets.constructors.huggingface.utils import get_huggingface_model_ids
-
-
-def save_huggingface_metrics(save_dirpath: pathlib.Path):
-    metrics = list_metrics()
-    ids = [metric.id for metric in metrics]
-    descriptions = [metric.description for metric in metrics]
-    data_frame = pandas.DataFrame({'Metric Names': ids, 'Descriptions': descriptions})
-    save_filepath = save_dirpath.joinpath('huggingface_metrics.xlsx')
-    data_frame.to_excel(save_filepath, index=False)
+from younger.datasets.constructors.huggingface.utils import get_huggingface_model_ids, get_huggingface_tasks
 
 
 def save_huggingface_models(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path):
@@ -43,8 +34,25 @@ def save_huggingface_model_ids(save_dirpath: pathlib.Path, library: str | None =
     logger.info(f'Total {len(model_ids)} Model IDs{f" (Library - {library})" if library else ""}. Results Saved In: \'{save_filepath}\'.')
 
 
-def main(mode: Literal['Models', 'Model_Infos', 'Model_IDs', 'Metrics'], save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, **kwargs):
-    assert mode in {'Models', 'Model_Infos', 'Model_IDs', 'Metrics'}
+def save_huggingface_metrics(save_dirpath: pathlib.Path):
+    metrics = list_metrics()
+    ids = [metric.id for metric in metrics]
+    descriptions = [metric.description for metric in metrics]
+    data_frame = pandas.DataFrame({'Metric Names': ids, 'Descriptions': descriptions})
+    save_filepath = save_dirpath.joinpath('huggingface_metrics.xlsx')
+    data_frame.to_excel(save_filepath, index=False)
+    logger.info(f'Total {len(metrics)} Metrics. Results Saved In: \'{save_filepath}\'.')
+
+
+def save_huggingface_tasks(save_dirpath: pathlib.Path):
+    tasks = get_huggingface_tasks()
+    save_filepath = save_dirpath.joinpath('huggingface_tasks.json')
+    save_json(tasks, save_filepath)
+    logger.info(f'Total {len(tasks)} Tasks. Results Saved In: \'{save_filepath}\'.')
+
+
+def main(mode: Literal['Models', 'Model_Infos', 'Model_IDs', 'Metrics', 'Tasks'], save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, **kwargs):
+    assert mode in {'Models', 'Model_Infos', 'Model_IDs', 'Metrics', 'Tasks'}
 
     if mode == 'Models':
         save_huggingface_models(save_dirpath, cache_dirpath)
@@ -56,4 +64,8 @@ def main(mode: Literal['Models', 'Model_Infos', 'Model_IDs', 'Metrics'], save_di
     
     if mode == 'Metrics':
         save_huggingface_metrics(save_dirpath)
+        return
+    
+    if mode == 'Tasks':
+        save_huggingface_tasks(save_dirpath)
         return

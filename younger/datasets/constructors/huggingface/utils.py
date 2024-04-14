@@ -28,19 +28,28 @@ from younger.datasets.utils.constants import READMEPattern
 from younger.datasets.constructors.utils import extract_table_related_metrics_from_readme, extract_digit_related_metrics_from_readme
 
 
-def huggingface_paginate(huggingface_path: str, params: dict, headers: dict) -> Iterable[dict]:
+huggingface_hub_api_path = 'https://huggingface.co/api'
+
+
+def get_huggingface_hub_api_response(path: str, params: dict | None = None, token: str | None = None) -> requests.Response:
+    session = requests.Session()
+    headers = utils.build_hf_headers(token=token)
+    response = session.get(path, params=params, headers=headers)
+    return response
+
+
+def huggingface_paginate(huggingface_hub_api_models_path: str, params: dict, token: str | None = None) -> Iterable[dict]:
     # [NOTE] The Code are modified based on the official Hugging Face Hub source codes. (https://github.com/huggingface/huggingface_hub/blob/main/src/huggingface_hub/utils/_pagination.py)
     # paginate is called by huggingface_hub.HfApi.list_models();
 
-    session = requests.Session()
-    response = session.get(huggingface_path, params=params, headers=headers)
+    response = get_huggingface_hub_api_response(huggingface_hub_api_models_path, params=params, token=token)
     yield from response.json()
 
     # Follow pages
     # Next link already contains query params
     next_page_path = response.links.get("next", {}).get("url")
     while next_page_path is not None:
-        response = session.get(next_page_path, headers=headers)
+        response = get_huggingface_hub_api_response(next_page_path, token=token)
         yield from response.json()
         next_page_path = response.links.get("next", {}).get("url")
 
@@ -56,7 +65,7 @@ def get_huggingface_model_infos(
 ) -> Iterable[dict[str, Any]]:
     # [NOTE] The Code are modified based on the official Hugging Face Hub source codes. (https://github.com/huggingface/huggingface_hub/blob/main/src/huggingface_hub/hf_api.py [Method: list_models])
 
-    huggingface_path = 'https://huggingface.co/api/models'
+    huggingface_hub_api_models_path = f'{huggingface_hub_api_path}/models'
     params = dict()
     # The filter_list is should be a tuple that contain multiple str, each str can be a identifier about library, language, task, tags, but not model_name and author.
     if filter_list is not None:
@@ -77,9 +86,7 @@ def get_huggingface_model_infos(
     if config:
         params['config'] = config
 
-    headers = utils.build_hf_headers(token=token)
-
-    huggingface_model_infos = huggingface_paginate(huggingface_path, params=params, headers=headers)
+    huggingface_model_infos = huggingface_paginate(huggingface_hub_api_models_path, params=params, token=token)
 
     if limit is not None:
         huggingface_model_infos = itertools.islice(huggingface_model_infos, limit)
@@ -100,10 +107,7 @@ def get_huggingface_model_readmes(model_ids: list[str], ignore_errors: bool = Fa
 
 
 def get_huggingface_model_info(model_id: str, token: str | None = None) -> dict[str, Any]:
-    huggingface_path = 'https://huggingface.co/api/models'
-    headers = utils.build_hf_headers(token=token)
-    session = requests.Session()
-    response = session.get(f"{huggingface_path}/{model_id}", headers=headers)
+    response = get_huggingface_hub_api_response(f"{huggingface_hub_api_path}/models/{model_id}", token=token)
     return response.json()
 
 
@@ -122,15 +126,42 @@ def get_huggingface_model_readme(model_id: str, hf_file_system: HfFileSystem) ->
             raise error
     else:
         logger.info(f"REPO: {model_id}. No README.md, skip.")
+        raise FileNotFoundError
 
 
-def get_huggingface_model_ids(library: str | None = None):
+def get_huggingface_model_ids(library: str | None = None) -> list[str]:
     filter_list = [library] if library else None
     model_infos = get_huggingface_model_infos(filter_list=filter_list, full=True, config=True)
     model_ids = list()
     for model_info in model_infos:
         model_ids.append(model_info['id'])
     return model_ids
+
+
+def get_huggingface_tasks(token: str | None = None) -> dict[str, dict[str, str]]:
+    huggingface_hub_api_tasks_path = f'{huggingface_hub_api_path}/tasks'
+    response = get_huggingface_hub_api_response(huggingface_hub_api_tasks_path, token=token)
+    tasks = {task: {'id': details['id'], 'label': details['label']} for task, details in response.json().items()}
+    return tasks
+
+
+def get_huggingface_model_card_data(model_id, hf_file_system: HfFileSystem) -> ModelCardData:
+    readme = get_huggingface_model_readme(model_id, hf_file_system)
+    return get_huggingface_model_card_data_from_readme(readme)
+
+
+def get_huggingface_model_card_data_from_readme(readme: str) -> ModelCardData:
+    try:
+        return ModelCard(readme, ignore_metadata_errors=True).data
+    except ScannerError as error:
+        logger.error(f' !!! Return Empty Card !!! Format of YAML at the Begin of README File Maybe Wrong. Error: {error}')
+        raise error
+    except ValueError as error:
+        logger.error(f' !!! YAML ValueError !!! Format of YAML at the Begin of README File Maybe Wrong. Error: {error}')
+        raise error
+    except Exception as error:
+        logger.error(f' !!! Unknow ModelCard Parse Error !!! Format of YAML at the Begin of README File Maybe Wrong. Error: {error}')
+        raise error
 
 
 def remove_card_related_from_readme(readme: str) -> str:
@@ -150,17 +181,8 @@ def extract_candidate_metrics_from_readme(readme: str) -> dict[str, dict[str, An
     candidate_metrics = dict()
 
     card_related = dict()
-    try:
-        card_data: ModelCardData = ModelCard(readme, ignore_metadata_errors=True).data
-    except ScannerError as error:
-        logger.error(f' !!! Return Empty Card !!! Format of YAML at the Begin of README File Maybe Wrong. Error: {error}')
-        raise error
-    except ValueError as error:
-        logger.error(f' !!! YAML ValueError !!! Format of YAML at the Begin of README File Maybe Wrong. Error: {error}')
-        raise error
-    except Exception as error:
-        logger.error(f' !!! Unknow ModelCard Parse Error !!! Format of YAML at the Begin of README File Maybe Wrong. Error: {error}')
-        raise error
+
+    card_data = get_huggingface_model_card_data_from_readme(readme)
 
     card_related['datasets'] = card_data.datasets if card_data.datasets else list()
     card_related['metrics'] = card_data.metrics if card_data.metrics else list()

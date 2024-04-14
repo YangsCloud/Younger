@@ -15,6 +15,7 @@ import pathlib
 from typing import Literal
 
 from optimum.exporters.onnx import main_export
+from huggingface_hub import HfFileSystem
 from huggingface_hub.utils._errors import RepositoryNotFoundError
 
 from younger.commons.io import load_json
@@ -23,12 +24,14 @@ from younger.commons.logging import logger
 from younger.datasets.modules import Instance
 
 from younger.datasets.constructors.utils import convert_bytes, get_instance_dirname
-from younger.datasets.constructors.huggingface.utils import infer_model_size, clean_default_cache_repo, clean_specify_cache_repo
+from younger.datasets.constructors.huggingface.utils import infer_model_size, clean_default_cache_repo, clean_specify_cache_repo, get_huggingface_model_readme, get_huggingface_model_card_data_from_readme
+from younger.datasets.constructors.huggingface.annotations import get_heuristic_annotations
 
 
 def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_filepath: pathlib.Path, device: Literal['cpu', 'cuda'] = 'cpu', threshold: int | None = None):
     assert device in {'cpu', 'cuda'}
 
+    hf_file_system = HfFileSystem()
     huggingface_cache_dirpath = cache_dirpath.joinpath('HuggingFace')
     convert_cache_dirpath = cache_dirpath.joinpath('Convert')
 
@@ -53,8 +56,8 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
         except RepositoryNotFoundError as error:
             logger.error(f'Model ID = {model_id}: Skip! Maybe Deleted By Author - {error}')
         except Exception as error:
-            logger.error(f'Model ID = {model_id}: Conversion Error - {error} ')
-
+            logger.error(f'Model ID = {model_id}: Conversion Error - {error}')
+        
         logger.info(f'     Infered Repo Size = {convert_bytes(infered_model_size)}')
 
         onnx_model_filenames = list()
@@ -63,16 +66,25 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
                 onnx_model_filenames.append(filename)
         logger.info(f' ^ - Converted To ONNX: Got {len(onnx_model_filenames)} ONNX Models.')
 
+        readme = None
+        labels = None
+        try:
+            readme = get_huggingface_model_readme(model_id, hf_file_system)
+            card_data = get_huggingface_model_card_data_from_readme(readme)
+            labels = get_heuristic_annotations(model_id, card_data)
+        except:
+            logger.error(f'Skip Label For Model ID = {model_id}: Error Occur While Extracting Model Card - {error}')
+
         for convert_index, onnx_model_filename in enumerate(onnx_model_filenames, start=1):
             onnx_model_filepath = convert_cache_dirpath.joinpath(onnx_model_filename)
             logger.info(f'      > Converting ONNX -> NetworkX: ONNX Filepath - {onnx_model_filepath}')
             try:
-                instance = Instance(model=onnx_model_filepath, labels=dict(model_source='HuggingFace', model_name=model_id, onnx_model_filename=onnx_model_filename))
+                instance = Instance(model=onnx_model_filepath, labels=dict(model_source='HuggingFace', model_name=model_id, onnx_model_filename=onnx_model_filename, readme=readme, labels=labels))
                 instance_save_dirpath = save_dirpath.joinpath(get_instance_dirname(model_id.replace('/', '--HF--'), 'HuggingFace', onnx_model_filename))
                 instance.save(instance_save_dirpath)
                 logger.info(f'        No.{convert_index} Instance Saved: {instance_save_dirpath}')
             except Exception as error:
-                logger.error(f'Error! [ONNX -> NetworkX Error] OR [Dataset Insertion Error] - {error}')
+                logger.error(f'Error! [ONNX -> NetworkX Error] OR [Instance Saving Error] - {error}')
                 pass
             logger.info(f'      > Converted.')
         
