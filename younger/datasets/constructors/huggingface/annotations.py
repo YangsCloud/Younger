@@ -118,8 +118,6 @@ def parse_dataset(dataset_names: list[str]) -> tuple[str, Literal['train', 'vali
         detected_dataset_names.append(detect_dataset(string))
         strings.append(string)
 
-    print(detected_dataset_names)
-    print(strings)
     detected_dataset_name = max(detected_dataset_names, key=len)
     string = max(strings, key=len)
 
