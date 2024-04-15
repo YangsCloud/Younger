@@ -17,14 +17,16 @@ from younger.datasets.constructors.huggingface.utils import infer_model_size, cl
 from huggingface_hub import HfFileSystem
 
 hf_file_system = HfFileSystem()
-# model_id = 'tarek23/flan-t5-qg-tarek-test-SQUAD'
+model_id = 'tarek23/flan-t5-qg-tarek-test-SQUAD'
 # model_id = 'aXhyra/presentation_sentiment_1234567'
 # model_id = 'Harveenchadha/hindi_base_wav2vec2'
-model_id = 'azizbarank/mbert-finetuned-azerbaijani-ner'
-model_id = 'DataGuard/pali-7B-v0.16.4-awq'
-model_id = 'it5/it5-efficient-small-el32-news-summarization'
-model_id = 'TheBloke/bloomz-176B-GPTQ'
-model_id = 'Aditya3107/wav2vec2-Irish-common-voice-Fleurs-living-audio-300m'
+# model_id = 'azizbarank/mbert-finetuned-azerbaijani-ner'
+# model_id = 'DataGuard/pali-7B-v0.16.4-awq'
+# model_id = 'it5/it5-efficient-small-el32-news-summarization'
+# model_id = 'TheBloke/bloomz-176B-GPTQ'
+# model_id = 'Aditya3107/wav2vec2-Irish-common-voice-Fleurs-living-audio-300m'
+model_id = 'thomas0104/whisper_medium_nan_tw'
+model_id = 'bigscience/bloom-3b'
 readme = get_huggingface_model_readme(model_id, hf_file_system)
 cd = get_huggingface_model_card_data_from_readme(readme)
 labels = get_heuristic_annotations(model_id, cd)
