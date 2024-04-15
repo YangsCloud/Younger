@@ -32,6 +32,9 @@ def split_camel_case_string(camel_case_string: str) -> list[str]:
 
 def split_string_info(string: str) -> tuple[str, list[str], list[str]]:
     # 1. Split All Camel Case Words:
+    # It is a difficult method to achieve both sides
+    # Metrics like CIDEr, ROUGEl, HellaSwag, BERTScore, ...
+    # Will Be Split
     words = list()
     for word in string.split():
         words.extend(split_camel_case_string(word))
@@ -134,7 +137,9 @@ def parse_metric(metric_name: str):
     #     if switch_word.startswith('+'):
     #         switch_words.append(switch_word)
     # print(switch_words)
+    print(mn_string)
     mn_string = detect_metric(mn_string)
+    print(mn_string)
 
     return mn_string
 

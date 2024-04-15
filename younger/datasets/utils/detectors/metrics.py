@@ -261,7 +261,7 @@ def detect_basic_metric(string: str) -> str:
         basic_metric = 'qwk'
 
     # Loss
-    elif 'cider' in string.split():
+    elif 'cide r' in string or 'cider' in string.split():
         basic_metric = 'cider'
     elif 'perplexity' in string or 'ppl' in string.split():
         basic_metric = 'perplexity'
@@ -295,13 +295,13 @@ def detect_basic_metric(string: str) -> str:
 
 def detect_special_metric(string: str) -> str:
     special_metric = ''
-    if 'bertscore' in string:
+    if 'bertscore' in string or 'bert score' in string:
         special_metric = 'bertscore'
-    elif 'moverscore' in string:
+    elif 'moverscore' in string or 'mover score' in string:
         special_metric = 'moverscore'
-    elif 'frugalscore' in string:
+    elif 'frugalscore' in string or 'frugal score' in string:
         special_metric = 'frugalscore'
-    elif 'brierscore' in string:
+    elif 'brierscore' in string or 'brier score' in string:
         special_metric = 'brierscore'
     elif 'poseval' in string:
         special_metric = 'poseval'
