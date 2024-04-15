@@ -31,6 +31,11 @@ score_0_oo_metrics = set([
     'step',
     'epoch',
     'len',
+    'psnr', # [0, 60]
+    'is',
+    'fid',
+    'clip',
+    'clipsim',
 ])
 
 
@@ -46,8 +51,14 @@ score_0_1_metrics = set([
     'ap',
     'mc',
     'mrr',
+    'win',
+    'wip',
+    'wil',
+    'mer',
     'pass',
     'ndcg',
+    'mare',
+    'ssim',
 
     'meteor',
     'sacrebleu',
@@ -184,7 +195,16 @@ def detect_basic_metric(string: str) -> str:
     basic_metric = ''
     if 'f1' in string or 'f1-score' in string or 'f1score' in string or 'f1 score' in string or 'f-measure' in string:
         basic_metric = 'f1'
-
+    elif 'gsm8k' in string:
+        basic_metric = 'accuracy'
+    elif 'hellaswag' in string or 'winogrande' in string or 'mmlu' in string or 'piqa' in string or 'arc' in string or 'ai 2 reasoning challenge' in string:
+        basic_metric = 'accuracy'
+    elif 'truthfulqa' in string:
+        basic_metric = 'mc'
+    elif 'alpacaeval' in string:
+        basic_metric = 'win'
+    elif 'common voice' in string:
+        basic_metric = 'wer'
     elif 'em' in string.split() or 'exact' in string or 'exact match' in string or 'exact-match' in string:
         basic_metric = 'em'
     elif 'map' in string.split():
@@ -193,6 +213,8 @@ def detect_basic_metric(string: str) -> str:
         basic_metric = 'ap'
     elif 'mc' in string.split():
         basic_metric = 'mc'
+    elif 'win' in string.split():
+        basic_metric = 'win'
     elif 'sari' in string.split():
         basic_metric = 'sari'
     elif 'mrr' in string.split():
@@ -201,6 +223,26 @@ def detect_basic_metric(string: str) -> str:
         basic_metric = 'pass'
     elif 'ndcg' in string.split():
         basic_metric = 'ndcg'
+    elif 'wil' in string.split(): # Word Information Lost
+        basic_metric = 'wil'
+    elif 'wip' in string.split(): # Word Information Preserved
+        basic_metric = 'wip'
+    elif 'mer' in string.split(): # Match Error Rate
+        basic_metric = 'mer'
+    elif 'is' in string.split(): # Inception Score
+        basic_metric = 'is'
+    elif 'mare' in string.split(): # Mean Absolute Relative Error
+        basic_metric = 'mare'
+    elif 'fid' in string.split(): # Frechet Inception Distance
+        basic_metric = 'fid'
+    elif 'psnr' in string.split(): # Peak Signal-to-Noise Ratio
+        basic_metric = 'psnr'
+    elif 'ssim' in string.split(): # Structural Similarity Index Measure
+        basic_metric = 'ssim'
+    elif 'clip' in string.split():
+        basic_metric = 'clip'
+    elif 'clipsim' in string.split(): # CLIP similarity
+        basic_metric = 'clipsim'
 
     # Text
     elif 'meteor' in string:
@@ -261,7 +303,7 @@ def detect_basic_metric(string: str) -> str:
         basic_metric = 'qwk'
 
     # Loss
-    elif 'cide r' in string or 'cider' in string.split():
+    elif 'cider' in string.split():
         basic_metric = 'cider'
     elif 'perplexity' in string or 'ppl' in string.split():
         basic_metric = 'perplexity'

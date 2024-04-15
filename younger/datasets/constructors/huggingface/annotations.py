@@ -18,7 +18,7 @@ from huggingface_hub import ModelCardData
 
 from younger.commons.logging import logger
 
-from younger.datasets.utils.detectors import detect_program_langs, detect_natural_langs, detect_metric, detect_split, normalize_metric_value
+from younger.datasets.utils.detectors import detect_task, detect_dataset, detect_split, detect_metric, normalize_metric_value
 
 
 def get_detailed_string(strings: list[str]) -> str:
@@ -30,118 +30,133 @@ def split_camel_case_string(camel_case_string: str) -> list[str]:
     return [word.group(0) for word in words]
 
 
-def split_string_info(string: str) -> tuple[str, list[str], list[str]]:
-    # 1. Split All Camel Case Words:
-    # It is a difficult method to achieve both sides
-    # Metrics like CIDEr, ROUGEl, HellaSwag, BERTScore, ...
-    # Will Be Split
-    words = list()
-    for word in string.split():
-        words.extend(split_camel_case_string(word))
-    string = ' '.join(words)
+def clean_string(string: str, split_camel_case: bool = False) -> str:
+    # 0. Remove Sub-string Before The First '/'
+    string = re.sub(r'^.*?/', '', string, 1)
 
-    # 2. Get All Note Strings Wrapped in Parentheses:
+    # 1. Split All Camel Case Words:
+    #   Metrics like CIDEr, ROUGEl, HellaSwag, BERTScore, ... Can Be Splited
+    #   So we set split_camel_case to be False
+    if split_camel_case:
+        words = list()
+        for word in string.split():
+            words.extend(split_camel_case_string(word))
+            string = ' '.join(words)
+
+    # 3. Remove All Parentheses:
     note_pattern = r'\(([^()]*?)\)'
     note_strings = [note_string.lower() for note_string in re.findall(note_pattern, string)]
+    string = re.sub(note_pattern, '', string)
+    strings = [string] + note_strings
+    tidy_string = ' '.join(strings)
 
-    # 3. Remove Note Strings
-    tidy_string = re.sub(note_pattern, '', string)
+    # 3. Convert '_at_' -> '@':
+    tidy_string = tidy_string.replace('_at_', '@')
 
-    # 4. Clean All '_' Chars:
+    # 4. Clean All '_'  '-'  ':'  '.'  ',' Chars:
     tidy_string = tidy_string.replace('_', ' ')
+    tidy_string = tidy_string.replace('-', ' ')
+    tidy_string = tidy_string.replace(':', ' ')
+    tidy_string = tidy_string.replace('.', ' ')
+    tidy_string = tidy_string.replace(',', ' ')
 
-    # 5. Clean Additional Spaces:
+    # 5. Seperate Version String & Clean Version Indicator 'v': (Like: 'v1.1.1' -> '1.1.1', 'article500v0' -> 'article500 0')
+    tidy_string = re.sub(r'([^a-zA-Z]+)v(\d+)', r'\1 \2', tidy_string)
+
+    # 6. Seperate Number Right Next To A Word [Except 'QAv1', 'LMv1', 'f1'...]: (Like: 'article500' -> 'article 500', 'p2p' -> 'p2p', '4K' -> '4K')
+    # tidy_string = re.sub(r'(\D+)(\d+)(?=\s|$)', r'\1 \2', tidy_string)
+    tidy_string = re.sub(r'(\D+[A-Z])?([v]?@?f?\d+)|([a-zA-Z]+)([v]?@?f?\d+)', r'\1\3 \2\4', tidy_string)
+
+    # 7. Clean Additional Spaces:
     tidy_string = ' '.join(tidy_string.split())
 
-    # 6. Lower All Chars:
+    # 8. Lower All Chars:
     tidy_string = tidy_string.lower()
 
-    # 7. Split Main String and Other Strings:
-    tidy_strings = tidy_string.split(' - ')
-    main_string = tidy_strings[0]
-    if len(tidy_strings) > 1:
-        other_strings = tidy_strings[1:]
-    else:
-        other_strings = list()
-
-    return main_string, note_strings, other_strings
-
-def initial_parse_string(string: str) -> str:
-    main_string, note_strings, other_strings = split_string_info(string)
-    strings = main_string.split() + note_strings + other_strings
-    string = ' '.join(strings)
-    return string
+    return tidy_string
 
 
 def parse_task(task_name: str) -> str:
-    tn_string = initial_parse_string(task_name)
+    string = clean_string(task_name)
 
-    tn_string = tn_string.replace('-', ' ')
-    tn_string = tn_string.replace('label', ' class ')
-    tn_string = tn_string.replace('multiple', ' multi ')
-    tn_string = tn_string.replace('qa', ' question answering ')
+    # Correcting Spelling Errors
+    string = string.replace('label', ' class ')
+    string = string.replace('multiple', ' multi ')
+    string = string.replace('qa', ' question answering ')
+    string = string.replace('lenguage', 'language')
+    string = string.replace('modelling', 'modeling')
+    string = string.replace('classfication', 'classification')
 
-    return tn_string
+    detected_task_name = detect_task(string)
+    if detected_task_name == '':
+        detected_task_name = string
+    else:
+        detected_task_name = detected_task_name
+
+    detected_task_name = ' '.join(detected_task_name.split())
+    return detected_task_name
 
 
-def parse_dataset(dataset_name: str) -> tuple[str, Literal['train', 'valid', 'test']]:
-    dn_string = initial_parse_string(dataset_name)
+def parse_dataset(dataset_names: list[str]) -> tuple[str, Literal['train', 'valid', 'test']]:
+    detected_dataset_names = list()
+    strings = list()
+    for dataset_name in dataset_names:
+        string = clean_string(dataset_name)
 
-    if 'humaneval' in dn_string:
-        # No More Process
-        plangs = detect_program_langs(dn_string)
+        # Correcting Spelling Errors
+        string = string.replace('common voices', 'common voice')
+        string = string.replace('commonvoice', 'common voice')
+        string = string.replace('invoices', 'invoice')
+        string = string.replace('humanneval', 'humaneval')
 
-    elif 'voice' in dn_string:
-        # Not Search All Version String, Just Replace All '.' with ' '
-        # re.findall(r'(v?\d+(?:\.\d+)*)')
-        dn_string = dn_string.replace('-', ' ')
-        dn_string = dn_string.replace('.', ' ')
-        dn_string = dn_string.replace(',', ' ')
+        # Extract Shots: '1 shot'
+        shot_pattern = r'\b((?:\d+~)?(?:\d+) shot)\b'
+        shots = ' '.join(re.findall(shot_pattern, string))
 
-        dn_string = dn_string.replace('common voices', 'common voice')
-        dn_string = dn_string.replace('commonvoice', 'common voice')
-        dn_string = dn_string.replace('invoices', 'invoice')
+        string = re.sub(shot_pattern, '', string)
 
-        # Only Preserve Natural Languages & Versions
-        # Ignore '+' Case:
-        #   Example: 'vivos + commonvoice'
-        if (
-            (dn_string.startswith('common voice')) or
-            (len(dn_string.split('/')) == 2 and dn_string.split('/')[1].startswith('common voice')) or
-            ('common voice' in dn_string and dn_string.startswith('mozilla')
-        )):
-            if len(dn_string.split('/')) >= 2:
-                dn_string = dn_string.split('/')[1]
-            nlangs = detect_natural_langs(dn_string)
-            nums = [num for num in re.findall(r'v?(\d+(?:\.\d+)*)', dn_string) if int(num)]
-            dn_strings = ['common voice'] + nums + nlangs
-            dn_string = ' '.join(dn_strings)
+        detected_dataset_names.append(detect_dataset(string))
+        strings.append(string)
 
-    dn_string = dn_string.replace('/', ' ')
+    print(detected_dataset_names)
+    print(strings)
+    detected_dataset_name = max(detected_dataset_names, key=len)
+    string = max(strings, key=len)
 
-    return dn_string
+    if detected_dataset_name == '':
+        strings = [string, shots]
+        detected_dataset_name = ' '.join(strings)
+    else:
+        strings = [detected_dataset_name, shots]
+        detected_dataset_name = ' '.join(strings)
+
+    detected_dataset_name = ' '.join(detected_dataset_name.split())
+    return detected_dataset_name
 
 
 def parse_metric(metric_name: str):
-    mn_string = initial_parse_string(metric_name)
-    mn_string = mn_string.replace('language model', 'lm')
-    mn_string = mn_string.replace('no ', '-')
-    mn_string = mn_string.replace('w/o ', '-')
-    mn_string = mn_string.replace('without ', '-')
-    mn_string = mn_string.replace('with ', '+')
-    mn_string = mn_string.replace('using ', '+')
-    mn_string = mn_string.replace(' at ', ' @')
+    string = clean_string(metric_name)
+    string = string.replace(' language model', ' lm')
+    string = string.replace(' no ', ' -')
+    string = string.replace(' w/o ', ' -')
+    string = string.replace(' without ', ' -')
+    string = string.replace(' with ', ' +')
+    string = string.replace(' using ', ' +')
     # Skip +/- words
     # switch_words = list()
     # for switch_word in mn_string.split():
     #     if switch_word.startswith('+'):
     #         switch_words.append(switch_word)
     # print(switch_words)
-    print(mn_string)
-    mn_string = detect_metric(mn_string)
-    print(mn_string)
+    detected_metric_name = detect_metric(string)
 
-    return mn_string
+    if detected_metric_name == '':
+        detected_metric_name = string
+    else:
+        detected_metric_name = detected_metric_name
+
+    detected_metric_name = ' '.join(detected_metric_name.split())
+    return detected_metric_name
 
 
 def get_heuristic_annotations(model_id: str, model_card_data: ModelCardData) -> list[dict[str, dict[str, str]]] | None:
@@ -165,7 +180,7 @@ def get_heuristic_annotations(model_id: str, model_card_data: ModelCardData) -> 
             hf_metric_value = eval_result.metric_value
             hf_metric_name = eval_result.metric_name if eval_result.metric_name else ''
 
-            # A. For a Task Name: In most cases there should not be a 'Note Strings'
+            # A. For a Task Name: In most cases there should not be a 'Note Strings' i.e. '(note string)s'
             #    If there is, It MIGHT Be a Dataset Name!
             #    So, if any word in dataset_name or dataset_type appear in task_name -> task_name indicates a dataset_name & task_type definitely is a task_type.
             # B. Besides, dataset_type <> task_type, if they are equal, there MUST BE an error occur when authors write the ModelCard.
@@ -207,19 +222,13 @@ def get_heuristic_annotations(model_id: str, model_card_data: ModelCardData) -> 
                 logger.warn(f'Annotations Maybe Wrong. Try To Fix: Model ID {model_id}')
                 hf_task_name, hf_dataset_name = hf_task_type, hf_task_name
                 hf_task_type, hf_dataset_type = '', ''
+            elif hf_dataset_name in hf_task_type:
+                hf_task_type, hf_dataset_type = hf_dataset_type, hf_task_type
             else:
-                _, tn_notes, _ = split_string_info(hf_task_name)
-                if len(tn_notes):
-                    dn_main, dn_notes, dn_others = split_string_info(hf_dataset_name)
-                    dt_main, dt_notes, dt_others = split_string_info(hf_dataset_type)
-                    words = (
-                        [word for word in dn_main.split()] +
-                        [word for dn_note in dn_notes for word in dn_note.split()] +
-                        [word for dn_other in dn_others for word in dn_other.split()] +
-                        [word for word in dt_main.split()] +
-                        [word for dt_note in dt_notes for word in dt_note.split()] +
-                        [word for dt_other in dt_others for word in dt_other.split()]
-                    )
+                if re.search(r'\(([^()]*?)\)', hf_task_name):
+                    dn_string = clean_string(hf_dataset_name)
+                    dt_string = clean_string(hf_dataset_type)
+                    words = [word for word in dn_string.split()] + [word for word in dt_string.split()]
                     for word in words:
                         if word in hf_task_name:
                             logger.warn(f'Annotations Maybe Wrong. Try To Fix: Model ID {model_id}')
@@ -227,16 +236,19 @@ def get_heuristic_annotations(model_id: str, model_card_data: ModelCardData) -> 
                             hf_task_type, hf_dataset_type = '', ''
                             break
 
-            detailed_task_name = get_detailed_string([hf_task_name, hf_task_type])
-            task_name = parse_task(detailed_task_name)
+            # detailed_task_name = get_detailed_string([hf_task_name, hf_task_type])
+            # task_name = parse_task(detailed_task_name)
+            task_name = get_detailed_string([parse_task(hf_task_name), parse_task(hf_task_type)])
 
             detailed_dataset_name = get_detailed_string([hf_dataset_type, hf_dataset_name])
-            dataset_name = parse_dataset(detailed_dataset_name)
+            # dataset_name = parse_dataset(detailed_dataset_name)
+            dataset_name = parse_dataset([hf_dataset_name, hf_dataset_type])
 
             split = detect_split(hf_dataset_split)
             if split == '':
-                split = detect_split(initial_parse_string(detailed_dataset_name))
+                split = detect_split(clean_string(detailed_dataset_name))
 
+            detailed_metric_name = get_detailed_string([hf_metric_type, hf_metric_name])
             if isinstance(hf_metric_value, list):
                 logger.warn(f'Skip. Useless Metric Value. Model ID {model_id} {eval_result.metric_value}')
                 metric_info = None
@@ -249,15 +261,15 @@ def get_heuristic_annotations(model_id: str, model_card_data: ModelCardData) -> 
                     else:
                         if isinstance(v, dict):
                             for kk, vv in v.items():
-                                candidate_hf_metrics.append((k+' '+kk, str(vv)))
+                                candidate_hf_metrics.append((detailed_metric_name+' '+k+' '+kk, str(vv)))
                         else:
-                            candidate_hf_metrics.append((k, str(v)))
+                            candidate_hf_metrics.append((detailed_metric_name+' '+k, str(v)))
             else:
-                candidate_hf_metrics = [(get_detailed_string([hf_metric_type, hf_metric_name]), str(hf_metric_value))]
+                candidate_hf_metrics = [(detailed_metric_name, str(hf_metric_value))]
 
             for mname, mvalue in candidate_hf_metrics:
                 if split == '':
-                    split = detect_split(initial_parse_string(mname))
+                    split = detect_split(clean_string(mname))
 
                 parsed_mname = parse_metric(mname)
                 parsed_mname = mname if parsed_mname == '' else parsed_mname

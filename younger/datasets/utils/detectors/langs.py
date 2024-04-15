@@ -54,6 +54,8 @@ def detect_program_langs(string: str):
 def detect_natural_langs(string: str):
     nlangs = list()
     for word in string.split():
+        if word.isdigit():
+            continue
         if len(word) == 2:
             kwargs = {'alpha_2': word}
         elif len(word) == 3:
