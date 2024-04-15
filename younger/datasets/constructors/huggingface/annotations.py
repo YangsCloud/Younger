@@ -65,7 +65,7 @@ def clean_string(string: str, split_camel_case: bool = False) -> str:
 
     # 6. Seperate Number Right Next To A Word [Except 'QAv1', 'LMv1', 'f1'...]: (Like: 'article500' -> 'article 500', 'p2p' -> 'p2p', '4K' -> '4K')
     # tidy_string = re.sub(r'(\D+)(\d+)(?=\s|$)', r'\1 \2', tidy_string)
-    tidy_string = re.sub(r'(\D+[A-Z])?([v]?@?f?\d+)|([a-zA-Z]+)([v]?@?f?\d+)', r'\1\3 \2\4', tidy_string)
+    tidy_string = re.sub(r'(\D+[A-Z])?([v]?@?[fF]?\d+)|([a-zA-Z]+)([v]?@?[fF]?\d+)', r'\1\3 \2\4', tidy_string)
 
     # 7. Clean Additional Spaces:
     tidy_string = ' '.join(tidy_string.split())
@@ -77,6 +77,7 @@ def clean_string(string: str, split_camel_case: bool = False) -> str:
 
 
 def parse_task(task_name: str) -> str:
+    task_name = task_name.replace('text2text', 'text-to-text')
     string = clean_string(task_name)
 
     # Correcting Spelling Errors
@@ -133,6 +134,8 @@ def parse_dataset(dataset_names: list[str]) -> tuple[str, Literal['train', 'vali
 
 
 def parse_metric(metric_name: str):
+    if metric_name.lower() in {'n/a', 'n.a.'}:
+        return ''
     string = clean_string(metric_name)
     string = string.replace(' language model', ' lm')
     string = string.replace(' no ', ' -')
@@ -224,14 +227,14 @@ def get_heuristic_annotations(model_id: str, model_card_data: ModelCardData) -> 
                 hf_task_type, hf_dataset_type = hf_dataset_type, hf_task_type
             else:
                 if re.search(r'\(([^()]*?)\)', hf_task_name):
-                    dn_string = clean_string(hf_dataset_name)
-                    dt_string = clean_string(hf_dataset_type)
-                    words = [word for word in dn_string.split()] + [word for word in dt_string.split()]
+                    # dn_string = clean_string(hf_dataset_name)
+                    # dt_string = clean_string(hf_dataset_type)
+                    words = [word for word in hf_dataset_name.split()] + [word for word in hf_dataset_type.split()]
                     for word in words:
                         if word in hf_task_name:
                             logger.warn(f'Annotations Maybe Wrong. Try To Fix: Model ID {model_id}')
-                            hf_task_name, hf_dataset_name = hf_task_type, hf_task_name
-                            hf_task_type, hf_dataset_type = '', ''
+                            hf_task_type, hf_dataset_name = hf_dataset_type, hf_task_name
+                            hf_task_name, hf_dataset_type = '', ''
                             break
 
             # detailed_task_name = get_detailed_string([hf_task_name, hf_task_type])
@@ -241,6 +244,9 @@ def get_heuristic_annotations(model_id: str, model_card_data: ModelCardData) -> 
             detailed_dataset_name = get_detailed_string([hf_dataset_type, hf_dataset_name])
             # dataset_name = parse_dataset(detailed_dataset_name)
             dataset_name = parse_dataset([hf_dataset_name, hf_dataset_type])
+
+            if dataset_name in task_name:
+                dataset_name, task_name = task_name, dataset_name
 
             split = detect_split(hf_dataset_split)
             if split == '':
