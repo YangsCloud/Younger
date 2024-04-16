@@ -139,7 +139,6 @@ def parse_metric(metric_names: list[str]) -> str:
     detected_metric_names = list()
     strings = list()
     for metric_name in metric_names:
-        print(metric_name)
         if metric_name.lower() in {'n/a', 'n.a.'}:
             detected_metric_names.append('')
             strings.append('n/a')
