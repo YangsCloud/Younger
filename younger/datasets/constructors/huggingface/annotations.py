@@ -65,7 +65,7 @@ def clean_string(string: str, split_camel_case: bool = False) -> str:
 
     # 6. Seperate Number Right Next To A Word [Except 'QAv1', 'LMv1', 'f1'...]: (Like: 'article500' -> 'article 500', 'p2p' -> 'p2p', '4K' -> '4K')
     # tidy_string = re.sub(r'(\D+)(\d+)(?=\s|$)', r'\1 \2', tidy_string)
-    tidy_string = re.sub(r'(\D+[A-Z])?([v]?@?[fF]?\d+)|([a-zA-Z]+)([v]?@?[fF]?\d+)', r'\1\3 \2\4', tidy_string)
+    tidy_string = re.sub(r'(\w+[A-Z])?([v]?@?[fF]?\d+)|([a-zA-Z]+)([v]?@?[fF]?\d+)', r'\1\3 \2\4', tidy_string)
 
     # 7. Clean Additional Spaces:
     tidy_string = ' '.join(tidy_string.split())
@@ -87,6 +87,8 @@ def parse_task(task_name: str) -> str:
     string = string.replace('lenguage', 'language')
     string = string.replace('modelling', 'modeling')
     string = string.replace('classfication', 'classification')
+    string = string.replace('choices', 'choice')
+    string = string.replace('abstractitive', 'abstractive')
 
     detected_task_name = detect_task(string)
     if detected_task_name == '':
@@ -133,23 +135,35 @@ def parse_dataset(dataset_names: list[str]) -> tuple[str, Literal['train', 'vali
     return detected_dataset_name
 
 
-def parse_metric(metric_name: str):
-    if metric_name.lower() in {'n/a', 'n.a.'}:
-        return ''
-    string = clean_string(metric_name)
-    string = string.replace(' language model', ' lm')
-    string = string.replace(' no ', ' -')
-    string = string.replace(' w/o ', ' -')
-    string = string.replace(' without ', ' -')
-    string = string.replace(' with ', ' +')
-    string = string.replace(' using ', ' +')
-    # Skip +/- words
-    # switch_words = list()
-    # for switch_word in mn_string.split():
-    #     if switch_word.startswith('+'):
-    #         switch_words.append(switch_word)
-    # print(switch_words)
-    detected_metric_name = detect_metric(string)
+def parse_metric(metric_names: list[str]) -> str:
+    detected_metric_names = list()
+    strings = list()
+    for metric_name in metric_names:
+        print(metric_name)
+        if metric_name.lower() in {'n/a', 'n.a.'}:
+            detected_metric_names.append('')
+            strings.append('n/a')
+            continue
+        string = clean_string(metric_name)
+        string = re.sub(r'\blanguage model\b', 'lm', string)
+        string = re.sub(r'\bno\b', '-', string)
+        string = re.sub(r'\bw/o\b', '-', string)
+        string = re.sub(r'\bwithout\b', '-', string)
+        string = re.sub(r'\bwith\b', '+', string)
+        string = re.sub(r'\busing\b', '+', string)
+        string = re.sub(r'\bavg\b', 'mean', string)
+        string = re.sub(r'\baverage\b', 'mean', string)
+        # Skip +/- words
+        # switch_words = list()
+        # for switch_word in mn_string.split():
+        #     if switch_word.startswith('+'):
+        #         switch_words.append(switch_word)
+        # print(switch_words)
+        detected_metric_names.append(detect_metric(string))
+        strings.append(string)
+
+    detected_metric_name = max(detected_metric_names, key=len)
+    string = max(strings, key=len)
 
     if detected_metric_name == '':
         detected_metric_name = string
@@ -252,7 +266,6 @@ def get_heuristic_annotations(model_id: str, model_card_data: ModelCardData) -> 
             if split == '':
                 split = detect_split(clean_string(detailed_dataset_name))
 
-            detailed_metric_name = get_detailed_string([hf_metric_type, hf_metric_name])
             if isinstance(hf_metric_value, list):
                 logger.warn(f'Skip. Useless Metric Value. Model ID {model_id} {eval_result.metric_value}')
                 metric_info = None
@@ -265,18 +278,18 @@ def get_heuristic_annotations(model_id: str, model_card_data: ModelCardData) -> 
                     else:
                         if isinstance(v, dict):
                             for kk, vv in v.items():
-                                candidate_hf_metrics.append((detailed_metric_name+' '+k+' '+kk, str(vv)))
+                                candidate_hf_metrics.append(([hf_metric_type+' '+k+' '+kk, hf_metric_name+' '+k+' '+kk], str(vv)))
                         else:
-                            candidate_hf_metrics.append((detailed_metric_name+' '+k, str(v)))
+                            candidate_hf_metrics.append(([hf_metric_type+' '+k, hf_metric_name+' '+k], str(v)))
             else:
-                candidate_hf_metrics = [(detailed_metric_name, str(hf_metric_value))]
+                candidate_hf_metrics = [([hf_metric_type, hf_metric_name], str(hf_metric_value))]
 
-            for mname, mvalue in candidate_hf_metrics:
+            for mnames, mvalue in candidate_hf_metrics:
                 if split == '':
-                    split = detect_split(clean_string(mname))
+                    split = detect_split(clean_string(get_detailed_string(mnames)))
 
-                parsed_mname = parse_metric(mname)
-                parsed_mname = mname if parsed_mname == '' else parsed_mname
+                parsed_mname = parse_metric(mnames)
+                # parsed_mname = mname if parsed_mname == '' else parsed_mname
                 norm_mvalue = normalize_metric_value(parsed_mname, mvalue)
                 metric_info = (parsed_mname, norm_mvalue)
 

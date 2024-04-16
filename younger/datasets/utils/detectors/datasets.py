@@ -208,8 +208,8 @@ def detect_dataset(string: str) -> str:
     if any_pattern_exists(string, ['reccon']):
         datasets.append('reccon')
 
-    if any_pattern_exists(string, ['sam']):
-        datasets.append('sam')
+    if any_pattern_exists(string, ['sam', 'samsum']):
+        datasets.append('samsum')
 
     if any_pattern_exists(string, ['superglue', 'super glue']):
         datasets.append('superglue')

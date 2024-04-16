@@ -256,15 +256,16 @@ def detect_basic_metric(string: str) -> str:
         else:
             basic_metric = 'bleu4'
     elif 'rouge' in string or 'rogue' in string:
-        match = re.search(r'(?:rouge|rogue)(?:-?([1,2]|l))?(?:-?(sum))?', string) # May Match Like '1' and 'sum', will be fixed in future.
-        if match.group(1):
-            if match.group(2):
-                basic_metric = 'rouge-' + match.group(1) + match.group(2)
+        match = re.search(r'(?:rouge|rogue)(?:[\s]?([1,2]|l))(?:[\s]?(sum))?', string) # May Match Like '1' and 'sum', will be fixed in future.
+        if match:
+            if match.group(1):
+                if match.group(2):
+                    basic_metric = 'rouge-' + match.group(1) + match.group(2)
+                else:
+                    basic_metric = 'rouge-' + match.group(1)
             else:
-                basic_metric = 'rouge-' + match.group(1)
-        else:
-            basic_metric = 'rouge-1'
-    elif 'chrf' in string or 'chr-f' in string:
+                basic_metric = 'rouge-1'
+    elif 'chrf' in string or 'chr f' in string:
         basic_metric = 'chrf'
     
     elif 'ser' in string.split():

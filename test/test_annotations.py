@@ -18,19 +18,24 @@ from huggingface_hub import HfFileSystem
 
 hf_file_system = HfFileSystem()
 model_ids = [
-  'tarek23/flan-t5-qg-tarek-test-SQUAD',
-  'aXhyra/presentation_sentiment_1234567',
-  'Harveenchadha/hindi_base_wav2vec2',
-  'azizbarank/mbert-finetuned-azerbaijani-ner',
-  'DataGuard/pali-7B-v0.16.4-awq',
-  'it5/it5-efficient-small-el32-news-summarization',
-  'TheBloke/bloomz-176B-GPTQ',
-  'thomas0104/whisper_medium_nan_tw',
-  'bigscience/bloom-3b',
-  'BallisticAI/Ballistic-CodeLlama-34B-v1-AWQ',
-  'sysresearch101/t5-large-xsum-cnn-8-2',
-  'research-backup/relbert-roberta-large-triplet-e-semeval2012',
-  'Aditya3107/wav2vec2-Irish-common-voice-Fleurs-living-audio-300m',
+  # 'lmqg/t5-small-squad-qg',
+  # 'luisotorres/bart-finetuned-samsum',
+  'lamhieu/ghost-7b-v0.9.0',
+  # 'Zabihin/Symptom_to_Diagnosis',
+  # 'Jzuluaga/bert-base-ner-atc-en-atco2-1h',
+  # 'tarek23/flan-t5-qg-tarek-test-SQUAD',
+  # 'aXhyra/presentation_sentiment_1234567',
+  # 'Harveenchadha/hindi_base_wav2vec2',
+  # 'azizbarank/mbert-finetuned-azerbaijani-ner',
+  # 'DataGuard/pali-7B-v0.16.4-awq',
+  # 'it5/it5-efficient-small-el32-news-summarization',
+  # 'TheBloke/bloomz-176B-GPTQ',
+  # 'thomas0104/whisper_medium_nan_tw',
+  # 'bigscience/bloom-3b',
+  # 'BallisticAI/Ballistic-CodeLlama-34B-v1-AWQ',
+  # 'sysresearch101/t5-large-xsum-cnn-8-2',
+  # 'research-backup/relbert-roberta-large-triplet-e-semeval2012',
+  # 'Aditya3107/wav2vec2-Irish-common-voice-Fleurs-living-audio-300m',
 ]
 for model_id in model_ids:
   print(f'-------------------------{model_id}----------------------------')
