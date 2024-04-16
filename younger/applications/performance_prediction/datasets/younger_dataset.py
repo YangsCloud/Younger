@@ -127,7 +127,7 @@ class YoungerDataset(Dataset):
         assert total_instances == self.indicators[self.split_name]['instances_number']
 
     def sub_process(self, sub_process_paths: list[pathlib.Path]):
-        for index, sub_process_path in tqdm.tqdm(enumerate(sub_process_paths), total=len(sub_process_paths)):
+        for sub_process_path in sub_process_paths:
             if sub_process_path.is_dir():
                 instance = Instance()
                 instance.load(sub_process_path)
@@ -135,18 +135,25 @@ class YoungerDataset(Dataset):
                 x = self.__class__.get_x(instance, self.node_dict, self.x_feature_get_type)
                 edge_index = self.__class__.get_edge_index(instance)
                 if self.mode == 'Supervised':
-                    y = self.__class__.get_y(instance, self.metric_dict, self.y_feature_get_type)
-                    data = Data(x=x, edge_index=edge_index, y=y)
+                    ys = self.__class__.get_y(instance, self.metric_dict, self.y_feature_get_type)
+                    for y in ys:
+                        data = Data(x=x, edge_index=edge_index, y=y)
+                    if self.pre_filter is not None and not self.pre_filter(data):
+                        continue
+
+                    if self.pre_transform is not None:
+                        data = self.pre_transform(data)
+                    torch.save(data, osp.join(self.processed_dir, self.split_name, f'data_{index}.pt'))
+
                 else:
                     data = Data(x=x, edge_index=edge_index)
+                    if self.pre_filter is not None and not self.pre_filter(data):
+                        continue
 
-                if self.pre_filter is not None and not self.pre_filter(data):
-                    continue
+                    if self.pre_transform is not None:
+                        data = self.pre_transform(data)
 
-                if self.pre_transform is not None:
-                    data = self.pre_transform(data)
-
-                torch.save(data, osp.join(self.processed_dir, self.split_name, f'data_{index}.pt'))
+                    torch.save(data, osp.join(self.processed_dir, self.split_name, f'data_{index}.pt'))
 
     def process(self):
         fs.makedirs(osp.join(self.processed_dir, self.split_name), exist_ok=True)
@@ -187,7 +194,7 @@ class YoungerDataset(Dataset):
         node_feature = list()
         if x_feature_get_type == 'OnlyOp':
             if node_type == 'operator':
-                node_feature.append(node_dict.get(node_labels['operator']['op_type'], node_dict[YoungerDatasetNodeType.UNK]))
+                node_feature.append(node_dict.get(str(node_labels['operator']), node_dict[YoungerDatasetNodeType.UNK]))
             else:
                 node_feature.append(node_dict[getattr(YoungerDatasetNodeType, node_type.upper())])
         return node_feature
@@ -213,10 +220,10 @@ class YoungerDataset(Dataset):
     def get_graph_feature(cls, graph_labels: dict, metric_dict: dict[str, int], y_feature_get_type: Literal['OnlyMt']) -> list:
         #task_name = graph_labels['task_name']
         #dataset_name = graph_labels['dataset_name']
-        metrics: list[dict] = graph_labels['metrics']
+        metrics: list[dict] = graph_labels['labels']
 
         if y_feature_get_type == 'OnlyMt':
-            graph_feature = [metric_dict[clean_metric(metrics[0]['metric_type'], metrics[0]['metric_name'])], float(metrics[0]['metric_value'])]
+            graph_feature = [metric_dict[metrics[0]['metric_type'], metrics[0]['metric_name']], float(metrics[0]['metric_value'])]
 
         return graph_feature
 
