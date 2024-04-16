@@ -193,7 +193,7 @@ def detect_basic_metric_adj(string) -> str:
 
 def detect_basic_metric(string: str) -> str:
     basic_metric = ''
-    if 'f1' in string or 'f1-score' in string or 'f1score' in string or 'f1 score' in string or 'f-measure' in string:
+    if 'f1' in string or 'f1score' in string or 'f1 score' in string or 'f measure' in string:
         basic_metric = 'f1'
     elif 'gsm8k' in string:
         basic_metric = 'accuracy'
@@ -205,7 +205,7 @@ def detect_basic_metric(string: str) -> str:
         basic_metric = 'win'
     elif 'common voice' in string:
         basic_metric = 'wer'
-    elif 'em' in string.split() or 'exact' in string or 'exact match' in string or 'exact-match' in string:
+    elif 'em' in string.split() or 'exact' in string or 'exact match' in string:
         basic_metric = 'em'
     elif 'map' in string.split():
         basic_metric = 'map'
@@ -250,13 +250,13 @@ def detect_basic_metric(string: str) -> str:
     elif 'sacrebleu' in string:
         basic_metric = 'sacrebleu'
     elif 'bleu' in string:
-        match = re.search(r'bleu-?([1,2,3,4]?)', string)
+        match = re.search(r'bleu[\s]?([1,2,3,4]?)', string)
         if match.group(1):
             basic_metric = 'bleu' + match.group(1)
         else:
             basic_metric = 'bleu4'
     elif 'rouge' in string or 'rogue' in string:
-        match = re.search(r'(?:rouge|rogue)(?:[\s]?([1,2]|l))(?:[\s]?(sum))?', string) # May Match Like '1' and 'sum', will be fixed in future.
+        match = re.search(r'(?:rouge|rogue)(?:[\s]?([1,2]|l))?(?:[\s]?(sum))?', string) # May Match Like '1' and 'sum', will be fixed in future.
         if match:
             if match.group(1):
                 if match.group(2):

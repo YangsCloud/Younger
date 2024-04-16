@@ -252,6 +252,8 @@ def detect_dataset(string: str) -> str:
     if has_n_langs:
         n_langs = list()
         is_show = set()
+        if 'wmt' in datasets:
+            string = re.sub(r'wmt', '', string)
         for n_lang in detect_natural_langs(string):
             if n_lang in is_show:
                 continue
@@ -276,7 +278,7 @@ def detect_dataset(string: str) -> str:
     if has_numbers:
         numbers = [number for number in re.findall(r'v?(\d+(?:\.\d+)*)', string) if number.isdigit()]
         numbers = [] if len(numbers) == 1 and numbers[0] == '1' else numbers # Ignore '1' If There's Only A '1'.
-        if 'wmt' in datasets or 'wnut' in datasets:
+        if 'wmt' in datasets or 'wnut' in datasets or 'conll' in datasets:
             numbers = [number[-2:] for number in numbers] # 2016 -> 16
     else:
         numbers = list()
