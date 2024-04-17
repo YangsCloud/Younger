@@ -203,3 +203,8 @@ class Network(object):
         simplified_graph.append(flatted_graph)
 
         return simplified_graph
+
+    @classmethod
+    def flatten(cls, graph: networkx.DiGraph) -> networkx.DiGraph:
+        # TODO: All Sub-Graphs Should Be Flattened
+        pass
