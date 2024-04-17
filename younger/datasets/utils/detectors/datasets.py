@@ -11,7 +11,6 @@
 
 
 import re
-import locale
 
 from younger.datasets.utils.detectors import detect_program_langs, detect_natural_langs
 
@@ -37,7 +36,7 @@ def detect_dataset(string: str) -> str:
     if any_pattern_exists(string, ['common voice']):
         datasets.append('common-voice')
         has_numbers = True
-    
+
     if any_pattern_exists(string, ['arc', 'ai2 arc', 'arc challenge', 'ai2 reasoning challenge']):
         datasets.append('ai2-reasoning-challenge')
 

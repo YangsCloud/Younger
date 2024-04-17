@@ -10,7 +10,6 @@
 # LICENSE file in the root directory of this source tree.
 
 
-import tqdm
 import torch
 import pathlib
 import multiprocessing
@@ -170,7 +169,7 @@ class YoungerDataset(Dataset):
 
     def get(self, index: int):
         return torch.load(osp.join(self.processed_dir, self.split_name, f'data_{index}.pt'))
-    
+
     @classmethod
     def load_node_dict(cls, node_dict_filepath: str) -> dict[str, int]:
         onnx_operators: list[str] = load_json(node_dict_filepath)

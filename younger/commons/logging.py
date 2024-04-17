@@ -48,7 +48,7 @@ def get_logger(name: str) -> logging.Logger:
     except Exception as error:
         naive_log(f'Logger: \'{name}\' Does Not Exist. Now Using Default Logger [Only Show On Console]. Warn: {error}')
         logger = set_logger(name, mode='console')
-    
+
     return logger
 
 

@@ -47,7 +47,7 @@ def detect_program_langs(string: str):
                 word = 'csharp'
             if word in program_langs:
                 plangs.append(word)
-    
+
     return plangs
 
 

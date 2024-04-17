@@ -267,7 +267,7 @@ def detect_basic_metric(string: str) -> str:
                 basic_metric = 'rouge-1'
     elif 'chrf' in string or 'chr f' in string:
         basic_metric = 'chrf'
-    
+
     elif 'ser' in string.split():
         basic_metric = 'ser'
     elif 'wer' in string.split():
@@ -419,19 +419,19 @@ def normalize_metric_value(metric: str, metric_value: str) -> float:
         origin_metric_value = float(origin_metric_value) / base
     except:
         logger.warn(f'Ignored. Invalid Metric Value String, Check It! \'{metric_value}\'')
-    
+
     if isinstance(origin_metric_value, float):
         if len(metric.split()) >= 2:
             main_metric, maybe_main_metric = metric.split()[0], metric.split()[1]
         else:
             main_metric, maybe_main_metric = metric, ''
-        
+
         if main_metric in score_special_metrics:
             if maybe_main_metric in score_special_metrics[main_metric]:
                 main_metric, maybe_main_metric = maybe_main_metric, ''
             else:
                 main_metric, maybe_main_metric = score_special_metrics[main_metric][0], ''
-        
+
         if main_metric in score_0_100_metrics or maybe_main_metric in score_0_100_metrics:
             normalized_metric_value = origin_metric_value / 100
 

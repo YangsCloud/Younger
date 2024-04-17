@@ -87,7 +87,7 @@ def load_pickle(filepath: pathlib.Path) -> object:
     try:
         with open(filepath, 'rb') as file:
             safety_data = pickle.load(file)
-        
+
         assert hash_bytes(safety_data['main']) == safety_data['checksum']
         serializable_object = pickle.loads(safety_data['main'])
     except Exception as e:
@@ -112,4 +112,3 @@ def save_pickle(serializable_object: object, filepath: pathlib.Path) -> None:
         sys.exit(1)
 
     return
-

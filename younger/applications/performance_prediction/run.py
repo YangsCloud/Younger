@@ -251,7 +251,7 @@ def exact_train(
             device_descriptor,
             is_distribution
         )
-    
+
     if is_distribution:
         distributed.destroy_process_group()
 
@@ -340,7 +340,7 @@ def train(
 
     node_dict = train_dataset.node_dict
     metric_dict = train_dataset.metric_dict
-    
+
     logger.info(f'    -> Node Dict Size: {len(node_dict)}')
     logger.info(f'    -> Metric Dict Size: {len(metric_dict)}')
     logger.info(f'    -> Dataset Split Sizes:')

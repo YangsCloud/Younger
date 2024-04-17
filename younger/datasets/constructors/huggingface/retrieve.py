@@ -57,15 +57,15 @@ def main(mode: Literal['Models', 'Model_Infos', 'Model_IDs', 'Metrics', 'Tasks']
     if mode == 'Models':
         save_huggingface_models(save_dirpath, cache_dirpath)
         return
-    
+
     if mode == 'Model_IDs':
         save_huggingface_model_ids(save_dirpath, library=kwargs['library'])
         return
-    
+
     if mode == 'Metrics':
         save_huggingface_metrics(save_dirpath)
         return
-    
+
     if mode == 'Tasks':
         save_huggingface_tasks(save_dirpath)
         return
