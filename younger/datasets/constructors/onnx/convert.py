@@ -16,6 +16,7 @@ from onnx import hub
 
 from younger.datasets.modules import Instance
 
+from younger.commons.io import delete_dir
 from younger.commons.logging import logger
 
 from younger.datasets.constructors.utils import get_instance_dirname
@@ -37,5 +38,5 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path):
         instance = Instance(model=onnx_model, labels=dict(model_source='ONNX', model_name=model_name, onnx_model_filename=onnx_model_filename))
         instance_save_dirpath = save_dirpath.joinpath(get_instance_dirname(model_name, 'ONNX', onnx_model_filename))
         instance.save(instance_save_dirpath)
+        delete_dir(cache_dirpath)
     logger.info(f'-> Instances Created.')
-
