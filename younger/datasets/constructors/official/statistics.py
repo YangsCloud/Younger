@@ -12,10 +12,12 @@
 
 import pathlib
 
+from younger.commons.logging import logger
+
 
 def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, tasks: list[str], datasets: list[str], splits: list[str], metrics: list[str]):
-    print(dataset_dirpath)
-    print(save_dirpath)
+    logger.info(f'{dataset_dirpath.absolute()}')
+    logger.info(f'{save_dirpath.name}')
     print(tasks)
     print(datasets)
     print(splits)
