@@ -36,6 +36,16 @@ def retrieve_run(arguments):
     pass
 
 
+def statistics_run(arguments):
+    update_logger(arguments)
+    dataset_dirpath = pathlib.Path(arguments.dataset_dirpath)
+    save_dirpath = pathlib.Path(arguments.save_dirpath)
+
+    from younger.datasets.constructors.official import statistics
+
+    statistics.main(dataset_dirpath, save_dirpath, arguments.tasks, arguments.datasets, arguments.splits, arguments.metrics)
+
+
 def convert_huggingface_run(arguments):
     update_logger(arguments)
     save_dirpath = pathlib.Path(arguments.save_dirpath)
@@ -102,13 +112,28 @@ def set_datasets_retrieve_arguments(parser: argparse.ArgumentParser):
     parser.set_defaults(run=retrieve_run)
 
 
+def set_datasets_statistics_arguments(parser: argparse.ArgumentParser):
+    parser.add_argument('--dataset-dirpath', type=str, default='.')
+    parser.add_argument('--save-dirpath', type=str, default='.')
+
+    parser.add_argument('--tasks', type=str, nargs='*', default=[])
+    parser.add_argument('--datasets', type=str, nargs='*', default=[])
+    parser.add_argument('--splits', type=str, nargs='*', default=['test'])
+    parser.add_argument('--metrics', type=str, nargs='*', default=['accuracy'])
+
+    parser.add_argument('--logging-filepath', type=str, default=None)
+    parser.set_defaults(run=statistics_run)
+
+
 def set_datasets_arguments(parser: argparse.ArgumentParser):
     subparser = parser.add_subparsers()
 
     convert_parser = subparser.add_parser('convert')
     retrieve_parser = subparser.add_parser('retrieve')
+    statistics_parser = subparser.add_parser('statistics')
 
     set_datasets_convert_arguments(convert_parser)
     set_datasets_retrieve_arguments(retrieve_parser)
+    set_datasets_statistics_arguments(statistics_parser)
 
     parser.set_defaults(run=run)
