@@ -9,105 +9,104 @@
 # This source code is licensed under the Apache-2.0 license found in the
 # LICENSE file in the root directory of this source tree.
 
-import json
-from tqdm import tqdm
-from younger.datasets.modules import Instance
+import onnx
 import pathlib
+import datetime
 import networkx
-from typing import Dict 
 import itertools
 
+from younger.commons.io import save_json
+from younger.commons.logging import logger
 
-instance_dir = pathlib.Path('/Users/zrsion/instances-0.0.1') # test
-save_dir = pathlib.Path('/Users/zrsion/instances_statistics') # test
+from younger.datasets.modules import Instance
 
-            
-def get_operators(nodes: networkx.DiGraph.nodes) -> Dict[str, int]:
-    operators_dict = dict()
-    for node in nodes(data = 'operator'):
-        if not node[1]: # node : e.g. ('589', None), node[1]==None , This will skip nodes with node_type == 'input' | 'output' | 'constant' | 'outer'
-            continue
-            
-        operator = str(node[1])
-        if operator not in operators_dict:
-            operators_dict[operator] = 1
+
+def statistics_graph(graph: networkx.DiGraph) -> tuple[dict[str, int], int, int]:
+    num_operators: dict[str, int] = dict()
+    num_node: int = graph.number_of_nodes()
+    num_edge: int = graph.number_of_edges()
+    num_sub: int = 0
+
+    for node_id in graph.nodes:
+        node_data = graph.nodes[node_id]
+        # For Operator Stats
+        if node_data['type'] == 'operator':
+            operator = str(node_data['operator'])
+            num_operators[operator] = num_operators.get(operator, 0) + 1
+            for attribute_key, attribute_value in node_data['attributes'].items():
+                if attribute_value['attr_type'] == onnx.defs.OpSchema.AttrType.GRAPHS:
+                    for sub_graph in attribute_value['value']:
+                        sub_num_operators, sub_num_node, sub_num_edge, sub_num_sub = statistics_graph(sub_graph)
+                        for sub_operator, sub_num_operator in sub_num_operators.items():
+                            num_operators[sub_operator] = num_operators.get(sub_operator, 0) + sub_num_operator
+                        num_node = num_node + sub_num_node
+                        num_edge = num_edge + sub_num_edge
+                        num_sub = num_sub + sub_num_sub + 1
+                elif attribute_value['attr_type'] == onnx.defs.OpSchema.AttrType.GRAPH:
+                    sub_num_operators, sub_num_edge = statistics_graph(sub_graph)
+                    for sub_operator, sub_num_operator in sub_num_operators.items():
+                        num_operators[sub_operator] = num_operators.get(sub_operator, 0) + sub_num_operator
+                    num_node = num_node + sub_num_node
+                    num_edge = num_edge + sub_num_edge
+                    num_sub = num_sub + sub_num_sub + 1
         else:
-            operators_dict[operator] += 1
-        
-    return operators_dict
+            num_node = num_node - 1
+            num_edge = num_edge - graph.degree(node_id)
+
+    return num_operators, num_node, num_edge, num_sub
 
 
-def generater_statistics(instance_dir: pathlib.Path, save_dir: pathlib.Path,
-                         tasks: list[str], datasets: list[str], splits: list[str], metrics: list[str]):
-    
-    combinations = list()
-    task_iter = tasks if tasks else ['']
-    dataset_iter = datasets if datasets else ['']
-    split_iter = splits if splits else ['']
-    metric_iter = metrics if metrics else ['']
+def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, tasks: list[str], datasets: list[str], splits: list[str], metrics: list[str]):
+    has_task_filters = len(tasks) != 0
+    has_dataset_filters = len(datasets) != 0
+    has_split_filters = len(splits) != 0
+    has_metric_filters = len(metrics) != 0
+    task_filters = tasks if has_task_filters else ['*']
+    dataset_filters = datasets if has_dataset_filters else ['*']
+    split_filters = splits if has_split_filters else ['*']
+    metric_filters = metrics if has_metric_filters else ['*']
 
-    for task, dataset, split, metric in itertools.product(task_iter, dataset_iter, split_iter, metric_iter):
-        combination = (task,) + (dataset,) + (split,) + (metric,)
-        combination = tuple(item for item in combination if item)
-        combinations.append(str(combination))
-    
-    final_dic = dict()
-    cnt = 0 # test
-    
-    instance_paths = list(instance_dir.iterdir())
-    for instance_path in tqdm(instance_paths):
-        instance = Instance()
-        instance.load(instance_path)
-        nodes = instance.network.graph.nodes
-        model_id = str(instance_path).rsplit("/", 1)[-1]
-        model_operators = get_operators(nodes)
-        
-        if cnt > 15: break # test
-        
-        if instance.labels:
+    statistics: dict[str, list] = dict()
+    for combined_filter in itertools.product(*[task_filters, dataset_filters, split_filters, metric_filters]):
+        statistics[str(combined_filter)] = list()
+
+    for path in dataset_dirpath.iterdir():
+        if path.is_dir():
+            instance = Instance()
+            try:
+                instance.load(path)
+            except:
+                logger.warn(f'The Path Is Not a Valid Instance Directory: {path.absolute}')
+                continue
+
+            model_name = path.name
+            graph_stats = statistics_graph(instance.network.graph)
+
             labels = instance.labels['labels']
-            
             if labels:
                 for label in labels:
-                    task = label['task'] if tasks else ''
-                    dataset = label['dataset'][0] if datasets else ''
-                    split = label['dataset'][1] if splits else ''
-                    metric = label['metric'][0] if metrics else ''
-                    value = label['metric'][1]
-                    
-                    combination = (task,) + (dataset,) + (split,) + (metric,)
-                    combination = str(tuple(item for item in combination if item))
-                    
-                    if combination in combinations:
-                        dic_to_add = dict()
-                        dic_to_add[model_id] = list()
-                        dic_to_add[model_id].extend([value, model_operators])
-                        if combination not in final_dic:
-                            final_dic[combination] = list()
-                        final_dic[combination].append(dic_to_add)
-                        cnt += 1 # test
-                        break
-    
-    save_file_name_suffix = "sta"
-    if tasks:
-        save_file_name_suffix += "_" + "tasks" 
-    if datasets:
-        save_file_name_suffix += "_" + "datasets" 
-    if splits:
-        save_file_name_suffix += "_" + "splits"
-    if metrics:
-        save_file_name_suffix += "_" + "metrics" 
-    save_file_name_suffix = save_file_name_suffix.strip("_") + ".json"
-    
-    with open(save_dir.joinpath(save_file_name_suffix), 'w') as f:
-        json.dump(final_dic, f, indent=4)
-    
-                
-if __name__ == '__main__':
+                    combined_pattern = str((
+                        label['task'] if has_task_filters else '*',
+                        label['dataset'][0] if has_dataset_filters else '*',
+                        label['dataset'][1] if has_split_filters else '*',
+                        label['metric'][0] if has_metric_filters else '*',
+                    ))
+                    metric_value = label['metric'][1]
+                    if combined_pattern in statistics:
+                        statistics[combined_pattern].append(dict(
+                            model_name = model_name,
+                            graph_stats = graph_stats,
+                            metric_value = metric_value
+                        ))
+            else:
+                combined_pattern = str(('*', '*', '*', '*'))
+                if combined_pattern in statistics:
+                    statistics[combined_pattern].append(dict(
+                        model_name = model_name,
+                        graph_stats = graph_stats
+                    ))
+        else:
+            continue
 
-    generater_statistics(instance_dir, save_dir, tasks=[], 
-                         datasets=[], splits=["test", "train"], metrics=["accuracy","f1","wer"])
-    
-    # generater_statistics(instance_dir, save_dir, tasks=[], 
-    #                      datasets=[], splits=[], metrics=[])
-
+    stats_filename = datetime.datetime.now().strftime('statistics_%Y-%m-%d_%H-%M-%S.json')
+    save_json(statistics, save_dirpath.joinpath(stats_filename))

@@ -50,6 +50,8 @@ class YoungerDataset(Dataset):
         assert osp.isfile(meta_filepath), f'Please Download The \'meta.json\' File Of A Specific Version Of The Younger Dataset From Official Website.'
 
         self.meta: dict[str, Any] = load_json(meta_filepath)
+        self.version: str = self.meta['version']
+        self.archive: str = self.meta['archive']
         self.instances: list[str] = self.meta['instances']
 
         super().__init__(root, transform, pre_transform, pre_filter, log, force_reload)
@@ -80,6 +82,7 @@ class YoungerDataset(Dataset):
 
     def download(self):
         # {self.raw_dir}/
+        archive_filepath = osp.join(self.root, self.archive)
         main_url = getattr(YoungerDatasetAddress, f'{self.split_name.upper()}')
         # {self.raw_dir}/{self.split_name}.tar.gz
         raw_dataset_tar_path = download_url(main_url, self.raw_dir)
