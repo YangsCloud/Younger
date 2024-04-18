@@ -10,11 +10,9 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import os
 import torch
-import pathlib
 import multiprocessing
-
-import os.path as osp
 
 from typing import Any, Callable, Literal
 from torch_geometric.io import fs
@@ -27,7 +25,7 @@ from younger.datasets.utils.constants import YoungerDatasetAddress, YoungerDatas
 
 
 def download_aux_file(aux_filepath, url, folder):
-    if osp.exists(aux_filepath):
+    if os.path.exists(aux_filepath):
         return aux_filepath
     else:
         return download_url(url, folder)
@@ -46,127 +44,115 @@ class YoungerDataset(Dataset):
     ):
         self.worker_number = worker_number
 
-        meta_filepath = osp.join(root, 'meta.json')
-        assert osp.isfile(meta_filepath), f'Please Download The \'meta.json\' File Of A Specific Version Of The Younger Dataset From Official Website.'
-
-        self.meta: dict[str, Any] = load_json(meta_filepath)
-        self.version: str = self.meta['version']
-        self.archive: str = self.meta['archive']
-        self.instances: list[str] = self.meta['instances']
+        meta_filepath = os.path.join(root, 'meta.json')
+        assert os.path.isfile(meta_filepath), f'Please Download The \'meta.json\' File Of A Specific Version Of The Younger Dataset From Official Website.'
+        self.meta = self.__class__.load_meta(meta_filepath)
 
         super().__init__(root, transform, pre_transform, pre_filter, log, force_reload)
 
     @property
     def raw_dir(self) -> str:
         name = f'younger_raw'
-        return osp.join(self.root, name)
+        return os.path.join(self.root, name)
 
     @property
     def processed_dir(self) -> str:
         name = f'younger_processed'
-        return osp.join(self.root, name)
+        return os.path.join(self.root, name)
 
     @property
     def raw_file_names(self):
-        return [instance for instance in self.instances]
+        return [instance_name for instance_name in self.instance_names]
 
     @property
     def processed_file_names(self):
-        return [f'{instance}.pt' for instance in self.instances]
+        return [f'{instance_name}.pt' for instance_name in self.instance_names]
 
     def len(self) -> int:
-        return len(self.instances)
+        return len(self.instance_names)
 
     def get(self, index: int):
-        return torch.load(f'{self.instances[index]}.pt')
+        return torch.load(os.path.join(self.processed_dir, f'{self.instance_names[index]}.pt'))
 
     def download(self):
-        # {self.raw_dir}/
-        archive_filepath = osp.join(self.root, self.archive)
-        main_url = getattr(YoungerDatasetAddress, f'{self.split_name.upper()}')
-        # {self.raw_dir}/{self.split_name}.tar.gz
-        raw_dataset_tar_path = download_url(main_url, self.raw_dir)
-        # {self.raw_dir}/{self.split_name}/
-        tar_extract(raw_dataset_tar_path, self.raw_dir)
+        archive_filepath = os.path.join(self.root, self.archive)
+        if not fs.exists(archive_filepath):
+            download_url(getattr(YoungerDatasetAddress, self.archive), self.root)
+        tar_extract(archive_filepath, self.raw_dir)
 
-        # {self.raw_dir}/{self.split_name}/
-        split_dirpath = osp.join(self.raw_dir, self.split_name)
-        # {self.raw_dir}/{self.split_name}/{tar_filename}
-        for tar_filename in self.indicators[self.split_name]['tar_filenames']:
-            # {self.raw_dir}/{self.split_name}/{instances_dirname}
-            tar_extract(osp.join(split_dirpath, tar_filename+'.tar.gz'), split_dirpath)
-        total_instances = 0
-        instances_dirpath = pathlib.Path(osp.join(split_dirpath, self.indicators[self.split_name]['instances_dirname']))
-        for path in instances_dirpath.iterdir():
-                if path.is_dir():
-                    total_instances += 1
-        assert total_instances == self.indicators[self.split_name]['instances_number']
-
-    def sub_process(self, sub_process_paths: list[pathlib.Path]):
-        for sub_process_path in sub_process_paths:
-            if sub_process_path.is_dir():
-                instance = Instance()
-                instance.load(sub_process_path)
-
-                x = self.__class__.get_x(instance, self.node_dict, self.x_feature_get_type)
-                edge_index = self.__class__.get_edge_index(instance)
-                if self.mode == 'Supervised':
-                    ys = self.__class__.get_y(instance, self.metric_dict, self.y_feature_get_type)
-                    for y in ys:
-                        data = Data(x=x, edge_index=edge_index, y=y)
-                    if self.pre_filter is not None and not self.pre_filter(data):
-                        continue
-
-                    if self.pre_transform is not None:
-                        data = self.pre_transform(data)
-                    torch.save(data, osp.join(self.processed_dir, self.split_name, f'data_{index}.pt'))
-
-                else:
-                    data = Data(x=x, edge_index=edge_index)
-                    if self.pre_filter is not None and not self.pre_filter(data):
-                        continue
-
-                    if self.pre_transform is not None:
-                        data = self.pre_transform(data)
-
-                    torch.save(data, osp.join(self.processed_dir, self.split_name, f'data_{index}.pt'))
+        for instance_name in self.instance_names:
+            assert fs.exists(os.path.join(self.raw_dir, instance_name))
 
     def process(self):
-        fs.makedirs(osp.join(self.processed_dir, self.split_name), exist_ok=True)
-        raw_instances_dirpath = pathlib.Path(osp.join(self.raw_dir, self.split_name, self.indicators[self.split_name]['instances_dirname']))
-        paths = list(raw_instances_dirpath.iterdir())
-        quotient, remainder = divmod(len(paths), self.worker_number)
-        step = quotient + (remainder != 0)
-        sub_process_paths = [paths[index: index+step] for index in range(0, len(paths), step)]
         with multiprocessing.Pool(self.worker_number) as pool:
-            pool.map(self.sub_process, sub_process_paths)
+            pool.map(self.process_instance, self.instance_names)
+
+    def process_instance(self, instance_name):
+        instance_dirpath = os.path.join(self.raw_dir, instance_name)
+        instance = Instance()
+        instance.load(instance_dirpath)
+
+        x = self.__class__.get_x(instance, self.meta, self.x_feature_get_type)
+        edge_index = self.__class__.get_edge_index(instance)
+        y = self.__class__.get_y(instance, self.meta, self.y_feature_get_type)
+
+        data = Data(x=x, edge_index=edge_index, y=y)
+        if self.pre_filter is not None and not self.pre_filter(data):
+            return
+
+        if self.pre_transform is not None:
+            data = self.pre_transform(data)
+        torch.save(data, os.path.join(self.processed_dir, f'{instance_name}.pt'))
 
     @classmethod
-    def load_node_dict(cls, node_dict_filepath: str) -> dict[str, int]:
-        onnx_operators: list[str] = load_json(node_dict_filepath)
-        node_types = [
+    def load_meta(cls, meta_filepath: str) -> dict[str, Any]:
+        loaded_meta: dict[str, Any] = load_json(meta_filepath)
+        meta: dict[str, Any] = dict()
+
+        meta['version'] = loaded_meta['version']
+        meta['archive'] = loaded_meta['archive']
+        meta['instance_names'] = loaded_meta['instance_names']
+
+
+        meta['i2o'] = [
             YoungerDatasetNodeType.UNK,
             YoungerDatasetNodeType.OUTER,
             YoungerDatasetNodeType.INPUT,
             YoungerDatasetNodeType.OUTPUT,
             YoungerDatasetNodeType.CONSTANT
-        ] + onnx_operators
-        return {node_type: index for index, node_type in enumerate(node_types)}
+        ] + loaded_meta['operators']
+
+        meta['i2t'] = loaded_meta['tasks']
+        meta['i2d'] = loaded_meta['datasets']
+        meta['i2s'] = loaded_meta['splits']
+        meta['i2m'] = loaded_meta['metrics']
+
+        meta['o2i'] = {operator: index for index, operator in meta['i2o']}
+
+        meta['t2i'] = {task: index for index, task in meta['i2t']}
+        meta['d2i'] = {dataset: index for index, dataset in meta['i2d']}
+        meta['s2i'] = {split: index for index, split in meta['i2s']}
+        meta['m2i'] = {metric: index for index, metric in meta['i2m']}
+
+        return meta
 
     @classmethod
-    def load_metric_dict(cls, metric_dict_filepath: str) -> dict[str, int]:
-        metrics: list[str] = load_json(metric_dict_filepath)
-        return {metric: index for index, metric in enumerate(metrics)}
+    def get_edge_index(cls, instance: Instance) -> torch.Tensor:
+        edges = list(instance.network.graph.edges)
+        src = [int(edge[0]) for edge in edges]
+        dst = [int(edge[1]) for edge in edges]
+        edge_index = torch.tensor([src, dst])
+        return edge_index
 
     @classmethod
-    def get_node_feature(cls, node_labels: dict, node_dict: dict[str, int], x_feature_get_type: Literal['OnlyOp']) -> list:
+    def get_node_feature(cls, node_labels: dict, meta: dict[str, Any], x_feature_get_type: Literal['OnlyOp']) -> list:
         node_type: str = node_labels['type']
         node_feature = list()
         if x_feature_get_type == 'OnlyOp':
             if node_type == 'operator':
-                node_feature.append(node_dict.get(str(node_labels['operator']), node_dict[YoungerDatasetNodeType.UNK]))
+                node_feature.append(meta['o2i'].get(str(node_labels['operator']), meta['o2i'][YoungerDatasetNodeType.UNK]))
             else:
-                node_feature.append(node_dict[getattr(YoungerDatasetNodeType, node_type.upper())])
+                node_feature.append(meta['o2i'][getattr(YoungerDatasetNodeType, node_type.upper())])
         return node_feature
 
     @classmethod
@@ -179,25 +165,19 @@ class YoungerDataset(Dataset):
         return torch.tensor(node_features)
 
     @classmethod
-    def get_edge_index(cls, instance: Instance) -> torch.Tensor:
-        edges = list(instance.network.graph.edges)
-        src = [int(edge[0]) for edge in edges]
-        dst = [int(edge[1]) for edge in edges]
-        edge_index = torch.tensor([src, dst])
-        return edge_index
-
-    @classmethod
-    def get_graph_feature(cls, graph_labels: dict, metric_dict: dict[str, int], y_feature_get_type: Literal['OnlyMt']) -> list:
-        #task_name = graph_labels['task_name']
-        #dataset_name = graph_labels['dataset_name']
-        metrics: list[dict] = graph_labels['labels']
+    def get_graph_feature(cls, graph_labels: dict, meta: dict[str, Any], y_feature_get_type: Literal['OnlyMt']) -> list:
+        task: str = graph_labels['labels']['task']
+        dataset: str = graph_labels['labels']['dataset'][0]
+        split: str = graph_labels['labels']['dataset'][1]
+        metric: str = graph_labels['labels']['metric'][0]
+        value: float = graph_labels['labels']['metric'][1]
 
         if y_feature_get_type == 'OnlyMt':
-            graph_feature = [metric_dict[metrics[0]['metric_type'], metrics[0]['metric_name']], float(metrics[0]['metric_value'])]
+            graph_feature = [meta['m2i'][metric], float(value)]
 
         return graph_feature
 
     @classmethod
-    def get_y(cls, instance: Instance, metric_dict: dict[str, int], y_feature_get_type: Literal['OnlyMt']) -> torch.Tensor:
-        graph_feature = cls.get_graph_feature(instance.labels, metric_dict, y_feature_get_type)
+    def get_y(cls, instance: Instance, meta: dict[str, Any], y_feature_get_type: Literal['OnlyMt']) -> torch.Tensor:
+        graph_feature = cls.get_graph_feature(instance.labels['labels'], meta, y_feature_get_type)
         return torch.tensor(graph_feature)
