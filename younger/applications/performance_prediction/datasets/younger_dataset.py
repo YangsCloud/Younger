@@ -16,7 +16,7 @@ import multiprocessing
 
 import os.path as osp
 
-from typing import Callable, Literal, Any
+from typing import Any, Callable, Literal
 from torch_geometric.io import fs
 from torch_geometric.data import Data, Dataset, download_url
 
@@ -24,7 +24,6 @@ from younger.commons.io import load_json, tar_extract
 
 from younger.datasets.modules import Instance
 from younger.datasets.utils.constants import YoungerDatasetAddress, YoungerDatasetNodeType
-from younger.datasets.utils.metric_cleaner import clean_metric
 
 
 def download_aux_file(aux_filepath, url, folder):
@@ -43,48 +42,17 @@ class YoungerDataset(Dataset):
         pre_filter: Callable | None = None,
         log: bool = True,
         force_reload: bool = False,
-        mode: Literal['Supervised', 'Unsupervised'] = 'Unsupervised',
-        split: Literal['Train', 'Valid', 'Test'] = 'Train',
-        x_feature_get_type: Literal['OnlyOp'] = 'OnlyOp',
-        y_feature_get_type: Literal['OnlyMt'] = 'OnlyMt',
         worker_number: int = 4,
     ):
-        assert mode in {'Supervised', 'Unsupervised'}, f'Dataset Mode Not Support - {mode}!'
-        assert split in {'Train', 'Valid', 'Test'}, f'Dataset Split Not Support - {split}!'
-
-        self.root = osp.expanduser(fs.normpath(root))
-
-        self.mode = mode
-        self.split = split
-        self.x_feature_get_type = x_feature_get_type
-        self.y_feature_get_type = y_feature_get_type
-
-        self.split_name = f'{self.mode}{f"_{self.split}" if self.mode == "Supervised" else ""}'
-
-        self.indicators_filename = 'indicators.json'
-        self.onnx_operators_filename = 'onnx_operators.json'
-        self.metrics_filename = 'metrics.json'
-
-        indicators_filepath = download_aux_file(osp.join(self.root, self.indicators_filename), YoungerDatasetAddress.INDICATORS, self.root)
-        self.indicators: dict[str, Any] = load_json(indicators_filepath)
-
-        onnx_operators_filepath = download_aux_file(osp.join(self.root, self.onnx_operators_filename), YoungerDatasetAddress.ONNX_OPERATORS, self.root)
-        self._node_dict = self.__class__.load_node_dict(onnx_operators_filepath)
-
-        metrics_filepath = download_aux_file(osp.join(self.root, self.metrics_filename), YoungerDatasetAddress.METRICS, self.root)
-        self._metric_dict = self.__class__.load_metric_dict(metrics_filepath)
-
         self.worker_number = worker_number
 
+        meta_filepath = osp.join(root, 'meta.json')
+        assert osp.isfile(meta_filepath), f'Please Download The \'meta.json\' File Of A Specific Version Of The Younger Dataset From Official Website.'
+
+        self.meta: dict[str, Any] = load_json(meta_filepath)
+        self.instances: list[str] = self.meta['instances']
+
         super().__init__(root, transform, pre_transform, pre_filter, log, force_reload)
-
-    @property
-    def node_dict(self) -> dict[str, int]:
-        return self._node_dict
-
-    @property
-    def metric_dict(self) -> dict[str, int]:
-        return self._metric_dict
 
     @property
     def raw_dir(self) -> str:
@@ -98,11 +66,17 @@ class YoungerDataset(Dataset):
 
     @property
     def raw_file_names(self):
-        return [self.split_name+'.tar.gz']
+        return [instance for instance in self.instances]
 
     @property
     def processed_file_names(self):
-        return [osp.join(self.split_name, f'data_{i}.pt') for i in range(self.indicators[self.split_name]['instances_number'])]
+        return [f'{instance}.pt' for instance in self.instances]
+
+    def len(self) -> int:
+        return len(self.instances)
+
+    def get(self, index: int):
+        return torch.load(f'{self.instances[index]}.pt')
 
     def download(self):
         # {self.raw_dir}/
@@ -163,12 +137,6 @@ class YoungerDataset(Dataset):
         sub_process_paths = [paths[index: index+step] for index in range(0, len(paths), step)]
         with multiprocessing.Pool(self.worker_number) as pool:
             pool.map(self.sub_process, sub_process_paths)
-
-    def len(self) -> int:
-        return len(self.processed_file_names)
-
-    def get(self, index: int):
-        return torch.load(osp.join(self.processed_dir, self.split_name, f'data_{index}.pt'))
 
     @classmethod
     def load_node_dict(cls, node_dict_filepath: str) -> dict[str, int]:
