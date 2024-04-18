@@ -49,10 +49,10 @@ def main():
 
     arguments = argument_parser.parse_args()
 
-    try:
-        arguments.run(arguments)
-    except Exception as error:
-        argument_parser.print_help()
+    #try:
+    arguments.run(arguments)
+    #except Exception as error:
+    #    argument_parser.print_help()
 
 
 if __name__ == '__main__':

@@ -43,7 +43,7 @@ def statistics_run(arguments):
 
     from younger.datasets.constructors.official import statistics
 
-    statistics.main(dataset_dirpath, save_dirpath, arguments.tasks, arguments.datasets, arguments.splits, arguments.metrics)
+    statistics.main(dataset_dirpath, save_dirpath, arguments.tasks, arguments.datasets, arguments.splits, arguments.metrics, arguments.worker_number)
 
 
 def convert_huggingface_run(arguments):
@@ -118,8 +118,10 @@ def set_datasets_statistics_arguments(parser: argparse.ArgumentParser):
 
     parser.add_argument('--tasks', type=str, nargs='*', default=[])
     parser.add_argument('--datasets', type=str, nargs='*', default=[])
-    parser.add_argument('--splits', type=str, nargs='*', default=['test'])
-    parser.add_argument('--metrics', type=str, nargs='*', default=['accuracy'])
+    parser.add_argument('--splits', type=str, nargs='*', default=[])
+    parser.add_argument('--metrics', type=str, nargs='*', default=[])
+
+    parser.add_argument('--worker-number', type=int, default=4)
 
     parser.add_argument('--logging-filepath', type=str, default=None)
     parser.set_defaults(run=statistics_run)

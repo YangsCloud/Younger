@@ -71,11 +71,11 @@ def load_json(filepath: pathlib.Path) -> object:
     return serializable_object
 
 
-def save_json(serializable_object: object, filepath: pathlib.Path) -> None:
+def save_json(serializable_object: object, filepath: pathlib.Path, indent: int | str | None = None) -> None:
     try:
         create_dir(filepath.parent)
         with open(filepath, 'w') as file:
-            json.dump(serializable_object, file)
+            json.dump(serializable_object, file, indent=indent)
     except Exception as e:
         logger.error(f'An Error occurred while writing serializable object into the \'json\' file: {str(e)}')
         sys.exit(1)
