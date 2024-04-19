@@ -23,40 +23,42 @@ from younger.commons.logging import logger
 from younger.datasets.modules import Instance
 
 
-def statistics_graph(graph: networkx.DiGraph) -> tuple[dict[str, int], int, int]:
-    num_operators: dict[str, int] = dict()
-    num_node: int = graph.number_of_nodes()
-    num_edge: int = graph.number_of_edges()
-    num_sub: int = 0
+def statistics_graph(graph: networkx.DiGraph) -> dict[str, dict[str, int] | int]:
+    graph_statistics = dict(
+        num_operators = dict(),
+        num_node = graph.number_of_nodes(),
+        num_edge = graph.number_of_edges(),
+        num_sub = 0,
+    )
 
     for node_id in graph.nodes:
         node_data = graph.nodes[node_id]
         # For Operator Stats
         if node_data['type'] == 'operator':
             operator = str(node_data['operator'])
-            num_operators[operator] = num_operators.get(operator, 0) + 1
+            graph_statistics['num_operators'][operator] = graph_statistics['num_operators'].get(operator, 0) + 1
             for attribute_key, attribute_value in node_data['attributes'].items():
                 if attribute_value['attr_type'] == onnx.defs.OpSchema.AttrType.GRAPHS:
                     for sub_graph in attribute_value['value']:
-                        sub_num_operators, sub_num_node, sub_num_edge, sub_num_sub = statistics_graph(sub_graph)
-                        for sub_operator, sub_num_operator in sub_num_operators.items():
-                            num_operators[sub_operator] = num_operators.get(sub_operator, 0) + sub_num_operator
-                        num_node = num_node + sub_num_node
-                        num_edge = num_edge + sub_num_edge
-                        num_sub = num_sub + sub_num_sub + 1
+                        sub_graph_statistics = statistics_graph(sub_graph)
+                        for sub_operator, sub_num_operator in sub_graph_statistics['num_operators'].items():
+                            graph_statistics['num_operators'][sub_operator] = graph_statistics['num_operators'].get(sub_operator, 0) + sub_num_operator
+                        graph_statistics['num_node'] = graph_statistics['num_node'] + sub_graph_statistics['num_node']
+                        graph_statistics['num_edge'] = graph_statistics['num_edge'] + sub_graph_statistics['sub_num_edge']
+                        graph_statistics['num_sub']  = graph_statistics['num_sub']  + sub_graph_statistics['sub_num_sub'] + 1
                 elif attribute_value['attr_type'] == onnx.defs.OpSchema.AttrType.GRAPH:
                     sub_graph = attribute_value['value']
-                    sub_num_operators, sub_num_node, sub_num_edge, sub_num_sub = statistics_graph(sub_graph)
-                    for sub_operator, sub_num_operator in sub_num_operators.items():
-                        num_operators[sub_operator] = num_operators.get(sub_operator, 0) + sub_num_operator
-                    num_node = num_node + sub_num_node
-                    num_edge = num_edge + sub_num_edge
-                    num_sub = num_sub + sub_num_sub + 1
+                    sub_graph_statistics = statistics_graph(sub_graph)
+                    for sub_operator, sub_num_operator in sub_graph_statistics['num_operators'].items():
+                        graph_statistics['num_operators'][sub_operator] = graph_statistics['num_operators'].get(sub_operator, 0) + sub_num_operator
+                    graph_statistics['num_node'] = graph_statistics['num_node'] + sub_graph_statistics['num_node']
+                    graph_statistics['num_edge'] = graph_statistics['num_edge'] + sub_graph_statistics['sub_num_edge']
+                    graph_statistics['num_sub']  = graph_statistics['num_sub']  + sub_graph_statistics['sub_num_sub'] + 1
         else:
-            num_node = num_node - 1
-            num_edge = num_edge - graph.degree(node_id)
+            graph_statistics['num_node'] = graph_statistics['num_node'] - 1
+            graph_statistics['num_edge'] = graph_statistics['num_edge'] - graph.degree(node_id)
 
-    return num_operators, num_node, num_edge, num_sub
+    return graph_statistics
 
 def statistics_instance(parameters: tuple[pathlib.Path, list]) -> tuple[dict[str, list], dict[str, int]]:
     path, combined_filters, has_task_filters, has_dataset_filters, has_split_filters, has_metric_filters = parameters

@@ -452,3 +452,30 @@ def normalize_metric_value(metric: str, metric_value: str) -> float:
             normalized_metric_value = origin_metric_value
 
     return normalized_metric_value
+
+
+def get_metric_theroy_range(metric: str) -> tuple[int | None, int | None]:
+    if len(metric.split()) >= 2:
+        main_metric, maybe_main_metric = metric.split()[0], metric.split()[1]
+    else:
+        main_metric, maybe_main_metric = metric, ''
+
+    if main_metric in score_special_metrics:
+        if maybe_main_metric in score_special_metrics[main_metric]:
+            main_metric, maybe_main_metric = maybe_main_metric, ''
+        else:
+            main_metric, maybe_main_metric = score_special_metrics[main_metric][0], ''
+
+    if main_metric in score_0_100_metrics or maybe_main_metric in score_0_100_metrics:
+        return (0, 100)
+
+    elif main_metric in score_0_oo_metrics or maybe_main_metric in score_0_oo_metrics:
+        return (0, None)
+
+    elif main_metric in score_n1_p1_metrics or maybe_main_metric in score_n1_p1_metrics:
+        return (-1, 1)
+
+    elif main_metric in score_0_1_metrics or maybe_main_metric in score_0_1_metrics:
+        return (0, 1)
+    else:
+        return (None, None)

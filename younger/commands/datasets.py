@@ -36,6 +36,22 @@ def retrieve_run(arguments):
     pass
 
 
+def split_run(arguments):
+    update_logger(arguments)
+    statistics_filepath = pathlib.Path(arguments.statistics_filepath)
+    dataset_dirpath = pathlib.Path(arguments.dataset_dirpath)
+    save_dirpath = pathlib.Path(arguments.save_dirpath)
+
+    from younger.datasets.constructors.official import statistics
+
+    statistics.main(
+        statistics_filepath, dataset_dirpath, save_dirpath,
+        arguments.version,
+        arguments.train_proportion, arguments.valid_proportion, arguments.test_proportion,
+        arguments.partition_number
+    )
+
+
 def statistics_run(arguments):
     update_logger(arguments)
     dataset_dirpath = pathlib.Path(arguments.dataset_dirpath)
@@ -112,8 +128,23 @@ def set_datasets_retrieve_arguments(parser: argparse.ArgumentParser):
     parser.set_defaults(run=retrieve_run)
 
 
+def set_datasets_split_arguments(parser: argparse.ArgumentParser):
+    parser.add_argument('--statistics-filepath', type=str, required=True)
+    parser.add_argument('--dataset-dirpath', type=str, required=True)
+    parser.add_argument('--save-dirpath', type=str, default='.')
+
+    parser.add_argument('--version', type=str, required=True)
+
+    parser.add_argument('--train-proportion', type=int, default=80)
+    parser.add_argument('--valid-proportion', type=int, default=10)
+    parser.add_argument('--test-proportion', type=int, default=10)
+
+    parser.add_argument('--logging-filepath', type=str, default=None)
+    parser.set_defaults(run=split_run)
+
+
 def set_datasets_statistics_arguments(parser: argparse.ArgumentParser):
-    parser.add_argument('--dataset-dirpath', type=str, default='.')
+    parser.add_argument('--dataset-dirpath', type=str, required=True)
     parser.add_argument('--save-dirpath', type=str, default='.')
 
     parser.add_argument('--tasks', type=str, nargs='*', default=[])
@@ -133,9 +164,11 @@ def set_datasets_arguments(parser: argparse.ArgumentParser):
     convert_parser = subparser.add_parser('convert')
     retrieve_parser = subparser.add_parser('retrieve')
     statistics_parser = subparser.add_parser('statistics')
+    split_parser = subparser.add_parser('split')
 
     set_datasets_convert_arguments(convert_parser)
     set_datasets_retrieve_arguments(retrieve_parser)
     set_datasets_statistics_arguments(statistics_parser)
+    set_datasets_split_arguments(split_parser)
 
     parser.set_defaults(run=run)

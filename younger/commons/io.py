@@ -41,23 +41,30 @@ def delete_dir(dirpath: pathlib.Path):
     os.rmdir(dirpath)
 
 
-def tar_archive(dirpath: pathlib.Path, archive_filepath: pathlib.Path, compress: bool = True):
+def tar_archive(ri: pathlib.Path | list[pathlib.Path], archive_filepath: pathlib.Path, compress: bool = True):
+    # ri - read in
     if compress:
         mode = 'w:gz'
     else:
         mode = 'w'
 
     with tarfile.open(archive_filepath, mode=mode, dereference=False) as tar:
-        tar.add(dirpath, arcname=os.path.basename(dirpath))
+        if isinstance(ri, list):
+            for path in ri:
+                tar.add(path, arcname=os.path.basename(path))
+        if isinstance(ri, pathlib.Path):
+            tar.add(ri, arcname=os.path.basename(ri))
 
-def tar_extract(archive_filepath: pathlib.Path, dirpath: pathlib.Path, compress: bool = True):
+
+def tar_extract(archive_filepath: pathlib.Path, wo: pathlib.Path, compress: bool = True):
+    # wo - write out
     if compress:
         mode = 'r:gz'
     else:
         mode = 'r'
 
     with tarfile.open(archive_filepath, mode=mode, dereference=False) as tar:
-        tar.extractall(dirpath)
+        tar.extractall(wo)
 
 
 def load_json(filepath: pathlib.Path) -> object:
