@@ -403,7 +403,7 @@ def detect_metric(string: str) -> str:
     return metric
 
 
-def normalize_metric_value(metric: str, metric_value: str) -> float:
+def normalize_metric_value(metric: str, metric_value: str, standardize: bool = False) -> float:
     normalized_metric_value = float('NaN')
     origin_metric_value = metric_value.strip()
     base = 1
@@ -421,31 +421,37 @@ def normalize_metric_value(metric: str, metric_value: str) -> float:
         logger.warn(f'Ignored. Invalid Metric Value String, Check It! \'{metric_value}\'')
 
     if isinstance(origin_metric_value, float):
-        if len(metric.split()) >= 2:
-            main_metric, maybe_main_metric = metric.split()[0], metric.split()[1]
-        else:
-            main_metric, maybe_main_metric = metric, ''
-
-        if main_metric in score_special_metrics:
-            if maybe_main_metric in score_special_metrics[main_metric]:
-                main_metric, maybe_main_metric = maybe_main_metric, ''
+        if standardize:
+            if len(metric.split()) >= 2:
+                main_metric, maybe_main_metric = metric.split()[0], metric.split()[1]
             else:
-                main_metric, maybe_main_metric = score_special_metrics[main_metric][0], ''
+                main_metric, maybe_main_metric = metric, ''
 
-        if main_metric in score_0_100_metrics or maybe_main_metric in score_0_100_metrics:
-            normalized_metric_value = origin_metric_value / 100
+            if main_metric in score_special_metrics:
+                if maybe_main_metric in score_special_metrics[main_metric]:
+                    main_metric, maybe_main_metric = maybe_main_metric, ''
+                else:
+                    main_metric, maybe_main_metric = score_special_metrics[main_metric][0], ''
 
-        elif main_metric in score_0_oo_metrics or maybe_main_metric in score_0_oo_metrics:
-            # normalized_metric_value = origin_metric_value / (origin_metric_value + 1)
-            # Let Application Choose How to Norm Too Large Number
-            normalized_metric_value = origin_metric_value
+            if (
+                main_metric in score_0_100_metrics or
+                maybe_main_metric in score_0_100_metrics or
+                main_metric in score_0_1_metrics or
+                maybe_main_metric in score_0_1_metrics
+            ):
+                if 1 < origin_metric_value and origin_metric_value <= 100:
+                    normalized_metric_value = origin_metric_value / 100
+                else:
+                    normalized_metric_value = origin_metric_value
 
-        elif main_metric in score_n1_p1_metrics or maybe_main_metric in score_n1_p1_metrics:
-            normalized_metric_value = (origin_metric_value + 1) / 2
+            elif main_metric in score_0_oo_metrics or maybe_main_metric in score_0_oo_metrics:
+                # normalized_metric_value = origin_metric_value / (origin_metric_value + 1)
+                # Let Application Choose How to Norm Too Large Number
+                normalized_metric_value = origin_metric_value
 
-        elif main_metric in score_0_1_metrics or maybe_main_metric in score_0_1_metrics:
-            if 1 < origin_metric_value and origin_metric_value <= 100:
-                normalized_metric_value = origin_metric_value / 100
+            elif main_metric in score_n1_p1_metrics or maybe_main_metric in score_n1_p1_metrics:
+                normalized_metric_value = (origin_metric_value + 1) / 2
+
             else:
                 normalized_metric_value = origin_metric_value
         else:
