@@ -60,13 +60,11 @@ def main(
     test_ratio = test_proportion / total_proportion
     statistics = load_json(statistics_filepath)
 
-    meta = dict(
-        tasks = set(),
-        datasets = set(),
-        splits = set(),
-        metrics = set(),
-        operators = set(),
-    )
+    tasks = set()
+    datasets = set()
+    splits = set()
+    metrics = set()
+    operators = set()
 
     train_set = list()
     valid_set = list()
@@ -95,45 +93,55 @@ def main(
             valid_set.extend([eligible_stats_value[valid_index]['model_name'] for valid_index in valid_indices])
             test_set.extend([eligible_stats_value[test_index]['model_name'] for test_index in test_indices])
 
-            meta['tasks'].add(task)
-            meta['datasets'].add(dataset)
-            meta['splits'].add(split)
-            meta['metrics'].add(metric)
+            tasks.add(task)
+            datasets.add(dataset)
+            splits.add(split)
+            metrics.add(metric)
             for eligible_instance_stats_value in eligible_stats_value:
-                meta['operators'].update(eligible_instance_stats_value['graph_stats']['num_operators'].keys())
+                operators.update(eligible_instance_stats_value['graph_stats']['num_operators'].keys())
 
+    meta = dict(
+        tasks = list(tasks),
+        datsets = list(datasets),
+        splits = list(splits),
+        metrics = list(metrics),
+        operators = list(operators),
+    )
     train_split_meta = dict(
         version = f'{version}',
         archive = f'{version}_train.tar.gz',
         instance_names = train_set,
     )
+    train_split_meta.update(meta)
+    save_json(train_split_meta, save_dirpath.joinpath(f'{version}_train.json'), indent=2)
     tar_archive(
         [dataset_dirpath.joinpath(instance_name) for instance_name in train_split_meta['instance_names']],
         save_dirpath.joinpath(train_split_meta['archive']),
         compress=True
     )
-    save_json(train_split_meta.update(meta), save_dirpath, indent=2)
 
     valid_split_meta = dict(
         version = f'{version}',
         archive = f'{version}_valid.tar.gz',
         instance_names = valid_set,
     )
+    valid_split_meta.update(meta)
+    save_json(valid_split_meta, save_dirpath.joinpath(f'{version}_valid.json'), indent=2)
     tar_archive(
         [dataset_dirpath.joinpath(instance_name) for instance_name in valid_split_meta['instance_names']],
         save_dirpath.joinpath(valid_split_meta['archive']),
         compress=True
     )
-    save_json(valid_split_meta.update(meta), save_dirpath, indent=2)
 
     test_split_meta = dict(
         version = f'{version}',
         archive = f'{version}_test.tar.gz',
         instance_names = test_set,
     )
+    test_split_meta.update(meta)
+    save_json(test_split_meta, save_dirpath.joinpath(f'{version}_test.json'), indent=2)
     tar_archive(
         [dataset_dirpath.joinpath(instance_name) for instance_name in test_split_meta['instance_names']],
         save_dirpath.joinpath(test_split_meta['archive']),
         compress=True
     )
-    save_json(test_split_meta.update(meta), save_dirpath, indent=2)

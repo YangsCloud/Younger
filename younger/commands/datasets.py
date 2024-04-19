@@ -42,9 +42,9 @@ def split_run(arguments):
     dataset_dirpath = pathlib.Path(arguments.dataset_dirpath)
     save_dirpath = pathlib.Path(arguments.save_dirpath)
 
-    from younger.datasets.constructors.official import statistics
+    from younger.datasets.constructors.official import split
 
-    statistics.main(
+    split.main(
         statistics_filepath, dataset_dirpath, save_dirpath,
         arguments.version,
         arguments.train_proportion, arguments.valid_proportion, arguments.test_proportion,
@@ -138,6 +138,8 @@ def set_datasets_split_arguments(parser: argparse.ArgumentParser):
     parser.add_argument('--train-proportion', type=int, default=80)
     parser.add_argument('--valid-proportion', type=int, default=10)
     parser.add_argument('--test-proportion', type=int, default=10)
+
+    parser.add_argument('--partition-number', type=int, default=10)
 
     parser.add_argument('--logging-filepath', type=str, default=None)
     parser.set_defaults(run=split_run)
