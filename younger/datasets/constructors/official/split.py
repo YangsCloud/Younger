@@ -13,6 +13,7 @@
 import ast
 import numpy
 import pathlib
+import multiprocessing
 
 from typing import Any
 
@@ -48,22 +49,37 @@ def sample_by_partition(examples: list, partition_number: int, train_ratio: floa
     return train_indices, valid_indices, test_indices
 
 
-def save_split(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, meta: dict[str, Any]):
+def save_graph(parameters: tuple[pathlib.Path, pathlib.Path]):
+    i_path, o_path = parameters
+    instance = Instance()
+    instance.load(i_path)
+    graph = Network.simplify(instance.network.graph, preserve_node_attributes=['type', 'operator'])
+    save_pickle(graph, o_path)
+
+
+def save_split(meta: dict[str, Any], dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, worker_number: int):
     version_dirpath = save_dirpath.joinpath(meta['version'])
     split_dirpath = version_dirpath.joinpath(meta['split'])
+    archive_filepath = split_dirpath.joinpath(meta['archive'])
+    instance_names = meta['instance_names']
+
     graph_dirpath = split_dirpath.joinpath('graph')
+    meta_filepath = split_dirpath.joinpath('meta.json')
     create_dir(graph_dirpath)
 
-    save_json(meta, split_dirpath.joinpath(f'meta.json'), indent=2)
-    for instance_name in meta['instance_names']:
-        instance = Instance()
-        instance.load(dataset_dirpath.joinpath(instance_name))
-        graph = Network.simplify(instance.network.graph, preserve_node_attributes=['type', 'operator'])
-        save_pickle(graph, graph_dirpath.joinpath(instance_name))
+    logger.info(f'Saving \'{meta['split']}\' Split META {meta_filepath.absolute()} ... ')
+    save_json(meta, meta_filepath, indent=2)
 
+    logger.info(f'Saving \'{meta['split']}\' Split {graph_dirpath.absolute()} ... ')
+    io_paths = ((dataset_dirpath.joinpath(instance_name), graph_dirpath.joinpath(instance_name)) for instance_name in instance_names)
+    with multiprocessing.Pool(worker_number) as pool:
+        for index, _ in enumerate(pool.imap_unordered(save_graph, io_paths), start=1):
+            logger.info(f'Saved Total {index} graphs')
+
+    logger.info(f'Saving \'{meta['split']}\' Split Tar {archive_filepath.absolute()} ... ')
     tar_archive(
-        [graph_dirpath.joinpath(instance_name) for instance_name in meta['instance_names']],
-        split_dirpath.joinpath(meta['archive']),
+        [graph_dirpath.joinpath(instance_name) for instance_name in instance_names],
+        archive_filepath,
         compress=True
     )
 
@@ -73,8 +89,15 @@ def main(
     version: str,
     train_proportion: int = 80, valid_proportion: int = 10, test_proportion: int = 10,
     partition_number: int = 10,
+    clean: bool = False,
+    worker_number: int = 4,
 ):
-    # stats is the outputs of the statistics.main
+    # 1. 'statistics_filepath' is the outputs of the statistics.main
+
+    # 2. 'clean' Usually we do not clean instances with theory value range of metric.
+    # For example:
+    # WER maybe larger than 1 and Word Accuracy maybe smaller than 0 in ASR research area.
+
     assert train_proportion + valid_proportion + test_proportion == 100
 
     total_proportion = train_proportion + valid_proportion + test_proportion
@@ -82,6 +105,7 @@ def main(
     valid_ratio = valid_proportion / total_proportion
     test_ratio = test_proportion / total_proportion
     statistics = load_json(statistics_filepath)
+    logger.info(f'Total Instances To Be Splited: {len(statistics)}')
 
     tasks = set()
     datasets = set()
@@ -92,6 +116,7 @@ def main(
     train_split = list()
     valid_split = list()
     test_split = list()
+
     for stats_key, stats_value in statistics.items():
         task, dataset, split, metric = ast.literal_eval(stats_key)
         metric_range = get_metric_theroy_range(metric)
@@ -101,11 +126,12 @@ def main(
             lower_bound, upper_bound = metric_range
         eligible_stats_value = list()
         for ins_stats in stats_value:
-            if 'metric_value' in ins_stats:
-                metric_value = ins_stats['metric_value']
-                if (lower_bound is not None and metric_value < lower_bound) or (upper_bound is not None and upper_bound < metric_value):
-                    logger.info(f'Outlier: {metric_value}. Skip The Instance: {ins_stats["model_name"]}')
-                    continue
+            if clean:
+                if 'metric_value' in ins_stats:
+                    metric_value = ins_stats['metric_value']
+                    if (lower_bound is not None and metric_value < lower_bound) or (upper_bound is not None and upper_bound < metric_value):
+                        logger.info(f'Outlier: {metric_value}. Skip The Instance: {ins_stats["instance_name"]}')
+                        continue
             eligible_stats_value.append(ins_stats)
         if len(eligible_stats_value) * min(train_ratio, valid_ratio, test_ratio) < 1:
             continue
@@ -123,6 +149,7 @@ def main(
             for eligible_instance_stats_value in eligible_stats_value:
                 operators.update(eligible_instance_stats_value['graph_stats']['num_operators'].keys())
 
+    logger.info(f'Split Finished - Train: {len(train_split)}; Valid: {len(valid_split)}; Test: {len(test_split)};')
     meta = dict(
         tasks = list(tasks),
         datsets = list(datasets),
@@ -130,6 +157,7 @@ def main(
         metrics = list(metrics),
         operators = list(operators),
     )
+    logger.info(f'Details - Tasks: {len(tasks)}; Datasets: {len(datasets)}; Splits: {len(splits)}; Metrics: {len(metrics)}; Operators: {len(operators)};')
 
     train_split_meta = dict(
         split = f'train',
@@ -138,7 +166,7 @@ def main(
         instance_names = train_split,
     )
     train_split_meta.update(meta)
-    save_split(dataset_dirpath, save_dirpath, train_split_meta)
+    save_split(train_split_meta, dataset_dirpath, save_dirpath, worker_number)
 
     valid_split_meta = dict(
         split = f'valid',
@@ -147,7 +175,7 @@ def main(
         instance_names = valid_split,
     )
     valid_split_meta.update(meta)
-    save_split(dataset_dirpath, save_dirpath, valid_split_meta)
+    save_split(valid_split_meta, dataset_dirpath, save_dirpath, worker_number)
 
     test_split_meta = dict(
         split = f'test',
@@ -156,4 +184,4 @@ def main(
         instance_names = test_split,
     )
     test_split_meta.update(meta)
-    save_split(dataset_dirpath, save_dirpath, test_split_meta)
+    save_split(test_split_meta, dataset_dirpath, save_dirpath, worker_number)

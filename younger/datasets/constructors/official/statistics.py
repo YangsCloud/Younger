@@ -60,7 +60,7 @@ def statistics_graph(graph: networkx.DiGraph) -> dict[str, dict[str, int] | int]
 
     return graph_statistics
 
-def statistics_instance(parameters: tuple[pathlib.Path, list]) -> tuple[dict[str, list], dict[str, int]]:
+def statistics_instance(parameters: tuple[pathlib.Path, list, list, list, list, list]) -> tuple[dict[str, list], dict[str, int]]:
     path, combined_filters, has_task_filters, has_dataset_filters, has_split_filters, has_metric_filters = parameters
 
     occurrence: dict[str, int] = dict()
