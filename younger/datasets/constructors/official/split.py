@@ -154,15 +154,15 @@ def main(
     logger.info(f'Split Finished - Train: {len(train_split)}; Valid: {len(valid_split)}; Test: {len(test_split)};')
     meta = dict(
         tasks = list(tasks),
-        datsets = list(datasets),
+        datasets = list(datasets),
         splits = list(splits),
         metrics = list(metrics),
         operators = list(operators),
     )
-    tasks_info = 'all' if tasks == ['*'] else len(tasks)
-    datasets_info = 'all' if datasets == ['*'] else len(datasets)
-    splits_info = 'all' if splits == ['*'] else len(splits)
-    metrics_info = 'all' if metrics == ['*'] else len(metrics)
+    tasks_info = 'all' if meta['tasks'] == ['*'] else len(tasks)
+    datasets_info = 'all' if meta['datasets'] == ['*'] else len(datasets)
+    splits_info = 'all' if meta['splits'] == ['*'] else len(splits)
+    metrics_info = 'all' if meta['metrics'] == ['*'] else len(metrics)
     logger.info(f'Details - Tasks: {tasks_info}; Datasets: {datasets_info}; Splits: {splits_info}; Metrics: {metrics_info}; Operators: {len(operators)};')
 
     train_split_meta = dict(
