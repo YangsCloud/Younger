@@ -71,7 +71,7 @@ def statistics_instance(parameters: tuple[pathlib.Path, list]) -> tuple[dict[str
     instance = Instance()
     instance.load(path)
 
-    model_name = path.name
+    instance_name = path.name
     graph_stats = statistics_graph(instance.network.graph)
 
     labels = instance.labels.get('labels', None)
@@ -91,7 +91,7 @@ def statistics_instance(parameters: tuple[pathlib.Path, list]) -> tuple[dict[str
             if combined_filter_pattern in statistics:
                 occurrence[str((task, dataset, split, metric))] = occurrence.get(str((task, dataset, split, metric)), 0) + 1
                 statistics[combined_filter_pattern].append(dict(
-                    model_name = model_name,
+                    instance_name = instance_name,
                     graph_stats = graph_stats,
                     metric_value = metric_value
                 ))
@@ -99,7 +99,7 @@ def statistics_instance(parameters: tuple[pathlib.Path, list]) -> tuple[dict[str
         combined_filter_pattern = str(('*', '*', '*', '*'))
         if combined_filter_pattern in statistics:
             statistics[combined_filter_pattern].append(dict(
-                model_name = model_name,
+                instance_name = instance_name,
                 graph_stats = graph_stats
             ))
     return (statistics, occurrence)

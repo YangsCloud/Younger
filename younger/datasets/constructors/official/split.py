@@ -14,9 +14,12 @@ import ast
 import numpy
 import pathlib
 
-from younger.commons.io import load_json, save_json, tar_archive
+from typing import Any
+
+from younger.commons.io import load_json, save_json, save_pickle, create_dir, tar_archive
 from younger.commons.logging import logger
 
+from younger.datasets.modules import Instance, Network
 from younger.datasets.utils.detectors.metrics import get_metric_theroy_range
 
 
@@ -45,6 +48,26 @@ def sample_by_partition(examples: list, partition_number: int, train_ratio: floa
     return train_indices, valid_indices, test_indices
 
 
+def save_split(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, meta: dict[str, Any]):
+    version_dirpath = save_dirpath.joinpath(meta['version'])
+    split_dirpath = version_dirpath.joinpath(meta['split'])
+    graph_dirpath = split_dirpath.joinpath('graph')
+    create_dir(graph_dirpath)
+
+    save_json(meta, split_dirpath.joinpath(f'meta.json'), indent=2)
+    for instance_name in meta['instance_names']:
+        instance = Instance()
+        instance.load(dataset_dirpath.joinpath(instance_name))
+        graph = Network.simplify(instance.network.graph, preserve_node_attributes=['type', 'operator'])
+        save_pickle(graph, graph_dirpath.joinpath(instance_name))
+
+    tar_archive(
+        [graph_dirpath.joinpath(instance_name) for instance_name in meta['instance_names']],
+        split_dirpath.joinpath(meta['archive']),
+        compress=True
+    )
+
+
 def main(
     statistics_filepath: pathlib.Path, dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path,
     version: str,
@@ -66,9 +89,9 @@ def main(
     metrics = set()
     operators = set()
 
-    train_set = list()
-    valid_set = list()
-    test_set = list()
+    train_split = list()
+    valid_split = list()
+    test_split = list()
     for stats_key, stats_value in statistics.items():
         task, dataset, split, metric = ast.literal_eval(stats_key)
         metric_range = get_metric_theroy_range(metric)
@@ -89,9 +112,9 @@ def main(
         else:
             num_nodes = [eligible_instance_stats_value['graph_stats']['num_node'] for eligible_instance_stats_value in eligible_stats_value]
             train_indices, valid_indices, test_indices = sample_by_partition(num_nodes, partition_number, train_ratio, valid_ratio, test_ratio)
-            train_set.extend([eligible_stats_value[train_index]['model_name'] for train_index in train_indices])
-            valid_set.extend([eligible_stats_value[valid_index]['model_name'] for valid_index in valid_indices])
-            test_set.extend([eligible_stats_value[test_index]['model_name'] for test_index in test_indices])
+            train_split.extend([eligible_stats_value[train_index]['instance_name'] for train_index in train_indices])
+            valid_split.extend([eligible_stats_value[valid_index]['instance_name'] for valid_index in valid_indices])
+            test_split.extend([eligible_stats_value[test_index]['instance_name'] for test_index in test_indices])
 
             tasks.add(task)
             datasets.add(dataset)
@@ -107,41 +130,30 @@ def main(
         metrics = list(metrics),
         operators = list(operators),
     )
+
     train_split_meta = dict(
+        split = f'train',
+        archive = f'train.tar.gz',
         version = f'{version}',
-        archive = f'{version}_train.tar.gz',
-        instance_names = train_set,
+        instance_names = train_split,
     )
     train_split_meta.update(meta)
-    save_json(train_split_meta, save_dirpath.joinpath(f'{version}_train.json'), indent=2)
-    tar_archive(
-        [dataset_dirpath.joinpath(instance_name) for instance_name in train_split_meta['instance_names']],
-        save_dirpath.joinpath(train_split_meta['archive']),
-        compress=True
-    )
+    save_split(dataset_dirpath, save_dirpath, train_split_meta)
 
     valid_split_meta = dict(
+        split = f'valid',
+        archive = f'valid.tar.gz',
         version = f'{version}',
-        archive = f'{version}_valid.tar.gz',
-        instance_names = valid_set,
+        instance_names = valid_split,
     )
     valid_split_meta.update(meta)
-    save_json(valid_split_meta, save_dirpath.joinpath(f'{version}_valid.json'), indent=2)
-    tar_archive(
-        [dataset_dirpath.joinpath(instance_name) for instance_name in valid_split_meta['instance_names']],
-        save_dirpath.joinpath(valid_split_meta['archive']),
-        compress=True
-    )
+    save_split(dataset_dirpath, save_dirpath, valid_split_meta)
 
     test_split_meta = dict(
+        split = f'test',
+        archive = f'test.tar.gz',
         version = f'{version}',
-        archive = f'{version}_test.tar.gz',
-        instance_names = test_set,
+        instance_names = test_split,
     )
     test_split_meta.update(meta)
-    save_json(test_split_meta, save_dirpath.joinpath(f'{version}_test.json'), indent=2)
-    tar_archive(
-        [dataset_dirpath.joinpath(instance_name) for instance_name in test_split_meta['instance_names']],
-        save_dirpath.joinpath(test_split_meta['archive']),
-        compress=True
-    )
+    save_split(dataset_dirpath, save_dirpath, test_split_meta)
