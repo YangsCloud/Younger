@@ -93,6 +93,10 @@ def statistics_instance(parameters: tuple[pathlib.Path, list, list, list, list, 
                 statistics[combined_filter_pattern].append(dict(
                     instance_name = instance_name,
                     graph_stats = graph_stats,
+                    task = task,
+                    dataset = dataset,
+                    split = split,
+                    metric = metric,
                     metric_value = metric_value
                 ))
     else:
@@ -100,7 +104,7 @@ def statistics_instance(parameters: tuple[pathlib.Path, list, list, list, list, 
         if combined_filter_pattern in statistics:
             statistics[combined_filter_pattern].append(dict(
                 instance_name = instance_name,
-                graph_stats = graph_stats
+                graph_stats = graph_stats,
             ))
     return (statistics, occurrence)
 

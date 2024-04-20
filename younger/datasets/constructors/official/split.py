@@ -49,15 +49,19 @@ def sample_by_partition(examples: list, partition_number: int, train_ratio: floa
     return train_indices, valid_indices, test_indices
 
 
-def save_graph(parameters: tuple[pathlib.Path, pathlib.Path]):
-    i_path, o_path = parameters
+def save_graph(parameters: tuple[pathlib.Path, pathlib.Path, dict[str, Any]]):
+    i_path, o_path, instance_statistics = parameters
     instance = Instance()
     instance.load(i_path)
     graph = Network.simplify(instance.network.graph, preserve_node_attributes=['type', 'operator'])
+    graph.graph['task'] = instance_statistics['task']
+    graph.graph['dataset'] = instance_statistics['dataset']
+    graph.graph['metric'] = instance_statistics['metric']
+    graph.graph['metric_value'] = instance_statistics['metric_value']
     save_pickle(graph, o_path)
 
 
-def save_split(meta: dict[str, Any], instance_names, dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, worker_number: int):
+def save_split(meta: dict[str, Any], instances_statistics: list[dict[str, Any]], dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, worker_number: int):
     version_dirpath = save_dirpath.joinpath(meta['version'])
     split_dirpath = version_dirpath.joinpath(meta['split'])
     archive_filepath = split_dirpath.joinpath(meta['archive'])
@@ -71,14 +75,20 @@ def save_split(meta: dict[str, Any], instance_names, dataset_dirpath: pathlib.Pa
     save_json(meta, meta_filepath, indent=2)
 
     logger.info(f'Saving \'{split}\' Split {graph_dirpath.absolute()} ... ')
-    io_paths = ((dataset_dirpath.joinpath(instance_name), graph_dirpath.joinpath(f'instance-{i}.pkl')) for i, instance_name in enumerate(instance_names))
+    parameters = (
+        (
+            dataset_dirpath.joinpath(instance_statistics['instance_name']),
+            graph_dirpath.joinpath(f'instance-{i}.pkl'),
+            instance_statistics,
+        ) for i, instance_statistics in enumerate(instances_statistics)
+    )
     with multiprocessing.Pool(worker_number) as pool:
-        for index, _ in enumerate(pool.imap_unordered(save_graph, io_paths), start=1):
+        for index, _ in enumerate(pool.imap_unordered(save_graph, parameters), start=1):
             logger.info(f'Saved Total {index} graphs')
 
     logger.info(f'Saving \'{split}\' Split Tar {archive_filepath.absolute()} ... ')
     tar_archive(
-        [graph_dirpath.joinpath(f'instance-{i}.pkl') for i, instance_name in enumerate(instance_names)],
+        [graph_dirpath.joinpath(f'instance-{i}.pkl') for i, _ in enumerate(instances_statistics)],
         archive_filepath,
         compress=True
     )
@@ -119,20 +129,22 @@ def main(
 
     for stats_key, stats_value in statistics.items():
         task, dataset, split, metric = ast.literal_eval(stats_key)
-        metric_range = get_metric_theroy_range(metric)
-        if metric_range in {(-1, 1), (0, 1), (0, 100)}:
-            lower_bound, upper_bound = 0, 1
-        else:
-            lower_bound, upper_bound = metric_range
-        eligible_stats_value = list()
-        for ins_stats in stats_value:
-            if clean:
+        if clean:
+            eligible_stats_value = list()
+            metric_range = get_metric_theroy_range(ins_stats['metric']) if metric == '*' else metric
+            if metric_range in {(-1, 1), (0, 1), (0, 100)}:
+                lower_bound, upper_bound = 0, 1
+            else:
+                lower_bound, upper_bound = metric_range
+            for ins_stats in stats_value:
                 if 'metric_value' in ins_stats:
                     metric_value = ins_stats['metric_value']
                     if (lower_bound is not None and metric_value < lower_bound) or (upper_bound is not None and upper_bound < metric_value):
                         logger.info(f'Outlier: {metric_value}. Skip The Instance: {ins_stats["instance_name"]}')
                         continue
-            eligible_stats_value.append(ins_stats)
+                eligible_stats_value.append(ins_stats)
+        else:
+            eligible_stats_value = stats_value
         if len(eligible_stats_value) * min(train_ratio, valid_ratio, test_ratio) < 1:
             continue
         else:
@@ -141,15 +153,15 @@ def main(
                 num_nodes.append(eligible_instance_stats_value['graph_stats']['num_node'])
                 operators.update(eligible_instance_stats_value['graph_stats']['num_operators'].keys())
 
-            tasks.add(task)
-            datasets.add(dataset)
-            splits.add(split)
-            metrics.add(metric)
+                tasks.add(eligible_instance_stats_value['task'])
+                datasets.add(eligible_instance_stats_value['dataset'])
+                splits.add(eligible_instance_stats_value['split'])
+                metrics.add(eligible_instance_stats_value['metric'])
 
             train_indices, valid_indices, test_indices = sample_by_partition(num_nodes, partition_number, train_ratio, valid_ratio, test_ratio)
-            train_split.extend([eligible_stats_value[train_index]['instance_name'] for train_index in train_indices])
-            valid_split.extend([eligible_stats_value[valid_index]['instance_name'] for valid_index in valid_indices])
-            test_split.extend([eligible_stats_value[test_index]['instance_name'] for test_index in test_indices])
+            train_split.extend([eligible_stats_value[train_index] for train_index in train_indices])
+            valid_split.extend([eligible_stats_value[valid_index] for valid_index in valid_indices])
+            test_split.extend([eligible_stats_value[test_index] for test_index in test_indices])
 
     logger.info(f'Split Finished - Train: {len(train_split)}; Valid: {len(valid_split)}; Test: {len(test_split)};')
     meta = dict(
@@ -159,11 +171,7 @@ def main(
         metrics = list(metrics),
         operators = list(operators),
     )
-    tasks_info = 'all' if meta['tasks'] == ['*'] else len(tasks)
-    datasets_info = 'all' if meta['datasets'] == ['*'] else len(datasets)
-    splits_info = 'all' if meta['splits'] == ['*'] else len(splits)
-    metrics_info = 'all' if meta['metrics'] == ['*'] else len(metrics)
-    logger.info(f'Details - Tasks: {tasks_info}; Datasets: {datasets_info}; Splits: {splits_info}; Metrics: {metrics_info}; Operators: {len(operators)};')
+    logger.info(f'Details - Tasks: {len(tasks)}; Datasets: {len(datasets)}; Splits: {len(splits)}; Metrics: {len(metrics)}; Operators: {len(operators)};')
 
     train_split_meta = dict(
         split = f'train',
