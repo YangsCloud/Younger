@@ -136,18 +136,20 @@ def main(
         if len(eligible_stats_value) * min(train_ratio, valid_ratio, test_ratio) < 1:
             continue
         else:
-            num_nodes = [eligible_instance_stats_value['graph_stats']['num_node'] for eligible_instance_stats_value in eligible_stats_value]
-            train_indices, valid_indices, test_indices = sample_by_partition(num_nodes, partition_number, train_ratio, valid_ratio, test_ratio)
-            train_split.extend([eligible_stats_value[train_index]['instance_name'] for train_index in train_indices])
-            valid_split.extend([eligible_stats_value[valid_index]['instance_name'] for valid_index in valid_indices])
-            test_split.extend([eligible_stats_value[test_index]['instance_name'] for test_index in test_indices])
+            num_nodes = list()
+            for eligible_instance_stats_value in eligible_stats_value:
+                num_nodes.append(eligible_instance_stats_value['graph_stats']['num_node'])
+                operators.update(eligible_instance_stats_value['graph_stats']['num_operators'].keys())
 
             tasks.add(task)
             datasets.add(dataset)
             splits.add(split)
             metrics.add(metric)
-            for eligible_instance_stats_value in eligible_stats_value:
-                operators.update(eligible_instance_stats_value['graph_stats']['num_operators'].keys())
+
+            train_indices, valid_indices, test_indices = sample_by_partition(num_nodes, partition_number, train_ratio, valid_ratio, test_ratio)
+            train_split.extend([eligible_stats_value[train_index]['instance_name'] for train_index in train_indices])
+            valid_split.extend([eligible_stats_value[valid_index]['instance_name'] for valid_index in valid_indices])
+            test_split.extend([eligible_stats_value[test_index]['instance_name'] for test_index in test_indices])
 
     logger.info(f'Split Finished - Train: {len(train_split)}; Valid: {len(valid_split)}; Test: {len(test_split)};')
     meta = dict(
@@ -157,7 +159,11 @@ def main(
         metrics = list(metrics),
         operators = list(operators),
     )
-    logger.info(f'Details - Tasks: {len(tasks)}; Datasets: {len(datasets)}; Splits: {len(splits)}; Metrics: {len(metrics)}; Operators: {len(operators)};')
+    tasks_info = 'all' if tasks == ['*'] else len(tasks)
+    datasets_info = 'all' if datasets == ['*'] else len(datasets)
+    splits_info = 'all' if splits == ['*'] else len(splits)
+    metrics_info = 'all' if metrics == ['*'] else len(metrics)
+    logger.info(f'Details - Tasks: {tasks_info}; Datasets: {datasets_info}; Splits: {splits_info}; Metrics: {metrics_info}; Operators: {len(operators)};')
 
     train_split_meta = dict(
         split = f'train',
