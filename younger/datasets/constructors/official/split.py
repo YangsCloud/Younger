@@ -61,22 +61,23 @@ def save_split(meta: dict[str, Any], dataset_dirpath: pathlib.Path, save_dirpath
     version_dirpath = save_dirpath.joinpath(meta['version'])
     split_dirpath = version_dirpath.joinpath(meta['split'])
     archive_filepath = split_dirpath.joinpath(meta['archive'])
+    split = meta['split']
     instance_names = meta['instance_names']
 
     graph_dirpath = split_dirpath.joinpath('graph')
     meta_filepath = split_dirpath.joinpath('meta.json')
     create_dir(graph_dirpath)
 
-    logger.info(f'Saving \'{meta['split']}\' Split META {meta_filepath.absolute()} ... ')
+    logger.info(f'Saving \'{split}\' Split META {meta_filepath.absolute()} ... ')
     save_json(meta, meta_filepath, indent=2)
 
-    logger.info(f'Saving \'{meta['split']}\' Split {graph_dirpath.absolute()} ... ')
+    logger.info(f'Saving \'{split}\' Split {graph_dirpath.absolute()} ... ')
     io_paths = ((dataset_dirpath.joinpath(instance_name), graph_dirpath.joinpath(instance_name)) for instance_name in instance_names)
     with multiprocessing.Pool(worker_number) as pool:
         for index, _ in enumerate(pool.imap_unordered(save_graph, io_paths), start=1):
             logger.info(f'Saved Total {index} graphs')
 
-    logger.info(f'Saving \'{meta['split']}\' Split Tar {archive_filepath.absolute()} ... ')
+    logger.info(f'Saving \'{split}\' Split Tar {archive_filepath.absolute()} ... ')
     tar_archive(
         [graph_dirpath.joinpath(instance_name) for instance_name in instance_names],
         archive_filepath,
