@@ -57,12 +57,11 @@ def save_graph(parameters: tuple[pathlib.Path, pathlib.Path]):
     save_pickle(graph, o_path)
 
 
-def save_split(meta: dict[str, Any], dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, worker_number: int):
+def save_split(meta: dict[str, Any], instance_names, dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, worker_number: int):
     version_dirpath = save_dirpath.joinpath(meta['version'])
     split_dirpath = version_dirpath.joinpath(meta['split'])
     archive_filepath = split_dirpath.joinpath(meta['archive'])
     split = meta['split']
-    instance_names = meta['instance_names']
 
     graph_dirpath = split_dirpath.joinpath('graph')
     meta_filepath = split_dirpath.joinpath('meta.json')
@@ -72,14 +71,14 @@ def save_split(meta: dict[str, Any], dataset_dirpath: pathlib.Path, save_dirpath
     save_json(meta, meta_filepath, indent=2)
 
     logger.info(f'Saving \'{split}\' Split {graph_dirpath.absolute()} ... ')
-    io_paths = ((dataset_dirpath.joinpath(instance_name), graph_dirpath.joinpath(instance_name)) for instance_name in instance_names)
+    io_paths = ((dataset_dirpath.joinpath(instance_name), graph_dirpath.joinpath(f'instance-{i}.pkl')) for i, instance_name in enumerate(instance_names))
     with multiprocessing.Pool(worker_number) as pool:
         for index, _ in enumerate(pool.imap_unordered(save_graph, io_paths), start=1):
             logger.info(f'Saved Total {index} graphs')
 
     logger.info(f'Saving \'{split}\' Split Tar {archive_filepath.absolute()} ... ')
     tar_archive(
-        [graph_dirpath.joinpath(instance_name) for instance_name in instance_names],
+        [graph_dirpath.joinpath(f'instance-{i}.pkl') for i, instance_name in enumerate(instance_names)],
         archive_filepath,
         compress=True
     )
@@ -164,25 +163,25 @@ def main(
         split = f'train',
         archive = f'train.tar.gz',
         version = f'{version}',
-        instance_names = train_split,
+        size = len(train_split),
     )
     train_split_meta.update(meta)
-    save_split(train_split_meta, dataset_dirpath, save_dirpath, worker_number)
+    save_split(train_split_meta, train_split, dataset_dirpath, save_dirpath, worker_number)
 
     valid_split_meta = dict(
         split = f'valid',
         archive = f'valid.tar.gz',
         version = f'{version}',
-        instance_names = valid_split,
+        size = len(valid_split),
     )
     valid_split_meta.update(meta)
-    save_split(valid_split_meta, dataset_dirpath, save_dirpath, worker_number)
+    save_split(valid_split_meta, valid_split, dataset_dirpath, save_dirpath, worker_number)
 
     test_split_meta = dict(
         split = f'test',
         archive = f'test.tar.gz',
         version = f'{version}',
-        instance_names = test_split,
+        size = len(test_split),
     )
     test_split_meta.update(meta)
-    save_split(test_split_meta, dataset_dirpath, save_dirpath, worker_number)
+    save_split(test_split_meta, test_split, dataset_dirpath, save_dirpath, worker_number)
