@@ -416,14 +416,13 @@ def train(
 
 def test(
     test_dataset_dirpath: pathlib.Path,
+    checkpoint_filepath: pathlib.Path,
     x_feature_get_type: Literal['OnlyOp'] = 'OnlyOp',
     y_feature_get_type: Literal['OnlyMt'] = 'OnlyMt',
 
-    checkpoint_filepath: str | None = None,
     test_batch_size: int = 32,
 
     node_dim: int = 512,
-    metric_dim: int = 512,
     hidden_dim: int = 512,
     readout_dim: int = 256,
     cluster_num: int | None = None,
@@ -456,7 +455,6 @@ def test(
     model = NAPPGNNBase(
         meta=meta,
         node_dim=node_dim,
-        metric_dim=metric_dim,
         hidden_dim=hidden_dim,
         readout_dim=readout_dim,
         cluster_num=cluster_num,
