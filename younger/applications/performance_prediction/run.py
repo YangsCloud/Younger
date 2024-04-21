@@ -177,7 +177,7 @@ def exact_train(
         valid_sampler = DistributedSampler(valid_dataset, num_replicas=world_size, rank=rank, shuffle=False, seed=seed, drop_last=False)
     else:
         train_sampler = RandomSampler(train_dataset)
-        valid_sampler = Sampler(valid_dataset)
+        valid_sampler = Sampler()
 
     train_dataloader = DataLoader(train_dataset, batch_size=train_batch_size, sampler=train_sampler)
     valid_dataloader = DataLoader(valid_dataset, batch_size=valid_batch_size, sampler=valid_sampler)
