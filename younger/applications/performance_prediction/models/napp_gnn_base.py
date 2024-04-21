@@ -26,7 +26,6 @@ class NAPPGNNBase(torch.nn.Module):
         self,
         meta: dict,
         node_dim: int = 512,
-        metric_dim: int = 512,
         hidden_dim: int = 512,
         readout_dim: int = 256,
         cluster_num: int = 16,

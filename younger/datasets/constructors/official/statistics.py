@@ -21,6 +21,7 @@ from younger.commons.io import save_json
 from younger.commons.logging import logger
 
 from younger.datasets.modules import Instance
+from younger.datasets.utils.detectors.metrics import normalize
 
 
 def statistics_graph(graph: networkx.DiGraph) -> dict[str, dict[str, int] | int]:
@@ -127,6 +128,7 @@ def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, tasks: list[
 
     occurrence: dict[str, int] = dict()
     statistics: dict[str, list] = dict()
+    mum: dict[str, tuple[float, float]] = dict()
     for combined_filter in combined_filters:
         statistics[str(combined_filter)] = list()
 
@@ -138,6 +140,20 @@ def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, tasks: list[
             for instance_statistics_key, instance_statistics_value in instance_statistics.items():
                 statistics[instance_statistics_key].extend(instance_statistics_value)
             logger.info(f'Processed Total {index} instances')
+
+    for instances_statistics in statistics.values():
+        for instance_statistics in instances_statistics:
+            metric = instance_statistics['metric']
+            metric_value = instance_statistics['metric_value']
+
+            minimum, maximum = mum.get(metric, (0, 1))
+            mum[metric] = (min(minimum, metric_value), max(maximum, metric_value))
+
+    for key in statistics.items():
+        for index, instance_statistics in enumerate(statistics[key]):
+            metric = instance_statistics['metric']
+            metric_value = instance_statistics['metric_value']
+            statistics[key][index]['metric_value'] = normalize(metric, metric_value, mum[metric][0], mum[metric][1])
 
     toc = time.time()
     finished_datetime = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')

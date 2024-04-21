@@ -485,3 +485,43 @@ def get_metric_theroy_range(metric: str) -> tuple[int | None, int | None]:
         return (0, 1)
     else:
         return (None, None)
+
+
+def normalize_linear(value: float, minimum_possible: float, maximum_possible: float) -> float:
+    return (value - minimum_possible) / (maximum_possible - minimum_possible)
+
+
+def normalize_0_1(metric_value: float, minimum_possible: float = 0, maximum_possible: float = 1) -> float:
+    if metric_value < -1 or 1 < metric_value:
+        norm_value = metric_value / 100
+    else:
+        norm_value = metric_value
+
+    return normalize_linear(norm_value, minimum_possible, maximum_possible)
+
+
+def normalize_n1_p1(metric_value: float, minimum_possible: float = -1, maximum_possible: float = 1) -> float:
+    if metric_value < -1 or 1 < metric_value:
+        norm_value = metric_value / 100
+    else:
+        norm_value = metric_value
+
+    return normalize_linear(norm_value, minimum_possible, maximum_possible)
+
+
+def normalize(metric: str, metric_value: float, minimum_possible: float, maximum_possible: float) -> float:
+    bounds = get_metric_theroy_range(metric)
+
+    if bounds == (0, 1) or bounds == (0, 100):
+        if minimum_possible < -1 or 1 < maximum_possible:
+            minimum_possible = minimum_possible / 100
+            maximum_possible = maximum_possible / 100
+        return normalize_0_1(metric_value, minimum_possible=minimum_possible, maximum_possible=maximum_possible)
+
+    if bounds == (-1, 1):
+        if minimum_possible < -1 or 1 < maximum_possible:
+            minimum_possible = minimum_possible / 100
+            maximum_possible = maximum_possible / 100
+        return normalize_n1_p1(metric_value, minimum_possible=minimum_possible, maximum_possible=maximum_possible)
+
+    return normalize_linear(metric_value, minimum_possible=minimum_possible, maximum_possible=maximum_possible)

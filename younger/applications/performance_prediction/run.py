@@ -13,8 +13,8 @@
 import os
 import time
 import torch
-import numpy
 import pathlib
+import functools
 
 from torch import distributed
 from typing import Literal
@@ -33,7 +33,10 @@ from younger.applications.performance_prediction.datasets import YoungerDataset
 
 
 def infer_cluster_num(dataset: Dataset) -> int:
-    pass
+    total_node_num = 0
+    for data in dataset:
+        total_node_num += data.num_nodes
+    return total_node_num / len(dataset)
 
 
 def get_logging_metrics_str(metric_names: list[str], metric_values: list[str]) -> str:
@@ -148,7 +151,7 @@ def exact_train(
     life_cycle:int, train_period: int, valid_period: int, report_period: int, record_unit: Literal['Epoch', 'Step'],
     train_batch_size: int, valid_batch_size: int, learning_rate: float, weight_decay: float,
     seed: int, device: Literal['CPU', 'GPU'], world_size: int, master_rank: int, is_distribution: bool,
-    make_deterministic: bool
+    make_deterministic: bool,
 ):
     is_master = rank == master_rank
     fix_random_procedure(seed)
@@ -277,7 +280,6 @@ def train(
     y_feature_get_type: Literal['OnlyMt'] = 'OnlyMt',
 
     node_dim: int = 512,
-    metric_dim: int = 512,
     hidden_dim: int = 512,
     readout_dim: int = 256,
     cluster_num: int | None = None,
