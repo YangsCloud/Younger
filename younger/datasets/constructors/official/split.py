@@ -178,6 +178,7 @@ def main(
         archive = f'train.tar.gz',
         version = f'{version}',
         size = len(train_split),
+        url = "",
     )
     train_split_meta.update(meta)
     save_split(train_split_meta, train_split, dataset_dirpath, save_dirpath, worker_number)
@@ -187,6 +188,7 @@ def main(
         archive = f'valid.tar.gz',
         version = f'{version}',
         size = len(valid_split),
+        url = "",
     )
     valid_split_meta.update(meta)
     save_split(valid_split_meta, valid_split, dataset_dirpath, save_dirpath, worker_number)
@@ -196,6 +198,7 @@ def main(
         archive = f'test.tar.gz',
         version = f'{version}',
         size = len(test_split),
+        url = "",
     )
     test_split_meta.update(meta)
     save_split(test_split_meta, test_split, dataset_dirpath, save_dirpath, worker_number)

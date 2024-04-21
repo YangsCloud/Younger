@@ -25,13 +25,6 @@ from younger.commons.io import load_json, load_pickle, tar_extract
 from younger.datasets.utils.constants import YoungerDatasetAddress, YoungerDatasetNodeType
 
 
-def download_aux_file(aux_filepath, url, folder):
-    if os.path.exists(aux_filepath):
-        return aux_filepath
-    else:
-        return download_url(url, folder)
-
-
 class YoungerDataset(Dataset):
     def __init__(
         self,
