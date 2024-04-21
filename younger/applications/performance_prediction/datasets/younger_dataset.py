@@ -41,6 +41,9 @@ class YoungerDataset(Dataset):
         pre_filter: Callable | None = None,
         log: bool = True,
         force_reload: bool = False,
+
+        x_feature_get_type: Literal['OnlyOp'] = 'OnlyOp',
+        y_feature_get_type: Literal['OnlyMt'] = 'OnlyMt',
         worker_number: int = 4,
     ):
         self.worker_number = worker_number
@@ -49,17 +52,20 @@ class YoungerDataset(Dataset):
         assert os.path.isfile(meta_filepath), f'Please Download The \'meta.json\' File Of A Specific Version Of The Younger Dataset From Official Website.'
         self.meta = self.__class__.load_meta(meta_filepath)
 
+        self.x_feature_get_type = x_feature_get_type
+        self.y_feature_get_type = y_feature_get_type
+
         super().__init__(root, transform, pre_transform, pre_filter, log, force_reload)
 
     @property
     def raw_dir(self) -> str:
         name = f'younger_raw'
-        return os.path.join(self.root, name, self.meta['version'], self.meta['split'])
+        return os.path.join(self.root, name)
 
     @property
     def processed_dir(self) -> str:
         name = f'younger_processed'
-        return os.path.join(self.root, name, self.meta['version'], self.meta['split'])
+        return os.path.join(self.root, name)
 
     @property
     def raw_file_names(self):
@@ -76,10 +82,9 @@ class YoungerDataset(Dataset):
         return torch.load(os.path.join(self.processed_dir, f'instance-{index}.pth'))
 
     def download(self):
-        archive_relapath = os.path.join(self.meta['version'], self.meta['split'], self.meta['archive'])
-        archive_filepath = os.path.join(self.root, archive_relapath)
+        archive_filepath = os.path.join(self.root, self.meta['archive'])
         if not fs.exists(archive_filepath):
-            download_url(getattr(YoungerDatasetAddress, archive_relapath), os.path.dirname(archive_filepath))
+            archive_filepath = download_url(getattr(YoungerDatasetAddress, self.meta['url']), self.root, filename=self.meta['archive'])
         tar_extract(archive_filepath, self.raw_dir)
 
         for index in range(self.meta['size']):
@@ -115,6 +120,7 @@ class YoungerDataset(Dataset):
         meta['version'] = loaded_meta['version']
         meta['archive'] = loaded_meta['archive']
         meta['size'] = loaded_meta['size']
+        meta['url'] = loaded_meta['url']
 
 
         meta['i2o'] = [

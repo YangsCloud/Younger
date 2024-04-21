@@ -24,8 +24,7 @@ class NAPPGNNBase(torch.nn.Module):
     # Neural Architecture Performance Prediction - GNN - Base Model
     def __init__(
         self,
-        node_dict: dict,
-        metric_dict: dict,
+        meta: dict,
         node_dim: int = 512,
         metric_dim: int = 512,
         hidden_dim: int = 512,
@@ -41,7 +40,7 @@ class NAPPGNNBase(torch.nn.Module):
         self.activation_layer = resolver.activation_resolver('ELU')
 
         # GNN Layers
-        self.node_embedding_layer = Embedding(len(node_dict), node_dim)
+        self.node_embedding_layer = Embedding(len(meta['o2i']), node_dim)
 
         self.gnn_head_mp_layer = GINConv(
             nn=MLP(
@@ -52,30 +51,7 @@ class NAPPGNNBase(torch.nn.Module):
             train_eps=False
         )
 
-        # v Other Layers
-        self.gnn_o_layer_1 = GINConv(
-            nn=MLP(
-                channel_list=[hidden_dim, hidden_dim, hidden_dim],
-                act='ELU',
-            ),
-            eps=0,
-            train_eps=False
-        )
-        # ^ Other Layers
-
         self.gnn_pooling_layer = DMoNPooling(hidden_dim, cluster_num)
-
-        self.gnn_dense_o_layer_1 = DenseGINConv(
-            nn=MLP(
-                channel_list=[hidden_dim, hidden_dim, hidden_dim],
-                act='ELU',
-                norm=None,
-            ),
-            eps=0,
-            train_eps=False
-        )
-
-        self.gnn_op_layer_1 = DMoNPooling(hidden_dim, cluster_num)
 
         if self.mode == 'Unsupervised':
             return
@@ -97,34 +73,30 @@ class NAPPGNNBase(torch.nn.Module):
             dropout=0.5
         )
 
-        # Metric Layers
-        self.metric_embedding_layer = Embedding(len(metric_dict), metric_dim)
-        self.metric_layer = MLP(
-            channel_list=[metric_dim, hidden_dim, hidden_dim],
-            act='RELU',
-        )
-
-        # Fuse Layers
-        self.fuse_layer = MLP(
-            channel_list=[readout_dim + hidden_dim, hidden_dim, hidden_dim],
-            act='ELU'
-        )
         # Output Layer
-        self.output_layer = MLP(
-            channel_list=[hidden_dim, 1],
+        # Now Try Classification
+        # Task: t2i
+        # Dataset: d2i
+        # Metric: m2i
+        self.cls_output_layer = MLP(
+            channel_list=[readout_dim, len(meta['m2i'])],
+            act=None,
+            norm=None,
+        )
+        # Now Try Regression
+        self.reg_output_layer = MLP(
+            channel_list=[readout_dim, 1],
             act=None,
             norm=None,
         )
 
-    def forward(self, x: torch.Tensor, edge_index: torch.Tensor, batch: torch.Tensor, metric: torch.Tensor | None = None):
+    def forward(self, x: torch.Tensor, edge_index: torch.Tensor, batch: torch.Tensor):
         # x - [ batch_size * max(node_number_of_graphs) X num_node_features ] (Current Version: num_node_features=1)
         main_feature = x[:, 0]
         x = self.node_embedding_layer(main_feature)
         # x - [ batch_size * max(node_number_of_graphs) X node_dim ]
 
         x = self.gnn_head_mp_layer(x, edge_index)
-        x = self.activation_layer(x)
-        x = self.gnn_o_layer_1(x, edge_index)
         x = self.activation_layer(x)
 
         # x - [ batch_size * max(node_number_of_graphs) X hidden_dim ]
@@ -134,13 +106,6 @@ class NAPPGNNBase(torch.nn.Module):
         _, x, adj, spectral_loss, orthogonality_loss, cluster_loss = self.gnn_pooling_layer(x, adj, mask)
 
         gnn_pooling_loss = spectral_loss + orthogonality_loss + cluster_loss
-
-        x = self.gnn_dense_o_layer_1(x, adj)
-        x = self.activation_layer(x)
-
-        _, x, adj, spectral_loss_1, orthogonality_loss_1, cluster_loss_1 = self.gnn_op_layer_1(x, adj)
-
-        gnn_pooling_loss += gnn_pooling_loss + spectral_loss_1 + orthogonality_loss_1 + cluster_loss_1
 
         if self.mode == 'Unsupervised':
             return gnn_pooling_loss
@@ -154,16 +119,10 @@ class NAPPGNNBase(torch.nn.Module):
         x = x.sum(dim=1)
         # x - [ batch_size X readout_dim ]
 
-        # metric - [ batch_size ]
-        metric = self.metric_embedding_layer(metric)
-        # metric - [ batch_size X metric_dim ]
-        metric = self.metric_layer(metric)
-        # metric - [ batch_size X hidden_dim ]
+        cls_output = self.cls_output_layer(x)
+        # cls_output - [ batch_size X _ ]
 
-        fused_information = self.fuse_layer(torch.concat([x, metric], dim=-1))
-        # fused_information - [ batch_size X hidden_dim ]
+        reg_output = self.reg_output_layer(x)
+        # reg_output - [ batch_size X 1 ]
 
-        output = self.output_layer(fused_information)
-        # output - [ batch_size X 1 ]
-
-        return output, gnn_pooling_loss
+        return cls_output, reg_output, gnn_pooling_loss
