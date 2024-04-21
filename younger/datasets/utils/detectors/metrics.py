@@ -497,7 +497,7 @@ def normalize_0_1(metric_value: float, minimum_possible: float = 0, maximum_poss
     else:
         norm_value = metric_value
 
-    return normalize_linear(norm_value, minimum_possible, maximum_possible)
+    return normalize_linear(norm_value, min(minimum_possible, 0), max(maximum_possible, 1))
 
 
 def normalize_n1_p1(metric_value: float, minimum_possible: float = -1, maximum_possible: float = 1) -> float:
@@ -506,7 +506,7 @@ def normalize_n1_p1(metric_value: float, minimum_possible: float = -1, maximum_p
     else:
         norm_value = metric_value
 
-    return normalize_linear(norm_value, minimum_possible, maximum_possible)
+    return normalize_linear(norm_value, min(minimum_possible, -1), max(maximum_possible, 1))
 
 
 def normalize(metric: str, metric_value: float, minimum_possible: float, maximum_possible: float) -> float:

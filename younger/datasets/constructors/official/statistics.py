@@ -128,7 +128,7 @@ def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, tasks: list[
 
     occurrence: dict[str, int] = dict()
     statistics: dict[str, list] = dict()
-    mum: dict[str, tuple[float, float]] = dict()
+    mum: dict[str, list[float]] = dict()
     for combined_filter in combined_filters:
         statistics[str(combined_filter)] = list()
 
@@ -143,17 +143,23 @@ def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, tasks: list[
 
     for instances_statistics in statistics.values():
         for instance_statistics in instances_statistics:
-            metric = instance_statistics['metric']
-            metric_value = instance_statistics['metric_value']
+            if 'metric' in instance_statistics and 'metric_value' in instance_statistics:
+                metric = instance_statistics['metric']
+                metric_value = instance_statistics['metric_value']
+    
+                minimum, maximum = mum.get(metric, (0, 1))
+                mum[metric] = [min(minimum, metric_value), max(maximum, metric_value)]
+            else:
+                continue
 
-            minimum, maximum = mum.get(metric, (0, 1))
-            mum[metric] = (min(minimum, metric_value), max(maximum, metric_value))
-
-    for key in statistics.items():
+    for key in statistics.keys():
         for index, instance_statistics in enumerate(statistics[key]):
-            metric = instance_statistics['metric']
-            metric_value = instance_statistics['metric_value']
-            statistics[key][index]['metric_value'] = normalize(metric, metric_value, mum[metric][0], mum[metric][1])
+            if 'metric' in instance_statistics and 'metric_value' in instance_statistics:
+                metric = instance_statistics['metric']
+                metric_value = instance_statistics['metric_value']
+                statistics[key][index]['metric_value'] = normalize(metric, metric_value, mum[metric][0], mum[metric][1])
+            else:
+                continue
 
     toc = time.time()
     finished_datetime = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
@@ -166,3 +172,6 @@ def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, tasks: list[
     logger.info(f'Time Cost: {toc-tic:.2f}')
     logger.info(f'Statistics Saved into: {stats_filepath}')
     logger.info(f'Occurrence Saved into: {ocrcs_filepath}')
+    mum_filepath = save_dirpath.joinpath(f'mum_{finished_datetime}.json')
+    save_json(list(mum.items()), mum_filepath, indent=2)
+    logger.info(f'Mum Saved into: {mum_filepath}')
