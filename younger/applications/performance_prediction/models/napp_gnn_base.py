@@ -88,6 +88,7 @@ class NAPPGNNBase(torch.nn.Module):
             act=None,
             norm=None,
         )
+        self.initialize_parameters()
 
     def forward(self, x: torch.Tensor, edge_index: torch.Tensor, batch: torch.Tensor):
         # x - [ batch_size * max(node_number_of_graphs) X num_node_features ] (Current Version: num_node_features=1)
@@ -125,3 +126,6 @@ class NAPPGNNBase(torch.nn.Module):
         # reg_output - [ batch_size X 1 ]
 
         return cls_output, reg_output, gnn_pooling_loss
+
+    def initialize_parameters(self):
+        torch.nn.init.normal_(self.node_embedding_layer.weight, mean=0, std=self.node_embedding_layer.embedding_dim ** -0.5)

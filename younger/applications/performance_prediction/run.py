@@ -110,7 +110,7 @@ def exact_check(device_descriptor: torch.device, model: torch.nn.Module, dataloa
             if mode == 'Supervised':
                 y = data.y.reshape(len(data), -1)
                 cls_output, reg_output, gnn_pooling_loss = model(data.x, data.edge_index, data.batch)
-                cls_main_loss = torch.nn.functional.cross_entropy(cls_output.reshape(-1), y[:, 0].int())
+                cls_main_loss = torch.nn.functional.cross_entropy(torch.nn.functional.softmax(cls_output, dim=-1), y[:, 0].long())
                 reg_main_loss = torch.nn.functional.mse_loss(reg_output.reshape(-1), y[:, 1])
                 loss = cls_main_loss + reg_main_loss + gnn_pooling_loss
                 digits = [f'{float(loss):.4f}', f'{float(cls_main_loss):.4f}', f'{float(reg_main_loss):.4f}', f'{float(gnn_pooling_loss):.4f}']
@@ -226,7 +226,7 @@ def exact_train(
                 y = data.y.reshape(len(data), -1)
                 cls_output, reg_output, gnn_pooling_loss = model(data.x, data.edge_index, data.batch)
                 # Now Try Classification
-                cls_main_loss = cre_criterian(cls_output.reshape(-1), y[:, 0].int())
+                cls_main_loss = cre_criterian(torch.nn.functional.softmax(cls_output, dim=-1), y[:, 0].long())
                 # Now Try Regression
                 reg_main_loss = mse_criterian(reg_output.reshape(-1), y[:, 1])
                 loss = cls_main_loss + reg_main_loss + gnn_pooling_loss
@@ -345,11 +345,11 @@ def train(
 
     meta = train_dataset.meta
 
-    logger.info(f'    -> Node Dict Size: {len(meta['o2i'])}')
+    logger.info(f'    -> Node Dict Size: {len(meta["o2i"])}')
     if mode == 'Supervised':
-        logger.info(f'    -> Task Number: {len(meta['t2i'])}')
-        logger.info(f'    -> Dataset Number: {len(meta['d2i'])}')
-        logger.info(f'    -> Metric Number: {len(meta['m2i'])}')
+        logger.info(f'    -> Task Number: {len(meta["t2i"])}')
+        logger.info(f'    -> Dataset Number: {len(meta["d2i"])}')
+        logger.info(f'    -> Metric Number: {len(meta["m2i"])}')
     logger.info(f'    -> Dataset Split Sizes:')
     logger.info(f'       Train - {len(train_dataset)}')
     logger.info(f'       Valid - {len(valid_dataset)}')
@@ -444,10 +444,10 @@ def test(
         worker_number=worker_number
     )
     meta = test_dataset.meta
-    logger.info(f'    -> Node Dict Size: {len(meta['o2i'])}')
-    logger.info(f'    -> Task Number: {len(meta['t2i'])}')
-    logger.info(f'    -> Dataset Number: {len(meta['d2i'])}')
-    logger.info(f'    -> Metric Number: {len(meta['m2i'])}')
+    logger.info(f'    -> Node Dict Size: {len(meta["o2i"])}')
+    logger.info(f'    -> Task Number: {len(meta["t2i"])}')
+    logger.info(f'    -> Dataset Number: {len(meta["d2i"])}')
+    logger.info(f'    -> Metric Number: {len(meta["m2i"])}')
     logger.info(f'    -> Test Dataset Size: {len(test_dataset)}')
     logger.info(f'  ^ Built.')
 

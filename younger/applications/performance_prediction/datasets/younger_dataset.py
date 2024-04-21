@@ -69,7 +69,7 @@ class YoungerDataset(Dataset):
         return [f'instance-{index}.pth' for index in range(self.meta['size'])]
 
     def len(self) -> int:
-        return len(self.meta['size'])
+        return self.meta['size']
 
     def get(self, index: int):
         return torch.load(os.path.join(self.processed_dir, f'instance-{index}.pth'))
@@ -129,12 +129,12 @@ class YoungerDataset(Dataset):
         meta['i2s'] = loaded_meta['splits']
         meta['i2m'] = loaded_meta['metrics']
 
-        meta['o2i'] = {operator: index for index, operator in meta['i2o']}
+        meta['o2i'] = {operator: index for index, operator in enumerate(meta['i2o'])}
 
-        meta['t2i'] = {task: index for index, task in meta['i2t']}
-        meta['d2i'] = {dataset: index for index, dataset in meta['i2d']}
-        meta['s2i'] = {split: index for index, split in meta['i2s']}
-        meta['m2i'] = {metric: index for index, metric in meta['i2m']}
+        meta['t2i'] = {task: index for index, task in enumerate(meta['i2t'])}
+        meta['d2i'] = {dataset: index for index, dataset in enumerate(meta['i2d'])}
+        meta['s2i'] = {split: index for index, split in enumerate(meta['i2s'])}
+        meta['m2i'] = {metric: index for index, metric in enumerate(meta['i2m'])}
 
         return meta
 
