@@ -17,7 +17,7 @@ import numpy
 import random
 import pathlib
 
-from typing import Any, Iterable
+from typing import Any, Iterable, Literal
 
 
 def set_deterministic(make_deterministic: bool = True):
@@ -66,8 +66,8 @@ def get_device_descriptor(device: str, index: int) -> torch.device:
     return torch.device(device_name)
 
 
-def find_all_checkpoints(checkpoint_dirpath: pathlib.Path, checkpoint_name: str = 'checkpoint', record_unit: str = 'Epoch') -> dict[int, pathlib.Path]:
-    checkpoint_filename_pattern = re.compile(f'{checkpoint_name}_{record_unit}_(\d+)\.cp')
+def find_all_checkpoints(checkpoint_dirpath: pathlib.Path, checkpoint_name: str = 'checkpoint') -> dict[int, pathlib.Path]:
+    checkpoint_filename_pattern = re.compile(f'{checkpoint_name}_Epoch_(?:\d+)_Step_(\d+)\.cp')
     checkpoints = dict()
     for path in checkpoint_dirpath.iterdir():
         if path.is_file():
@@ -83,14 +83,14 @@ def find_all_checkpoints(checkpoint_dirpath: pathlib.Path, checkpoint_name: str 
     return checkpoints
 
 
-def load_checkpoint(checkpoint_path: pathlib.Path, checkpoint_name: str = 'checkpoint', record_unit: str = 'Epoch') -> dict[str, Any] | None:
+def load_checkpoint(checkpoint_path: pathlib.Path, checkpoint_name: str = 'checkpoint') -> dict[str, Any] | None:
     checkpoint = None
     if checkpoint_path.is_file():
         checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
 
     if checkpoint_path.is_dir():
         assert len(checkpoint_name) != 0, f'Invalid checkpoint name.'
-        checkpoints = find_all_checkpoints(checkpoint_path, checkpoint_name, record_unit=record_unit)
+        checkpoints = find_all_checkpoints(checkpoint_path, checkpoint_name)
 
         if len(checkpoints) == 0:
             latest_checkpoint = None
@@ -99,7 +99,7 @@ def load_checkpoint(checkpoint_path: pathlib.Path, checkpoint_name: str = 'check
             latest_checkpoint_path = checkpoints[max_position]
             if latest_checkpoint_path.is_file():
                 latest_checkpoint = torch.load(latest_checkpoint_path, map_location=torch.device('cpu'))
-                assert max_position == latest_checkpoint[record_unit], 'An Error occurred when loading checkpoint.'
+                assert max_position == latest_checkpoint['Step'], 'An Error occurred when loading checkpoint.'
             else:
                 latest_checkpoint = None
 
@@ -108,15 +108,15 @@ def load_checkpoint(checkpoint_path: pathlib.Path, checkpoint_name: str = 'check
     return checkpoint
 
 
-def save_checkpoint(checkpoint, checkpoint_path: pathlib.Path, checkpoint_name: str = 'checkpoint', record_unit: str = 'Epoch', keep_number: int = 1):
+def save_checkpoint(checkpoint, checkpoint_path: pathlib.Path, checkpoint_name: str = 'checkpoint', keep_number: int = 1):
     if checkpoint_path.is_dir():
         assert len(checkpoint_name) != 0, f'Invalid checkpoint name.'
-        position = checkpoint[record_unit]
-        checkpoint_filename = f'{checkpoint_name}_{record_unit}_{position}.cp'
+        position = checkpoint['Step']
+        checkpoint_filename = f'{checkpoint_name}_Epoch_{checkpoint["Epoch"]}_Step_{checkpoint["Step"]}.cp'
         checkpoint_filepath = checkpoint_path.joinpath(checkpoint_filename)
         torch.save(checkpoint, checkpoint_filepath)
 
-        checkpoints = find_all_checkpoints(checkpoint_path, checkpoint_name, record_unit=record_unit)
+        checkpoints = find_all_checkpoints(checkpoint_path, checkpoint_name)
         positions = sorted(list(checkpoints.keys()), reverse=True)
         for position in positions[keep_number:]:
             remove_checkpoint(checkpoints[position])

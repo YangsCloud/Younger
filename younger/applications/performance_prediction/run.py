@@ -49,41 +49,33 @@ def get_logging_metrics_str(metric_names: list[str], metric_values: list[str]) -
 def period_operation(
     checkpoint_dirpath: pathlib.Path, mode: Literal['Supervised', 'Unsupervised'],
     is_master: bool, world_size: int,
-    epoch: int, step: int, train_period: int, valid_period: int, report_period: int, start_position: int,
-    record_unit: Literal['Epoch', 'Step'], current_unit: Literal['Epoch', 'Step'],
+    epoch: int, step: int, train_period: int, valid_period: int, report_period: int,
     model: torch.nn.Module, optimizer: torch.optim.Optimizer, checkpoint_name: str, keep_number: int,
     valid_dataloader: DataLoader | None,
     digits: torch.Tensor, digit_names: list[str],
     device_descriptor: torch.device,
     is_distribution: bool
 ):
-    if current_unit != record_unit:
-        return
-
-    if current_unit == 'Epoch':
-        position = epoch
-    if current_unit == 'Step':
-        position = step
-    
-    if position % train_period == 0 and is_master:
-        logger.info('  -> Saving checkpoint ...')
-        tic = time.time()
-        checkpoint = dict()
-        checkpoint[record_unit] = position + start_position
-        checkpoint['model_state'] = model.state_dict()
-        checkpoint['optimizer_state'] = optimizer.state_dict()
-        save_checkpoint(checkpoint, checkpoint_path=checkpoint_dirpath, checkpoint_name=checkpoint_name, record_unit=record_unit, keep_number=keep_number)
-        toc = time.time()
-        logger.info(f'  -> Checkpoint is saved to \'{checkpoint_dirpath}\' at {position} {record_unit} (Take: {toc-tic:2.0f}s)')        
-
-    if position % report_period == 0:
+    if step % report_period == 0:
         if is_distribution:
             distributed.all_reduce(digits, op = distributed.ReduceOp.SUM)
             digits = digits / world_size
         digits = [f'{float(digit):.4f}' for digit in digits]
-        logger.info(f'  {record_unit}@{position} - {get_logging_metrics_str(digit_names, digits)}')
+        logger.info(f'  [Epoch/Step]@[{epoch}/{step}] - {get_logging_metrics_str(digit_names, digits)}')
 
-    if position % valid_period == 0:
+    if step % train_period == 0 and is_master:
+        logger.info('  -> Saving checkpoint ...')
+        tic = time.time()
+        checkpoint = dict()
+        checkpoint['Epoch'] = epoch
+        checkpoint['Step'] = step
+        checkpoint['model_state'] = model.state_dict()
+        checkpoint['optimizer_state'] = optimizer.state_dict()
+        save_checkpoint(checkpoint, checkpoint_path=checkpoint_dirpath, checkpoint_name=checkpoint_name, keep_number=keep_number)
+        toc = time.time()
+        logger.info(f'  -> Checkpoint is saved to \'{checkpoint_dirpath}\' at [Epoch/Step][{epoch}/{step}] (Time Cost: {toc-tic:.2f}s)')        
+
+    if step % valid_period == 0:
         if is_distribution:
             distributed.barrier()
         exact_check(device_descriptor, model, valid_dataloader, 'Valid', mode, is_distribution, world_size)
@@ -94,14 +86,17 @@ def period_operation(
 
 def exact_check(device_descriptor: torch.device, model: torch.nn.Module, dataloader: DataLoader, split: Literal['Valid', 'Test'], mode: Literal['Supervised', 'Unsupervised'], is_distribution: bool = False, world_size: int = 1):
     model.eval()
-    logger.info(f'  v {split} Begin ...')
-    overall_loss = 0
-    overall_cls_main_loss = 0
-    overall_reg_main_loss = 0
-    overall_gnn_pooling_loss = 0
+    logger.info(f'  -> {split} Begin ...')
     tic = time.time()
     if mode == 'Supervised':
-        digit_names = ['Total-Loss', 'CLS-Loss (CRE)', 'REG-Loss (MSE)', 'Cluster-loss']
+        digit_names = ['Total-Loss', 'CLS-Acc', 'CLS-Loss (CRE)', 'REG-Loss (MSE)', 'Cluster-loss']
+        overall_loss = 0
+        overall_cls_main_loss = 0
+        overall_reg_main_loss = 0
+        overall_gnn_pooling_loss = 0
+
+        overall_correct = 0
+        overall_predict = 0
     else:
         digit_names = ['Cluster-loss']
     with torch.no_grad():
@@ -113,20 +108,24 @@ def exact_check(device_descriptor: torch.device, model: torch.nn.Module, dataloa
                 cls_main_loss = torch.nn.functional.cross_entropy(torch.nn.functional.softmax(cls_output, dim=-1), y[:, 0].long())
                 reg_main_loss = torch.nn.functional.mse_loss(reg_output.reshape(-1), y[:, 1])
                 loss = cls_main_loss + reg_main_loss + gnn_pooling_loss
-                digits = [f'{float(loss):.4f}', f'{float(cls_main_loss):.4f}', f'{float(reg_main_loss):.4f}', f'{float(gnn_pooling_loss):.4f}']
                 overall_loss += loss
                 overall_cls_main_loss += cls_main_loss
                 overall_reg_main_loss += reg_main_loss
                 overall_gnn_pooling_loss += gnn_pooling_loss
+
+                _, cls_predict = torch.max(torch.nn.functional.softmax(cls_output, dim=-1), dim=-1)
+                cls_correct = (cls_predict == y[:, 0].long()).sum().item()
+                overall_correct += cls_correct
+                overall_predict += len(cls_predict)
             else:
                 gnn_pooling_loss = model(data.x, data.edge_index, data.batch)
-                digits = [f'{float(gnn_pooling_loss):.4f}']
                 overall_gnn_pooling_loss += gnn_pooling_loss
     toc = time.time()
 
     if mode == 'Supervised':
         digits = torch.tensor([
             overall_loss/index,
+            overall_correct/overall_predict,
             overall_cls_main_loss/index,
             overall_reg_main_loss/index,
             overall_gnn_pooling_loss/index
@@ -140,7 +139,7 @@ def exact_check(device_descriptor: torch.device, model: torch.nn.Module, dataloa
 
     digits = [f'{float(digit):.4f}' for digit in digits]
 
-    logger.info(f'  ^  {split} Finished. Overall Result - {get_logging_metrics_str(digit_names, digits)} (Time Cost = {toc-tic:.2f}s)')
+    logger.info(f'  -> {split} Finished. Overall Result - {get_logging_metrics_str(digit_names, digits)} (Time Cost = {toc-tic:.2f}s)')
 
 
 def exact_train(
@@ -148,7 +147,7 @@ def exact_train(
     checkpoint_dirpath: pathlib.Path, mode: Literal['Supervised', 'Unsupervised'],
     model: torch.nn.Module, train_dataset: Dataset, valid_dataset: Dataset,
     checkpoint_filepath: str, checkpoint_name: str, keep_number: int, reset_optimizer: bool, reset_period: bool, fine_tune: bool,
-    life_cycle:int, update_period: int, train_period: int, valid_period: int, report_period: int, record_unit: Literal['Epoch', 'Step'],
+    life_cycle:int, update_period: int, train_period: int, valid_period: int, report_period: int,
     train_batch_size: int, valid_batch_size: int, learning_rate: float, weight_decay: float, shuffle: bool,
     seed: int, device: Literal['CPU', 'GPU'], world_size: int, master_rank: int, is_distribution: bool,
     make_deterministic: bool,
@@ -183,7 +182,7 @@ def exact_train(
     valid_dataloader = DataLoader(valid_dataset, batch_size=valid_batch_size, sampler=valid_sampler)
 
     if checkpoint_filepath:
-        checkpoint = load_checkpoint(pathlib.Path(checkpoint_filepath), checkpoint_name, record_unit=record_unit)
+        checkpoint = load_checkpoint(pathlib.Path(checkpoint_filepath), checkpoint_name)
     else:
         checkpoint = None
 
@@ -191,7 +190,7 @@ def exact_train(
         logger.info(f'  Train from scratch.')
         start_position = 0
     else:
-        logger.info(f'  Train from checkpoint [\'{checkpoint_filepath}\'] at [{checkpoint[record_unit]}] {record_unit}.')
+        logger.info(f'  Train from checkpoint [\'{checkpoint_filepath}\'] [Epoch/Step]@[{checkpoint["Epoch"]}/{checkpoint["Step"]}].')
 
         if reset_optimizer:
             logger.info(f'  Reset Optimizer.')
@@ -203,25 +202,29 @@ def exact_train(
         logger.info(f'  ^ Loaded.')
 
         if reset_period:
-            logger.info(f'  Reset {record_unit}.')
+            logger.info(f'  Reset Epoch & Step.')
             start_position = 0
         else:
-            start_position = checkpoint[record_unit]
+            start_position = checkpoint['Step']
 
     logger.info(f'Training Start ...')
     logger.info(f'  Train Life Cycle: Total {life_cycle} Epochs!')
-    logger.info(f'  Saving checkpoint every {train_period} {record_unit};')
     logger.info(f'  Update every {update_period} Step;')
-    logger.info(f'  Validate every {valid_period} {record_unit};')
-    logger.info(f'  Report every {report_period} {record_unit}.')
+    logger.info(f'  Report every {report_period} Step;')
+    logger.info(f'  Validate every {valid_period} Step;')
+    logger.info(f'  Saving checkpoint every {train_period} Step.')
 
     cre_criterian = torch.nn.CrossEntropyLoss()
     mse_criterian = torch.nn.MSELoss()
     model.train()
     optimizer.zero_grad()
-    for epoch in range(1, life_cycle + 1):
+    epoch = 0
+    step = start_position
+    while epoch < life_cycle:
+        epoch += 1
         tic = time.time()
-        for step, data in enumerate(train_dataloader, start=1):
+        for data in train_dataloader:
+            step += 1
             data: Data = data.to(device_descriptor)
             if mode == 'Supervised':
                 y = data.y.reshape(len(data), -1)
@@ -247,8 +250,7 @@ def exact_train(
             period_operation(
                 checkpoint_dirpath, mode,
                 is_master, world_size,
-                epoch, step, train_period, valid_period, report_period, start_position,
-                record_unit, 'Step',
+                epoch, step, train_period, valid_period, report_period,
                 model, optimizer, checkpoint_name, keep_number,
                 valid_dataloader,
                 average_digits, average_digit_names,
@@ -257,18 +259,7 @@ def exact_train(
             )
 
         toc = time.time()
-        logger.info(f'  Epoch@{epoch+start_position} Finished. Time Cost = {toc-tic:.2f}s')
-        period_operation(
-            checkpoint_dirpath, mode,
-            is_master, world_size,
-            epoch, step, train_period, valid_period, report_period, start_position,
-            record_unit, 'Epoch',
-            model, optimizer, checkpoint_name, keep_number,
-            valid_dataloader,
-            average_digits, average_digit_names,
-            device_descriptor,
-            is_distribution
-        )
+        logger.info(f'  <=> Epoch@{epoch} Finished. Time Cost = {toc-tic:.2f}s')
 
     if is_distribution:
         distributed.destroy_process_group()
@@ -299,7 +290,6 @@ def train(
     train_period: int = 1000,
     valid_period: int = 1000,
     report_period: int = 100,
-    record_unit: Literal['Epoch', 'Step'] = 'Step',
 
     train_batch_size: int = 32,
     valid_batch_size: int = 32,
@@ -318,7 +308,6 @@ def train(
     make_deterministic: bool = False,
 ):
     assert mode in {'Supervised', 'Unsupervised'}
-    assert record_unit in {'Epoch', 'Step'}
     assert device in {'CPU', 'GPU'}
 
     if device == 'CPU':
@@ -358,7 +347,7 @@ def train(
     logger.info(f'    -> Dataset Split Sizes:')
     logger.info(f'       Train - {len(train_dataset)}')
     logger.info(f'       Valid - {len(valid_dataset)}')
-    logger.info(f'  ^ Built.')
+    logger.info(f'  ^ Datasets Built.')
 
     if cluster_num is None:
         cluster_num = infer_cluster_num(train_dataset)
@@ -386,8 +375,8 @@ def train(
         f'\n{model}'
         f'\n  - Number of Parameters:'
         f'\n{parameters_number_str}'
-        f'\n  ^ Built.'
     )
+    logger.info(f'  ^ Model Built.')
 
     create_dir(checkpoint_dirpath)
     if is_distribution:
@@ -399,7 +388,7 @@ def train(
                 checkpoint_dirpath, mode,
                 model, train_dataset, valid_dataset,
                 checkpoint_filepath, checkpoint_name, keep_number, reset_optimizer, reset_period, fine_tune,
-                life_cycle, update_period, train_period, valid_period, report_period, record_unit,
+                life_cycle, update_period, train_period, valid_period, report_period,
                 train_batch_size, valid_batch_size, learning_rate, weight_decay, shuffle,
                 seed, device, world_size, master_rank, is_distribution,
                 make_deterministic,
@@ -412,7 +401,7 @@ def train(
             checkpoint_dirpath, mode,
             model, train_dataset, valid_dataset,
             checkpoint_filepath, checkpoint_name, keep_number, reset_optimizer, reset_period, fine_tune,
-            life_cycle, update_period, train_period, valid_period, report_period, record_unit,
+            life_cycle, update_period, train_period, valid_period, report_period,
             train_batch_size, valid_batch_size, learning_rate, weight_decay, shuffle,
             seed, device, world_size, master_rank, is_distribution,
             make_deterministic,

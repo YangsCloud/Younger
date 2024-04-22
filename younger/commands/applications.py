@@ -65,7 +65,6 @@ def performance_prediction_train_run(arguments):
         arguments.train_period,
         arguments.valid_period,
         arguments.report_period,
-        arguments.record_unit,
 
         arguments.train_batch_size,
         arguments.valid_batch_size,
@@ -138,7 +137,6 @@ def set_applications_performance_perdiction_arguments(parser: argparse.ArgumentP
     train_parser.add_argument('--train-period', type=int, default=1000)
     train_parser.add_argument('--valid-period', type=int, default=1000)
     train_parser.add_argument('--report-period', type=int, default=100)
-    train_parser.add_argument('--record-unit', choices=['Epoch', 'Step'], default='Step')
 
     train_parser.add_argument('--train-batch-size', type=int, default=32)
     train_parser.add_argument('--valid-batch-size', type=int, default=32)
