@@ -9,6 +9,7 @@
 # This source code is licensed under the Apache-2.0 license found in the
 # LICENSE file in the root directory of this source tree.
 
+import math
 import time
 import onnx
 import pathlib
@@ -89,6 +90,8 @@ def statistics_instance(parameters: tuple[pathlib.Path, list, list, list, list, 
                 metric if has_metric_filters else '*',
             ))
             metric_value = label['metric'][1]
+            if math.isnan(metric_value):
+                continue
             if combined_filter_pattern in statistics:
                 occurrence[str((task, dataset, split, metric))] = occurrence.get(str((task, dataset, split, metric)), 0) + 1
                 statistics[combined_filter_pattern].append(dict(
