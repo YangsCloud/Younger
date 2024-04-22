@@ -16,7 +16,7 @@ import pathlib
 from typing import Literal
 
 from optimum.exporters.onnx import main_export
-from huggingface_hub import HfFileSystem
+from huggingface_hub import HfFileSystem, login
 from huggingface_hub.utils._errors import RepositoryNotFoundError
 
 from younger.commons.io import load_json
@@ -29,8 +29,11 @@ from younger.datasets.constructors.huggingface.utils import infer_model_size, cl
 from younger.datasets.constructors.huggingface.annotations import get_heuristic_annotations
 
 
-def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_filepath: pathlib.Path, status_filepath: pathlib.Path, device: Literal['cpu', 'cuda'] = 'cpu', threshold: int | None = None):
+def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_filepath: pathlib.Path, status_filepath: pathlib.Path, device: Literal['cpu', 'cuda'] = 'cpu', threshold: int | None = None, huggingface_token: str | None = None):
     assert device in {'cpu', 'cuda'}
+
+    if huggingface_token is not None:
+        login(huggingface_token)
 
     hf_file_system = HfFileSystem()
     huggingface_cache_dirpath = cache_dirpath.joinpath('HuggingFace')
