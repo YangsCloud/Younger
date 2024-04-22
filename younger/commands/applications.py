@@ -61,6 +61,7 @@ def performance_prediction_train_run(arguments):
         arguments.fine_tune,
 
         arguments.life_cycle,
+        arguments.update_period,
         arguments.train_period,
         arguments.valid_period,
         arguments.report_period,
@@ -70,6 +71,7 @@ def performance_prediction_train_run(arguments):
         arguments.valid_batch_size,
         arguments.learning_rate,
         arguments.weight_decay,
+        arguments.shuffle,
 
         arguments.device,
         arguments.world_size,
@@ -132,6 +134,7 @@ def set_applications_performance_perdiction_arguments(parser: argparse.ArgumentP
     train_parser.add_argument('--fine-tune', action='store_true')
 
     train_parser.add_argument('--life-cycle', type=int, default=100)
+    train_parser.add_argument('--update-period', type=int, default=1)
     train_parser.add_argument('--train-period', type=int, default=1000)
     train_parser.add_argument('--valid-period', type=int, default=1000)
     train_parser.add_argument('--report-period', type=int, default=100)
@@ -141,6 +144,7 @@ def set_applications_performance_perdiction_arguments(parser: argparse.ArgumentP
     train_parser.add_argument('--valid-batch-size', type=int, default=32)
     train_parser.add_argument('--learning-rate', type=float, default=1e-3)
     train_parser.add_argument('--weight-decay', type=float, default=1e-1)
+    train_parser.add_argument('--shuffle', action='store_true')
 
     train_parser.add_argument('--world-size', type=int, default=1)
     train_parser.add_argument('--master-addr', type=str, default='localhost')

@@ -148,8 +148,8 @@ def exact_train(
     checkpoint_dirpath: pathlib.Path, mode: Literal['Supervised', 'Unsupervised'],
     model: torch.nn.Module, train_dataset: Dataset, valid_dataset: Dataset,
     checkpoint_filepath: str, checkpoint_name: str, keep_number: int, reset_optimizer: bool, reset_period: bool, fine_tune: bool,
-    life_cycle:int, train_period: int, valid_period: int, report_period: int, record_unit: Literal['Epoch', 'Step'],
-    train_batch_size: int, valid_batch_size: int, learning_rate: float, weight_decay: float,
+    life_cycle:int, update_period: int, train_period: int, valid_period: int, report_period: int, record_unit: Literal['Epoch', 'Step'],
+    train_batch_size: int, valid_batch_size: int, learning_rate: float, weight_decay: float, shuffle: bool,
     seed: int, device: Literal['CPU', 'GPU'], world_size: int, master_rank: int, is_distribution: bool,
     make_deterministic: bool,
 ):
@@ -173,10 +173,10 @@ def exact_train(
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
     if is_distribution:
-        train_sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=rank, shuffle=True, seed=seed, drop_last=False)
+        train_sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=rank, shuffle=shuffle, seed=seed, drop_last=False)
         valid_sampler = DistributedSampler(valid_dataset, num_replicas=world_size, rank=rank, shuffle=False, seed=seed, drop_last=False)
     else:
-        train_sampler = RandomSampler(train_dataset)
+        train_sampler = RandomSampler(train_dataset) if shuffle else None
         valid_sampler = None
 
     train_dataloader = DataLoader(train_dataset, batch_size=train_batch_size, sampler=train_sampler)
@@ -211,19 +211,22 @@ def exact_train(
     logger.info(f'Training Start ...')
     logger.info(f'  Train Life Cycle: Total {life_cycle} Epochs!')
     logger.info(f'  Saving checkpoint every {train_period} {record_unit};')
+    logger.info(f'  Update every {update_period} Step;')
     logger.info(f'  Validate every {valid_period} {record_unit};')
     logger.info(f'  Report every {report_period} {record_unit}.')
 
     cre_criterian = torch.nn.CrossEntropyLoss()
     mse_criterian = torch.nn.MSELoss()
     model.train()
+    optimizer.zero_grad()
     for epoch in range(1, life_cycle + 1):
         tic = time.time()
         for step, data in enumerate(train_dataloader, start=1):
             data: Data = data.to(device_descriptor)
-            optimizer.zero_grad()
             if mode == 'Supervised':
                 y = data.y.reshape(len(data), -1)
+                print(len(data.x))
+                print(data.y)
                 cls_output, reg_output, gnn_pooling_loss = model(data.x, data.edge_index, data.batch)
                 # Now Try Classification
                 cls_main_loss = cre_criterian(torch.nn.functional.softmax(cls_output, dim=-1), y[:, 0].long())
@@ -231,13 +234,17 @@ def exact_train(
                 reg_main_loss = mse_criterian(reg_output.reshape(-1), y[:, 1])
                 loss = cls_main_loss + reg_main_loss + gnn_pooling_loss
                 loss.backward()
-                optimizer.step()
+                if step % update_period == 0:
+                    optimizer.step()
+                    optimizer.zero_grad()
                 average_digits = torch.tensor([float(loss), float(cls_main_loss), float(reg_main_loss), float(gnn_pooling_loss)]).to(device_descriptor)
                 average_digit_names = ['Total-Loss', 'CLS-Loss (CRE)', 'REG-Loss (MSE)', 'Cluster-loss']
             else:
                 gnn_pooling_loss = model(data.x, data.edge_index, data.batch)
                 gnn_pooling_loss.backward()
-                optimizer.step()
+                if step % update_period == 0:
+                    optimizer.step()
+                    optimizer.zero_grad()
                 average_digits = torch.tensor([float(gnn_pooling_loss)]).to(device_descriptor)
                 average_digit_names = ['Cluster-loss']
 
@@ -292,6 +299,7 @@ def train(
     fine_tune: bool = False,
 
     life_cycle: int = 100,
+    update_period: int = 1,
     train_period: int = 1000,
     valid_period: int = 1000,
     report_period: int = 100,
@@ -301,6 +309,7 @@ def train(
     valid_batch_size: int = 32,
     learning_rate: float = 1e-3,
     weight_decay: float = 1e-1,
+    shuffle: bool = True,
 
     device: Literal['CPU', 'GPU'] = 'GPU',
     world_size: int = 1,
@@ -394,8 +403,8 @@ def train(
                 checkpoint_dirpath, mode,
                 model, train_dataset, valid_dataset,
                 checkpoint_filepath, checkpoint_name, keep_number, reset_optimizer, reset_period, fine_tune,
-                life_cycle, train_period, valid_period, report_period, record_unit,
-                train_batch_size, valid_batch_size, learning_rate, weight_decay,
+                life_cycle, update_period, train_period, valid_period, report_period, record_unit,
+                train_batch_size, valid_batch_size, learning_rate, weight_decay, shuffle,
                 seed, device, world_size, master_rank, is_distribution,
                 make_deterministic,
             ),
@@ -407,8 +416,8 @@ def train(
             checkpoint_dirpath, mode,
             model, train_dataset, valid_dataset,
             checkpoint_filepath, checkpoint_name, keep_number, reset_optimizer, reset_period, fine_tune,
-            life_cycle, train_period, valid_period, report_period, record_unit,
-            train_batch_size, valid_batch_size, learning_rate, weight_decay,
+            life_cycle, update_period, train_period, valid_period, report_period, record_unit,
+            train_batch_size, valid_batch_size, learning_rate, weight_decay, shuffle,
             seed, device, world_size, master_rank, is_distribution,
             make_deterministic,
         )
