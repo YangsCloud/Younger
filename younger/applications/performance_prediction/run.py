@@ -232,19 +232,17 @@ def exact_train(
                 reg_main_loss = mse_criterian(reg_output.reshape(-1), y[:, 1])
                 loss = cls_main_loss + reg_main_loss + gnn_pooling_loss
                 loss.backward()
-                if step % update_period == 0:
-                    optimizer.step()
-                    optimizer.zero_grad()
                 average_digits = torch.tensor([float(loss), float(cls_main_loss), float(reg_main_loss), float(gnn_pooling_loss)]).to(device_descriptor)
                 average_digit_names = ['Total-Loss', 'CLS-Loss (CRE)', 'REG-Loss (MSE)', 'Cluster-loss']
             else:
                 gnn_pooling_loss = model(data.x, data.edge_index, data.batch)
                 gnn_pooling_loss.backward()
-                if step % update_period == 0:
-                    optimizer.step()
-                    optimizer.zero_grad()
                 average_digits = torch.tensor([float(gnn_pooling_loss)]).to(device_descriptor)
                 average_digit_names = ['Cluster-loss']
+
+            if step % update_period == 0:
+                optimizer.step()
+                optimizer.zero_grad()
 
             period_operation(
                 checkpoint_dirpath, mode,
