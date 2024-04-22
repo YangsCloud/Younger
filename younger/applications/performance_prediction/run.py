@@ -13,14 +13,14 @@
 import os
 import time
 import torch
-import numpy
 import pathlib
+import functools
 
 from torch import distributed
 from typing import Literal
 
 from torch.utils.data.distributed import DistributedSampler
-from torch.utils.data import Sampler, RandomSampler
+from torch.utils.data import RandomSampler
 from torch_geometric.data import Dataset, Data
 from torch_geometric.loader import DataLoader
 
@@ -33,7 +33,10 @@ from younger.applications.performance_prediction.datasets import YoungerDataset
 
 
 def infer_cluster_num(dataset: Dataset) -> int:
-    pass
+    total_node_num = 0
+    for data in dataset:
+        total_node_num += data.num_nodes
+    return total_node_num / len(dataset)
 
 
 def get_logging_metrics_str(metric_names: list[str], metric_values: list[str]) -> str:
@@ -93,11 +96,12 @@ def exact_check(device_descriptor: torch.device, model: torch.nn.Module, dataloa
     model.eval()
     logger.info(f'  v {split} Begin ...')
     overall_loss = 0
-    overall_main_loss = 0
+    overall_cls_main_loss = 0
+    overall_reg_main_loss = 0
     overall_gnn_pooling_loss = 0
     tic = time.time()
     if mode == 'Supervised':
-        digit_names = ['Total-Loss', 'Regression-Loss (MSE)', 'Cluster-loss']
+        digit_names = ['Total-Loss', 'CLS-Loss (CRE)', 'REG-Loss (MSE)', 'Cluster-loss']
     else:
         digit_names = ['Cluster-loss']
     with torch.no_grad():
@@ -105,12 +109,14 @@ def exact_check(device_descriptor: torch.device, model: torch.nn.Module, dataloa
             data: Data = data.to(device_descriptor)
             if mode == 'Supervised':
                 y = data.y.reshape(len(data), -1)
-                output, gnn_pooling_loss = model(data.x, data.edge_index, data.batch, y[:, 0].int())
-                main_loss = torch.nn.functional.mse_loss(output.reshape(-1), y[:, 1])
-                loss = main_loss + gnn_pooling_loss
-                digits = [f'{float(loss):.4f}', f'{float(main_loss):.4f}', f'{float(gnn_pooling_loss):.4f}']
+                cls_output, reg_output, gnn_pooling_loss = model(data.x, data.edge_index, data.batch)
+                cls_main_loss = torch.nn.functional.cross_entropy(torch.nn.functional.softmax(cls_output, dim=-1), y[:, 0].long())
+                reg_main_loss = torch.nn.functional.mse_loss(reg_output.reshape(-1), y[:, 1])
+                loss = cls_main_loss + reg_main_loss + gnn_pooling_loss
+                digits = [f'{float(loss):.4f}', f'{float(cls_main_loss):.4f}', f'{float(reg_main_loss):.4f}', f'{float(gnn_pooling_loss):.4f}']
                 overall_loss += loss
-                overall_main_loss += main_loss
+                overall_cls_main_loss += cls_main_loss
+                overall_reg_main_loss += reg_main_loss
                 overall_gnn_pooling_loss += gnn_pooling_loss
             else:
                 gnn_pooling_loss = model(data.x, data.edge_index, data.batch)
@@ -119,7 +125,12 @@ def exact_check(device_descriptor: torch.device, model: torch.nn.Module, dataloa
     toc = time.time()
 
     if mode == 'Supervised':
-        digits = torch.tensor([overall_loss/index, overall_main_loss/index, overall_gnn_pooling_loss/index]).to(device_descriptor)
+        digits = torch.tensor([
+            overall_loss/index,
+            overall_cls_main_loss/index,
+            overall_reg_main_loss/index,
+            overall_gnn_pooling_loss/index
+        ]).to(device_descriptor)
     else:
         digits = torch.tensor([overall_gnn_pooling_loss/index]).to(device_descriptor)
 
@@ -137,10 +148,10 @@ def exact_train(
     checkpoint_dirpath: pathlib.Path, mode: Literal['Supervised', 'Unsupervised'],
     model: torch.nn.Module, train_dataset: Dataset, valid_dataset: Dataset,
     checkpoint_filepath: str, checkpoint_name: str, keep_number: int, reset_optimizer: bool, reset_period: bool, fine_tune: bool,
-    life_cycle:int, train_period: int, valid_period: int, report_period: int, record_unit: Literal['Epoch', 'Step'],
-    train_batch_size: int, valid_batch_size: int, learning_rate: float, weight_decay: float,
+    life_cycle:int, update_period: int, train_period: int, valid_period: int, report_period: int, record_unit: Literal['Epoch', 'Step'],
+    train_batch_size: int, valid_batch_size: int, learning_rate: float, weight_decay: float, shuffle: bool,
     seed: int, device: Literal['CPU', 'GPU'], world_size: int, master_rank: int, is_distribution: bool,
-    make_deterministic: bool
+    make_deterministic: bool,
 ):
     is_master = rank == master_rank
     fix_random_procedure(seed)
@@ -160,14 +171,13 @@ def exact_train(
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank], find_unused_parameters=False)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-    criterion = torch.nn.MSELoss()
 
     if is_distribution:
-        train_sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=rank, shuffle=True, seed=seed, drop_last=False)
+        train_sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=rank, shuffle=shuffle, seed=seed, drop_last=False)
         valid_sampler = DistributedSampler(valid_dataset, num_replicas=world_size, rank=rank, shuffle=False, seed=seed, drop_last=False)
     else:
-        train_sampler = RandomSampler(train_dataset)
-        valid_sampler = Sampler(valid_dataset)
+        train_sampler = RandomSampler(train_dataset) if shuffle else None
+        valid_sampler = None
 
     train_dataloader = DataLoader(train_dataset, batch_size=train_batch_size, sampler=train_sampler)
     valid_dataloader = DataLoader(valid_dataset, batch_size=valid_batch_size, sampler=valid_sampler)
@@ -201,30 +211,38 @@ def exact_train(
     logger.info(f'Training Start ...')
     logger.info(f'  Train Life Cycle: Total {life_cycle} Epochs!')
     logger.info(f'  Saving checkpoint every {train_period} {record_unit};')
+    logger.info(f'  Update every {update_period} Step;')
     logger.info(f'  Validate every {valid_period} {record_unit};')
     logger.info(f'  Report every {report_period} {record_unit}.')
 
+    cre_criterian = torch.nn.CrossEntropyLoss()
+    mse_criterian = torch.nn.MSELoss()
     model.train()
+    optimizer.zero_grad()
     for epoch in range(1, life_cycle + 1):
         tic = time.time()
         for step, data in enumerate(train_dataloader, start=1):
             data: Data = data.to(device_descriptor)
-            optimizer.zero_grad()
             if mode == 'Supervised':
                 y = data.y.reshape(len(data), -1)
-                output, gnn_pooling_loss = model(data.x, data.edge_index, data.batch, y[:, 0].int())
-                main_loss = criterion(output.reshape(-1), y[:, 1])
-                loss = main_loss + gnn_pooling_loss
+                cls_output, reg_output, gnn_pooling_loss = model(data.x, data.edge_index, data.batch)
+                # Now Try Classification
+                cls_main_loss = cre_criterian(torch.nn.functional.softmax(cls_output, dim=-1), y[:, 0].long())
+                # Now Try Regression
+                reg_main_loss = mse_criterian(reg_output.reshape(-1), y[:, 1])
+                loss = cls_main_loss + reg_main_loss + gnn_pooling_loss
                 loss.backward()
-                optimizer.step()
-                average_digits = torch.tensor([float(loss), float(main_loss), float(gnn_pooling_loss)]).to(device_descriptor)
-                average_digit_names = ['Total-Loss', 'Regression-Loss (MSE)', 'Cluster-loss']
+                average_digits = torch.tensor([float(loss), float(cls_main_loss), float(reg_main_loss), float(gnn_pooling_loss)]).to(device_descriptor)
+                average_digit_names = ['Total-Loss', 'CLS-Loss (CRE)', 'REG-Loss (MSE)', 'Cluster-loss']
             else:
                 gnn_pooling_loss = model(data.x, data.edge_index, data.batch)
                 gnn_pooling_loss.backward()
-                optimizer.step()
                 average_digits = torch.tensor([float(gnn_pooling_loss)]).to(device_descriptor)
                 average_digit_names = ['Cluster-loss']
+
+            if step % update_period == 0:
+                optimizer.step()
+                optimizer.zero_grad()
 
             period_operation(
                 checkpoint_dirpath, mode,
@@ -257,14 +275,14 @@ def exact_train(
 
 
 def train(
-    dataset_dirpath: pathlib.Path,
+    train_dataset_dirpath: pathlib.Path,
+    valid_dataset_dirpath: pathlib.Path,
     checkpoint_dirpath: pathlib.Path,
     mode: Literal['Supervised', 'Unsupervised'] = 'Unsupervised',
     x_feature_get_type: Literal['OnlyOp'] = 'OnlyOp',
     y_feature_get_type: Literal['OnlyMt'] = 'OnlyMt',
 
     node_dim: int = 512,
-    metric_dim: int = 512,
     hidden_dim: int = 512,
     readout_dim: int = 256,
     cluster_num: int | None = None,
@@ -277,6 +295,7 @@ def train(
     fine_tune: bool = False,
 
     life_cycle: int = 100,
+    update_period: int = 1,
     train_period: int = 1000,
     valid_period: int = 1000,
     report_period: int = 100,
@@ -286,12 +305,14 @@ def train(
     valid_batch_size: int = 32,
     learning_rate: float = 1e-3,
     weight_decay: float = 1e-1,
+    shuffle: bool = True,
 
     device: Literal['CPU', 'GPU'] = 'GPU',
     world_size: int = 1,
     master_addr: str = 'localhost',
     master_port: str = '16161',
     master_rank: int = 0,
+    worker_number: int = 4,
 
     seed: int = 1234,
     make_deterministic: bool = False,
@@ -314,52 +335,41 @@ def train(
     logger.info(f'  v Building Younger Datasets ...')
 
     fix_random_procedure(seed)
+    train_dataset = YoungerDataset(
+        str(train_dataset_dirpath),
+        x_feature_get_type=x_feature_get_type,
+        y_feature_get_type=y_feature_get_type,
+        worker_number=worker_number
+    )
+    valid_dataset = YoungerDataset(
+        str(valid_dataset_dirpath),
+        x_feature_get_type=x_feature_get_type,
+        y_feature_get_type=y_feature_get_type,
+        worker_number=worker_number
+    )
+
+    meta = train_dataset.meta
+
+    logger.info(f'    -> Node Dict Size: {len(meta["o2i"])}')
     if mode == 'Supervised':
-        #train_dataset = YoungerDataset(str(dataset_dirpath), mode=mode, split='Train', x_feature_get_type=x_feature_get_type, y_feature_get_type=y_feature_get_type)
-        #valid_dataset = YoungerDataset(str(dataset_dirpath).absolute(), mode=mode, split='Valid', x_feature_get_type=x_feature_get_type, y_feature_get_type=y_feature_get_type)
-        random_generator = numpy.random.default_rng(seed=seed)
-        dataset = YoungerDataset(str(dataset_dirpath), mode=mode, split='Train', x_feature_get_type=x_feature_get_type, y_feature_get_type=y_feature_get_type)
-        dataset_size = len(dataset)
-
-        random_index = list(random_generator.permutation(dataset_size))
-        dataset = dataset[random_index]
-
-        train_dataset = dataset[ dataset_size // 12 :                    ]
-        valid_dataset = dataset[                    : dataset_size // 12 ]
-
-    if mode == 'Unsupervised':
-        random_generator = numpy.random.default_rng(seed=seed)
-        dataset = YoungerDataset(str(dataset_dirpath), mode=mode, x_feature_get_type=x_feature_get_type, y_feature_get_type=y_feature_get_type)
-        dataset_size = len(dataset)
-
-        random_index = list(random_generator.permutation(dataset_size))
-        dataset = dataset[random_index]
-
-        train_dataset = dataset[ dataset_size // 12 :                    ]
-        valid_dataset = dataset[                    : dataset_size // 12 ]
-
-    node_dict = train_dataset.node_dict
-    metric_dict = train_dataset.metric_dict
-
-    logger.info(f'    -> Node Dict Size: {len(node_dict)}')
-    logger.info(f'    -> Metric Dict Size: {len(metric_dict)}')
+        logger.info(f'    -> Task Number: {len(meta["t2i"])}')
+        logger.info(f'    -> Dataset Number: {len(meta["d2i"])}')
+        logger.info(f'    -> Metric Number: {len(meta["m2i"])}')
     logger.info(f'    -> Dataset Split Sizes:')
     logger.info(f'       Train - {len(train_dataset)}')
     logger.info(f'       Valid - {len(valid_dataset)}')
     logger.info(f'  ^ Built.')
 
     if cluster_num is None:
-        cluster_num = infer_cluster_num(dataset)
+        cluster_num = infer_cluster_num(train_dataset)
         logger.info(f'  Cluster Number Not Specified! Infered Number: {cluster_num}')
     else:
         logger.info(f'  Cluster Number: {cluster_num}')
 
     logger.info(f'  v Building Younger Model ...')
     model = NAPPGNNBase(
-        node_dict=node_dict,
-        metric_dict=metric_dict,
+        meta=meta,
         node_dim=node_dim,
-        metric_dim=metric_dim,
         hidden_dim=hidden_dim,
         readout_dim=readout_dim,
         cluster_num=cluster_num,
@@ -389,8 +399,8 @@ def train(
                 checkpoint_dirpath, mode,
                 model, train_dataset, valid_dataset,
                 checkpoint_filepath, checkpoint_name, keep_number, reset_optimizer, reset_period, fine_tune,
-                life_cycle, train_period, valid_period, report_period, record_unit,
-                train_batch_size, valid_batch_size, learning_rate, weight_decay,
+                life_cycle, update_period, train_period, valid_period, report_period, record_unit,
+                train_batch_size, valid_batch_size, learning_rate, weight_decay, shuffle,
                 seed, device, world_size, master_rank, is_distribution,
                 make_deterministic,
             ),
@@ -402,28 +412,28 @@ def train(
             checkpoint_dirpath, mode,
             model, train_dataset, valid_dataset,
             checkpoint_filepath, checkpoint_name, keep_number, reset_optimizer, reset_period, fine_tune,
-            life_cycle, train_period, valid_period, report_period, record_unit,
-            train_batch_size, valid_batch_size, learning_rate, weight_decay,
+            life_cycle, update_period, train_period, valid_period, report_period, record_unit,
+            train_batch_size, valid_batch_size, learning_rate, weight_decay, shuffle,
             seed, device, world_size, master_rank, is_distribution,
             make_deterministic,
         )
 
 
 def test(
-    dataset_dirpath: pathlib.Path,
+    test_dataset_dirpath: pathlib.Path,
+    checkpoint_filepath: pathlib.Path,
     x_feature_get_type: Literal['OnlyOp'] = 'OnlyOp',
     y_feature_get_type: Literal['OnlyMt'] = 'OnlyMt',
 
-    checkpoint_filepath: str | None = None,
     test_batch_size: int = 32,
 
     node_dim: int = 512,
-    metric_dim: int = 512,
     hidden_dim: int = 512,
     readout_dim: int = 256,
     cluster_num: int | None = None,
 
     device: Literal['CPU', 'GPU'] = 'GPU',
+    worker_number: int = 4,
 ):
     assert device in {'CPU', 'GPU'}
     device_descriptor = get_device_descriptor(device, 0)
@@ -432,20 +442,24 @@ def test(
     logger.info(f'Using Device: {device};')
 
     logger.info(f'  v Building Younger Datasets (Supervised)...')
-    test_dataset = YoungerDataset(str(dataset_dirpath), mode='Supervised', split='Test', x_feature_get_type=x_feature_get_type, y_feature_get_type=y_feature_get_type)
-    node_dict = test_dataset.node_dict
-    metric_dict = test_dataset.metric_dict
-    logger.info(f'    -> Node Dict Size: {len(node_dict)}')
-    logger.info(f'    -> Metric Dict Size: {len(metric_dict)}')
+    test_dataset = YoungerDataset(
+        str(test_dataset_dirpath),
+        x_feature_get_type=x_feature_get_type,
+        y_feature_get_type=y_feature_get_type,
+        worker_number=worker_number
+    )
+    meta = test_dataset.meta
+    logger.info(f'    -> Node Dict Size: {len(meta["o2i"])}')
+    logger.info(f'    -> Task Number: {len(meta["t2i"])}')
+    logger.info(f'    -> Dataset Number: {len(meta["d2i"])}')
+    logger.info(f'    -> Metric Number: {len(meta["m2i"])}')
     logger.info(f'    -> Test Dataset Size: {len(test_dataset)}')
     logger.info(f'  ^ Built.')
 
     logger.info(f'  v Building Younger Model ...')
     model = NAPPGNNBase(
-        node_dict=node_dict,
-        metric_dict=metric_dict,
+        meta=meta,
         node_dim=node_dim,
-        metric_dim=metric_dim,
         hidden_dim=hidden_dim,
         readout_dim=readout_dim,
         cluster_num=cluster_num,

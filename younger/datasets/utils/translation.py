@@ -749,6 +749,7 @@ def trans_graph_proto(ox_graph: onnx.GraphProto, outer_dataflow2source: dict[str
     nx_graph.add_node(outer_node_index, **get_complete_node_attributes('outer'))
 
     # Add nx_graph edges
+    # TODO: Multiple (tail_index, head_index)? Typically Not Encounter?
     for node_index, node in nx_graph.nodes.items():
         if node['operands'] is not None:
             inputs_key = 'operands'

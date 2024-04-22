@@ -48,11 +48,8 @@ class Network(object):
         #   dataflow
         #   default_value
 
-        self._graph_filename = 'detailed_graph.pkl'
+        self._graph_filename = 'graph.pkl'
         self._graph = graph
-
-        self._simplified_graph_dirname = 'simplified_graph'
-        self._simplified_graph: list[networkx.DiGraph] = self.__class__.simplify(graph)
 
         ir_version: int = graph.graph.get('ir_version', None)
         opset_import: list[dict[str, str | int]] = graph.graph.get('opset_import', None)
@@ -80,10 +77,6 @@ class Network(object):
         return self._graph
 
     @property
-    def simplified_graph(self) -> list[networkx.DiGraph]:
-        return self._simplified_graph
-
-    @property
     def info(self) -> dict:
         return self._info
 
@@ -97,8 +90,6 @@ class Network(object):
         self._load_info(info_filepath)
         graph_filepath = network_dirpath.joinpath(self._graph_filename)
         self._load_graph(graph_filepath)
-        simplified_graph_dirpath = network_dirpath.joinpath(self._simplified_graph_dirname)
-        self._load_simplified_graph(simplified_graph_dirpath)
         return 
 
     def save(self, network_dirpath: pathlib.Path) -> None:
@@ -107,8 +98,6 @@ class Network(object):
         self._save_info(info_filepath)
         graph_filepath = network_dirpath.joinpath(self._graph_filename)
         self._save_graph(graph_filepath)
-        simplified_graph_dirpath = network_dirpath.joinpath(self._simplified_graph_dirname)
-        self._save_simplified_graph(simplified_graph_dirpath)
         return
 
     def _load_graph(self, graph_filepath: pathlib.Path) -> None:
@@ -119,29 +108,6 @@ class Network(object):
     def _save_graph(self, graph_filepath: pathlib.Path) -> None:
         assert not graph_filepath.is_file(), f'\"graph\" can not be saved into the specified path \"{graph_filepath.absolute()}\".'
         save_pickle(self._graph, graph_filepath)
-        return
-
-    def _load_simplified_graph(self, simplified_graph_dirpath: pathlib.Path) -> None:
-        assert simplified_graph_dirpath.is_dir(), f'There is no \"simplified_graph\" can be loaded from the specified directory \"{simplified_graph_dirpath.absolute()}\".'
-        simplified_graph_hash_filepath = simplified_graph_dirpath.joinpath('hash.pkl')
-        hash_strings: list[str] = load_pickle(simplified_graph_hash_filepath)
-        self._simplified_graph = list()
-        for hash_string in hash_strings:
-            simplified_graph_filepath = simplified_graph_dirpath.joinpath(f'{hash_string}.gml')
-            self._simplified_graph.append(networkx.read_gml(simplified_graph_filepath, destringizer=self.__class__.destringizer))
-        return
-
-    def _save_simplified_graph(self, simplified_graph_dirpath: pathlib.Path) -> None:
-        assert not simplified_graph_dirpath.is_dir(), f'\"simplified_graph\" can not be saved into the specified directory \"{simplified_graph_dirpath.absolute()}\".'
-        create_dir(simplified_graph_dirpath)
-        simplified_graph_hash_filepath = simplified_graph_dirpath.joinpath('hash.pkl')
-        hash_strings: list[str] = list()
-        for simplified_graph in self._simplified_graph:
-            hash_string = networkx.weisfeiler_lehman_graph_hash(simplified_graph)
-            simplified_graph_filepath = simplified_graph_dirpath.joinpath(f'{hash_string}.gml')
-            networkx.write_gml(simplified_graph, simplified_graph_filepath, stringizer=self.__class__.stringizer)
-            hash_strings.append(hash_string)
-        save_pickle(hash_strings, simplified_graph_hash_filepath)
         return
 
     def _load_info(self, info_filepath: pathlib.Path) -> None:
@@ -169,42 +135,55 @@ class Network(object):
             return tobe_saved
 
     @classmethod
-    def simplify(cls, graph: networkx.DiGraph) -> list[networkx.DiGraph]:
-        simplified_graph: list[networkx.DiGraph] = list()
+    def simplify(cls, graph: networkx.DiGraph, preserve_node_attributes: list[str] | None= None, preserve_edge_attributes: list[str] | None= None) -> networkx.DiGraph:
+        preserve_node_attributes = [] if preserve_node_attributes is None else preserve_node_attributes
+        preserve_edge_attributes = [] if preserve_edge_attributes is None else preserve_edge_attributes
+        flattened_graph = cls.flatten(graph)
+        simplified_graph = networkx.DiGraph()
 
-        def flat_g(g: networkx.DiGraph) -> networkx.DiGraph:
-            flatted_g = networkx.DiGraph()
+        simplified_graph.add_nodes_from(flattened_graph.nodes())
+        simplified_graph.add_edges_from(flattened_graph.edges())
 
-            for node_index, node_attrs in g.nodes.items():
-                g_index = None
-                if node_attrs['attributes'] is not None:
-                    for op_attr_name, op_attr_dict in node_attrs['attributes'].items():
-                        if op_attr_dict['attr_type'] == onnx.defs.OpSchema.AttrType.GRAPH:
-                            flatted_sub_g = flat_g(op_attr_dict['value'])
-                            g_index = len(simplified_graph)
-                            simplified_graph.append(flatted_sub_g)
-                        if op_attr_dict['attr_type'] == onnx.defs.OpSchema.AttrType.GRAPHS:
-                            g_index = list()
-                            for sub_g in op_attr_dict['value']:
-                                flatted_sub_g = flat_g(sub_g)
-                                g_index.append(len(simplified_graph))
-                                simplified_graph.append(flatted_sub_g)
-                attributes = dict(type=node_attrs['type'])
-                if g_index is not None:
-                    attributes.update(subgraph_index=g_index)
-                flatted_g.add_node(node_index, **attributes)
+        for preserve_node_attribute in preserve_node_attributes:
+            attributes_keyed_by_nodes = networkx.get_node_attributes(flattened_graph, preserve_node_attribute)
+            networkx.set_node_attributes(simplified_graph, attributes_keyed_by_nodes, preserve_node_attribute)
 
-            for (edge_tail_index, edge_head_index), edge_attrs in g.edges.items():
-                flatted_g.add_edge(edge_tail_index, edge_head_index, connection=edge_attrs['connection'])
-
-            return flatted_g
-
-        flatted_graph = flat_g(graph)
-        simplified_graph.append(flatted_graph)
+        for preserve_edge_attribute in preserve_edge_attributes:
+            attributes_keyed_by_edges = networkx.get_edge_attributes(flattened_graph, preserve_edge_attribute)
+            networkx.set_edge_attributes(simplified_graph, attributes_keyed_by_edges, preserve_edge_attribute)
 
         return simplified_graph
 
     @classmethod
     def flatten(cls, graph: networkx.DiGraph) -> networkx.DiGraph:
         # TODO: All Sub-Graphs Should Be Flattened
-        pass
+        fathers = list()
+        sub_graphs = list()
+        for node_index, node_attrs in graph.nodes.items():
+            if node_attrs['attributes'] is not None:
+                for op_attr_name, op_attr_dict in node_attrs['attributes'].items():
+                    sub_l = len(sub_graphs)
+                    if op_attr_dict['attr_type'] == onnx.defs.OpSchema.AttrType.GRAPH:
+                        sub_graphs.append(op_attr_dict['value'])
+                    if op_attr_dict['attr_type'] == onnx.defs.OpSchema.AttrType.GRAPHS:
+                        sub_graphs.extend(op_attr_dict['value'])
+                    sub_r = len(sub_graphs)
+                    fathers.extend([node_index for _ in range(sub_l, sub_r)])
+
+        assert len(fathers) == len(sub_graphs)
+
+        flattened_graph = networkx.DiGraph()
+        flattened_graph.update(graph)
+
+        for father, sub_graph in zip(fathers, sub_graphs):
+            start_node_index = str(flattened_graph.number_of_nodes())
+            flattened_sub_graph = cls.flatten(sub_graph)
+            flattened_graph.add_edge(father, start_node_index)
+            flattened_graph.update(
+                networkx.relabel_nodes(
+                    flattened_sub_graph,
+                    {sub_node_index: str(int(start_node_index) + int(sub_node_index)) for sub_node_index in flattened_sub_graph.nodes}
+                )
+            )
+
+        return flattened_graph

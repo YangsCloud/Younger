@@ -403,7 +403,7 @@ def detect_metric(string: str) -> str:
     return metric
 
 
-def normalize_metric_value(metric: str, metric_value: str) -> float:
+def normalize_metric_value(metric: str, metric_value: str, standardize: bool = False) -> float:
     normalized_metric_value = float('NaN')
     origin_metric_value = metric_value.strip()
     base = 1
@@ -421,34 +421,107 @@ def normalize_metric_value(metric: str, metric_value: str) -> float:
         logger.warn(f'Ignored. Invalid Metric Value String, Check It! \'{metric_value}\'')
 
     if isinstance(origin_metric_value, float):
-        if len(metric.split()) >= 2:
-            main_metric, maybe_main_metric = metric.split()[0], metric.split()[1]
-        else:
-            main_metric, maybe_main_metric = metric, ''
-
-        if main_metric in score_special_metrics:
-            if maybe_main_metric in score_special_metrics[main_metric]:
-                main_metric, maybe_main_metric = maybe_main_metric, ''
+        if standardize:
+            if len(metric.split()) >= 2:
+                main_metric, maybe_main_metric = metric.split()[0], metric.split()[1]
             else:
-                main_metric, maybe_main_metric = score_special_metrics[main_metric][0], ''
+                main_metric, maybe_main_metric = metric, ''
 
-        if main_metric in score_0_100_metrics or maybe_main_metric in score_0_100_metrics:
-            normalized_metric_value = origin_metric_value / 100
+            if main_metric in score_special_metrics:
+                if maybe_main_metric in score_special_metrics[main_metric]:
+                    main_metric, maybe_main_metric = maybe_main_metric, ''
+                else:
+                    main_metric, maybe_main_metric = score_special_metrics[main_metric][0], ''
 
-        elif main_metric in score_0_oo_metrics or maybe_main_metric in score_0_oo_metrics:
-            # normalized_metric_value = origin_metric_value / (origin_metric_value + 1)
-            # Let Application Choose How to Norm Too Large Number
-            normalized_metric_value = origin_metric_value
+            if (
+                main_metric in score_0_100_metrics or
+                maybe_main_metric in score_0_100_metrics or
+                main_metric in score_0_1_metrics or
+                maybe_main_metric in score_0_1_metrics
+            ):
+                if 1 < origin_metric_value and origin_metric_value <= 100:
+                    normalized_metric_value = origin_metric_value / 100
+                else:
+                    normalized_metric_value = origin_metric_value
 
-        elif main_metric in score_n1_p1_metrics or maybe_main_metric in score_n1_p1_metrics:
-            normalized_metric_value = (origin_metric_value + 1) / 2
+            elif main_metric in score_0_oo_metrics or maybe_main_metric in score_0_oo_metrics:
+                # normalized_metric_value = origin_metric_value / (origin_metric_value + 1)
+                # Let Application Choose How to Norm Too Large Number
+                normalized_metric_value = origin_metric_value
 
-        elif main_metric in score_0_1_metrics or maybe_main_metric in score_0_1_metrics:
-            if 1 < origin_metric_value and origin_metric_value <= 100:
-                normalized_metric_value = origin_metric_value / 100
+            elif main_metric in score_n1_p1_metrics or maybe_main_metric in score_n1_p1_metrics:
+                normalized_metric_value = (origin_metric_value + 1) / 2
+
             else:
                 normalized_metric_value = origin_metric_value
         else:
             normalized_metric_value = origin_metric_value
 
     return normalized_metric_value
+
+
+def get_metric_theroy_range(metric: str) -> tuple[int | None, int | None]:
+    if len(metric.split()) >= 2:
+        main_metric, maybe_main_metric = metric.split()[0], metric.split()[1]
+    else:
+        main_metric, maybe_main_metric = metric, ''
+
+    if main_metric in score_special_metrics:
+        if maybe_main_metric in score_special_metrics[main_metric]:
+            main_metric, maybe_main_metric = maybe_main_metric, ''
+        else:
+            main_metric, maybe_main_metric = score_special_metrics[main_metric][0], ''
+
+    if main_metric in score_0_100_metrics or maybe_main_metric in score_0_100_metrics:
+        return (0, 100)
+
+    elif main_metric in score_0_oo_metrics or maybe_main_metric in score_0_oo_metrics:
+        return (0, None)
+
+    elif main_metric in score_n1_p1_metrics or maybe_main_metric in score_n1_p1_metrics:
+        return (-1, 1)
+
+    elif main_metric in score_0_1_metrics or maybe_main_metric in score_0_1_metrics:
+        return (0, 1)
+    else:
+        return (None, None)
+
+
+def normalize_linear(value: float, minimum_possible: float, maximum_possible: float) -> float:
+    return (value - minimum_possible) / (maximum_possible - minimum_possible)
+
+
+def normalize_0_1(metric_value: float, minimum_possible: float = 0, maximum_possible: float = 1) -> float:
+    if metric_value < -1 or 1 < metric_value:
+        norm_value = metric_value / 100
+    else:
+        norm_value = metric_value
+
+    return normalize_linear(norm_value, min(minimum_possible, 0), max(maximum_possible, 1))
+
+
+def normalize_n1_p1(metric_value: float, minimum_possible: float = -1, maximum_possible: float = 1) -> float:
+    if metric_value < -1 or 1 < metric_value:
+        norm_value = metric_value / 100
+    else:
+        norm_value = metric_value
+
+    return normalize_linear(norm_value, min(minimum_possible, -1), max(maximum_possible, 1))
+
+
+def normalize(metric: str, metric_value: float, minimum_possible: float, maximum_possible: float) -> float:
+    bounds = get_metric_theroy_range(metric)
+
+    if bounds == (0, 1) or bounds == (0, 100):
+        if minimum_possible < -1 or 1 < maximum_possible:
+            minimum_possible = minimum_possible / 100
+            maximum_possible = maximum_possible / 100
+        return normalize_0_1(metric_value, minimum_possible=minimum_possible, maximum_possible=maximum_possible)
+
+    if bounds == (-1, 1):
+        if minimum_possible < -1 or 1 < maximum_possible:
+            minimum_possible = minimum_possible / 100
+            maximum_possible = maximum_possible / 100
+        return normalize_n1_p1(metric_value, minimum_possible=minimum_possible, maximum_possible=maximum_possible)
+
+    return normalize_linear(metric_value, minimum_possible=minimum_possible, maximum_possible=maximum_possible)

@@ -34,20 +34,21 @@ def performance_prediction_run(arguments):
 
 def performance_prediction_train_run(arguments):
     update_logger(arguments)
-    dataset_dirpath = pathlib.Path(arguments.dataset_dirpath)
+    train_dataset_dirpath = pathlib.Path(arguments.train_dataset_dirpath)
+    valid_dataset_dirpath = pathlib.Path(arguments.valid_dataset_dirpath)
     checkpoint_dirpath = pathlib.Path(arguments.checkpoint_dirpath)
 
     from younger.applications.performance_prediction.run import train
 
     train(
-        dataset_dirpath,
+        train_dataset_dirpath,
+        valid_dataset_dirpath,
         checkpoint_dirpath,
         arguments.mode,
         arguments.x_feature_get_type,
         arguments.y_feature_get_type,
 
         arguments.node_dim,
-        arguments.metric_dim,
         arguments.hidden_dim,
         arguments.readout_dim,
         arguments.cluster_num,
@@ -60,6 +61,7 @@ def performance_prediction_train_run(arguments):
         arguments.fine_tune,
 
         arguments.life_cycle,
+        arguments.update_period,
         arguments.train_period,
         arguments.valid_period,
         arguments.report_period,
@@ -69,12 +71,14 @@ def performance_prediction_train_run(arguments):
         arguments.valid_batch_size,
         arguments.learning_rate,
         arguments.weight_decay,
+        arguments.shuffle,
 
         arguments.device,
         arguments.world_size,
         arguments.master_addr,
         arguments.master_port,
         arguments.master_rank,
+        arguments.worker_number,
 
         arguments.seed,
         arguments.make_deterministic,
@@ -83,25 +87,26 @@ def performance_prediction_train_run(arguments):
 
 def performance_prediction_test_run(arguments):
     update_logger(arguments)
+    test_dataset_dirpath = pathlib.Path(arguments.test_dataset_dirpath)
+    checkpoint_filepath = pathlib.Path(arguments.checkpoint_filepath)
 
     from younger.applications.performance_prediction.run import test
 
     test(
-        arguments.dataset_dirpath,
-        arguments.mode,
+        test_dataset_dirpath,
+        checkpoint_filepath,
         arguments.x_feature_get_type,
         arguments.y_feature_get_type,
 
-        arguments.checkpoint_filepath,
         arguments.test_batch_size,
 
         arguments.node_dim,
-        arguments.metric_dim,
         arguments.hidden_dim,
         arguments.readout_dim,
         arguments.cluster_num,
 
         arguments.device,
+        arguments.worker_number,
     )
 
 
@@ -109,14 +114,14 @@ def set_applications_performance_perdiction_arguments(parser: argparse.ArgumentP
     subparser = parser.add_subparsers()
 
     train_parser = subparser.add_parser('train')
-    train_parser.add_argument('--dataset-dirpath', type=str, default='./YoungerDataset')
-    train_parser.add_argument('--checkpoint-dirpath', type=str, default='./checkpoints')
+    train_parser.add_argument('--train-dataset-dirpath', type=str)
+    train_parser.add_argument('--valid-dataset-dirpath', type=str)
+    train_parser.add_argument('--checkpoint-dirpath', type=str)
     train_parser.add_argument('--mode', type=str, choices=['Supervised', 'Unsupervised'], default='Unsupervised')
     train_parser.add_argument('--x-feature-get-type', type=str, choices=['OnlyOp'], default='OnlyOp')
     train_parser.add_argument('--y-feature-get-type', type=str, choices=['OnlyMt'], default='OnlyMt')
 
     train_parser.add_argument('--node-dim', type=int, default=512)
-    train_parser.add_argument('--metric-dim', type=int, default=512)
     train_parser.add_argument('--hidden-dim', type=int, default=512)
     train_parser.add_argument('--readout-dim', type=int, default=256)
     train_parser.add_argument('--cluster-num', type=int, default=16)
@@ -129,6 +134,7 @@ def set_applications_performance_perdiction_arguments(parser: argparse.ArgumentP
     train_parser.add_argument('--fine-tune', action='store_true')
 
     train_parser.add_argument('--life-cycle', type=int, default=100)
+    train_parser.add_argument('--update-period', type=int, default=1)
     train_parser.add_argument('--train-period', type=int, default=1000)
     train_parser.add_argument('--valid-period', type=int, default=1000)
     train_parser.add_argument('--report-period', type=int, default=100)
@@ -138,11 +144,13 @@ def set_applications_performance_perdiction_arguments(parser: argparse.ArgumentP
     train_parser.add_argument('--valid-batch-size', type=int, default=32)
     train_parser.add_argument('--learning-rate', type=float, default=1e-3)
     train_parser.add_argument('--weight-decay', type=float, default=1e-1)
+    train_parser.add_argument('--shuffle', action='store_true')
 
     train_parser.add_argument('--world-size', type=int, default=1)
     train_parser.add_argument('--master-addr', type=str, default='localhost')
     train_parser.add_argument('--master-port', type=str, default='16161')
     train_parser.add_argument('--master-rank', type=int, default=0)
+    train_parser.add_argument('--worker-number', type=int, default=4)
 
     train_parser.add_argument('--seed', type=int, default=1234)
 
@@ -154,21 +162,20 @@ def set_applications_performance_perdiction_arguments(parser: argparse.ArgumentP
     train_parser.set_defaults(run=performance_prediction_train_run)
 
     test_parser = subparser.add_parser('test')
-    test_parser.add_argument('--dataset-dirpath', type=str, default='./YoungerDataset')
-    test_parser.add_argument('--mode', type=str, choices=['Supervised', 'Unsupervised'], default='Unsupervised')
+    test_parser.add_argument('--test-dataset-dirpath', type=str)
+    test_parser.add_argument('--checkpoint-filepath', type=str)
     test_parser.add_argument('--x-feature-get-type', type=str, choices=['OnlyOp'], default='OnlyOp')
     test_parser.add_argument('--y-feature-get-type', type=str, choices=['OnlyMt'], default='OnlyMt')
 
-    test_parser.add_argument('--checkpoint-filepath', type=str, default=None)
     test_parser.add_argument('--test-batch-size', type=int, default=32)
 
     test_parser.add_argument('--node-dim', type=int, default=512)
-    test_parser.add_argument('--metric-dim', type=int, default=512)
     test_parser.add_argument('--hidden-dim', type=int, default=512)
     test_parser.add_argument('--readout-dim', type=int, default=256)
     test_parser.add_argument('--cluster-num', type=int, default=16)
 
     test_parser.add_argument('--device', type=str, choices=['CPU', 'GPU'], default='GPU')
+    test_parser.add_argument('--worker-number', type=int, default=4)
 
     test_parser.add_argument('--logging-filepath', type=str, default=None)
     test_parser.set_defaults(run=performance_prediction_test_run)
