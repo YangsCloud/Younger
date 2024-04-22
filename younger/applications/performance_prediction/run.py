@@ -14,7 +14,6 @@ import os
 import time
 import torch
 import pathlib
-import functools
 
 from torch import distributed
 from typing import Literal
