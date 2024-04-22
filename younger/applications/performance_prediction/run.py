@@ -225,8 +225,6 @@ def exact_train(
             data: Data = data.to(device_descriptor)
             if mode == 'Supervised':
                 y = data.y.reshape(len(data), -1)
-                print(len(data.x))
-                print(data.y)
                 cls_output, reg_output, gnn_pooling_loss = model(data.x, data.edge_index, data.batch)
                 # Now Try Classification
                 cls_main_loss = cre_criterian(torch.nn.functional.softmax(cls_output, dim=-1), y[:, 0].long())
