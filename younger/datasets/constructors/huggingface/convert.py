@@ -67,10 +67,10 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
 
         logger.info(f'     Infered Repo Size = {convert_bytes(infered_model_size)}')
 
-        onnx_model_filenames = list()
-        for filename in convert_cache_dirpath.iterdir():
-            if filename.suffix == '.onnx':
-                onnx_model_filenames.append(filename)
+        onnx_model_filenames: list[str] = list()
+        for filepath in convert_cache_dirpath.iterdir():
+            if filepath.suffix == '.onnx':
+                onnx_model_filenames.append(filepath.name)
         logger.info(f' ^ - Converted To ONNX: Got {len(onnx_model_filenames)} ONNX Models.')
 
         readme = None
@@ -101,5 +101,6 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
             logger.info(f'      > Converted.')
         clean_default_cache_repo(model_id)
         clean_specify_cache_repo(model_id, convert_cache_dirpath)
+        clean_specify_cache_repo(model_id, huggingface_cache_dirpath)
 
     logger.info(f'-> Instances Created.')
