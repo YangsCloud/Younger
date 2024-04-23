@@ -477,4 +477,4 @@ def test(
     logger.info(f'  ^ Moved.')
 
     test_dataloader = DataLoader(test_dataset, batch_size=test_batch_size)
-    exact_check(device_descriptor, model, test_dataloader, 'Test')
+    exact_check(device_descriptor, model, test_dataloader, 'Test', 'Supervised')
