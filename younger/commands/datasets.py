@@ -67,10 +67,11 @@ def convert_huggingface_run(arguments):
     save_dirpath = pathlib.Path(arguments.save_dirpath)
     cache_dirpath = pathlib.Path(arguments.cache_dirpath)
     model_ids_filepath = pathlib.Path(arguments.model_ids_filepath)
+    status_filepath = pathlib.Path(arguments.status_filepath)
 
     from younger.datasets.constructors.huggingface import convert
 
-    convert.main(save_dirpath, cache_dirpath, model_ids_filepath, device=arguments.device, threshold=arguments.threshold)
+    convert.main(save_dirpath, cache_dirpath, model_ids_filepath, status_filepath, device=arguments.device, threshold=arguments.threshold, huggingface_token=arguments.huggingface_token)
 
 
 def retrieve_huggingface_run(arguments):
@@ -100,9 +101,11 @@ def set_datasets_convert_arguments(parser: argparse.ArgumentParser):
     huggingface_parser.add_argument('--model-ids-filepath', type=str, required=True)
     huggingface_parser.add_argument('--save-dirpath', type=str, default='.')
     huggingface_parser.add_argument('--cache-dirpath', type=str, default='.')
+    huggingface_parser.add_argument('--status-filepath', type=str, default='./status.flg')
     huggingface_parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cpu')
     huggingface_parser.add_argument('--threshold', type=int, default=3*1024*1024*1024)
     huggingface_parser.add_argument('--logging-filepath', type=str, default=None)
+    huggingface_parser.add_argument('--huggingface-token', type=str, default=None)
     huggingface_parser.set_defaults(run=convert_huggingface_run)
 
     onnx_parser = subparser.add_parser('onnx')

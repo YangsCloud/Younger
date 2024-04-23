@@ -10,12 +10,13 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import json
 import pathlib
 
 from typing import Literal
 
 from optimum.exporters.onnx import main_export
-from huggingface_hub import HfFileSystem
+from huggingface_hub import HfFileSystem, login
 from huggingface_hub.utils._errors import RepositoryNotFoundError
 
 from younger.commons.io import load_json
@@ -28,8 +29,11 @@ from younger.datasets.constructors.huggingface.utils import infer_model_size, cl
 from younger.datasets.constructors.huggingface.annotations import get_heuristic_annotations
 
 
-def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_filepath: pathlib.Path, device: Literal['cpu', 'cuda'] = 'cpu', threshold: int | None = None):
+def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_filepath: pathlib.Path, status_filepath: pathlib.Path, device: Literal['cpu', 'cuda'] = 'cpu', threshold: int | None = None, huggingface_token: str | None = None):
     assert device in {'cpu', 'cuda'}
+
+    if huggingface_token is not None:
+        login(huggingface_token)
 
     hf_file_system = HfFileSystem()
     huggingface_cache_dirpath = cache_dirpath.joinpath('HuggingFace')
@@ -45,6 +49,9 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
         else:
             if infered_model_size > threshold:
                 logger.warn(f'Model Size: {convert_bytes(infered_model_size)} Larger Than Threshold! Skip.')
+                with open(status_filepath, 'a') as status_file:
+                    status = json.dumps(dict(model_name=model_id, status='oom'))
+                    status_file.write(f'{status}\n')
                 continue
 
         logger.info(f' # No.{index}: Now processing the model: {model_id} ...')
@@ -83,9 +90,14 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
                 instance_save_dirpath = save_dirpath.joinpath(get_instance_dirname(model_id.replace('/', '--HF--'), 'HuggingFace', onnx_model_filename))
                 instance.save(instance_save_dirpath)
                 logger.info(f'        No.{convert_index} Instance Saved: {instance_save_dirpath}')
+                with open(status_filepath, 'a') as status_file:
+                    status = json.dumps(dict(model_name=model_id, status='succ'))
+                    status_file.write(f'{status}\n')
             except Exception as error:
                 logger.error(f'Error! [ONNX -> NetworkX Error] OR [Instance Saving Error] - {error}')
-                pass
+                with open(status_filepath, 'a') as status_file:
+                    status = json.dumps(dict(model_name=model_id, status='fail'))
+                    status_file.write(f'{status}\n')
             logger.info(f'      > Converted.')
         clean_default_cache_repo(model_id)
         clean_specify_cache_repo(model_id, convert_cache_dirpath)
