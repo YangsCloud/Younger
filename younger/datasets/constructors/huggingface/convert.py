@@ -39,7 +39,18 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
     huggingface_cache_dirpath = cache_dirpath.joinpath('HuggingFace')
     convert_cache_dirpath = cache_dirpath.joinpath('Convert')
 
-    model_ids = load_json(model_ids_filepath)
+    model_ids = set(load_json(model_ids_filepath))
+
+    logger.info(f'-> Checking Existing Instances ...')
+    for index, instance_dirpath in enumerate(save_dirpath.iterdir()):
+        if len(model_ids) == 0:
+            logger.info(f'Finished. All Models Have Been Already Converted.')
+            break
+        instance = Instance()
+        instance.load(instance_dirpath)
+        if instance.labels['model_source'] == 'HuggingFace':
+            logger.info(f'Skip Total {index} - {instance.labels["model_name"]}')
+            model_ids = model_ids - {instance.labels['model_name']}
 
     logger.info(f'-> Instances Creating ...')
     for index, model_id in enumerate(model_ids, start=1):
