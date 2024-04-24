@@ -241,14 +241,7 @@ def clean_cache_root(cache_dirpath: pathlib.Path):
 
 
 def clean_default_cache_repo(repo_id: str):
-    repo_id = repo_id.replace("/", "--")
-    repo_type = "model"
-
-    default_cache_dirpath = pathlib.Path(HUGGINGFACE_HUB_CACHE)
-    repo_cache_dirpath = default_cache_dirpath.joinpath(f"{repo_type}s--{repo_id}")
-
-    if repo_cache_dirpath.is_dir():
-        delete_dir(repo_cache_dirpath)
+    clean_specify_cache_repo(repo_id, pathlib.Path(HUGGINGFACE_HUB_CACHE))
 
 
 def clean_specify_cache_repo(repo_id: str, specify_cache_dirpath: pathlib.Path):

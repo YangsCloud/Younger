@@ -19,7 +19,7 @@ from optimum.exporters.onnx import main_export
 from huggingface_hub import HfFileSystem, login
 from huggingface_hub.utils._errors import RepositoryNotFoundError
 
-from younger.commons.io import load_json
+from younger.commons.io import load_json, delete_dir
 from younger.commons.logging import logger
 
 from younger.datasets.modules import Instance
@@ -54,7 +54,11 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
 
     logger.info(f'-> Instances Creating ...')
     for index, model_id in enumerate(model_ids, start=1):
-        infered_model_size = infer_model_size(model_id)
+        try:
+            infered_model_size = infer_model_size(model_id)
+        except Exception as error:
+            logger.error(f'Model ID = {model_id}: Cannot Get The Model. Access Maybe Requested - {error}')
+            continue
         if threshold is None:
             pass
         else:
@@ -71,10 +75,16 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
             main_export(model_id, convert_cache_dirpath, device=device, cache_dir=huggingface_cache_dirpath, monolith=True, do_validation=False, trust_remote_code=True, no_post_process=True)
         except MemoryError as error:
             logger.error(f'Model ID = {model_id}: Skip! Maybe OOM - {error}')
+            with open(status_filepath, 'a') as status_file:
+                    status = json.dumps(dict(model_name=model_id, status='succ'))
+                    status_file.write(f'{status}\n')
+            continue
         except RepositoryNotFoundError as error:
             logger.error(f'Model ID = {model_id}: Skip! Maybe Deleted By Author - {error}')
+            continue
         except Exception as error:
             logger.error(f'Model ID = {model_id}: Conversion Error - {error}')
+            continue
 
         logger.info(f'     Infered Repo Size = {convert_bytes(infered_model_size)}')
 
@@ -110,8 +120,9 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
                     status = json.dumps(dict(model_name=model_id, status='fail'))
                     status_file.write(f'{status}\n')
             logger.info(f'      > Converted.')
+
+        delete_dir(convert_cache_dirpath)
         clean_default_cache_repo(model_id)
-        clean_specify_cache_repo(model_id, convert_cache_dirpath)
         clean_specify_cache_repo(model_id, huggingface_cache_dirpath)
 
     logger.info(f'-> Instances Created.')
