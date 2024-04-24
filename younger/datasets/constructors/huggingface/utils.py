@@ -247,7 +247,7 @@ def clean_default_cache_repo(repo_id: str):
     default_cache_dirpath = pathlib.Path(HUGGINGFACE_HUB_CACHE)
     repo_cache_dirpath = default_cache_dirpath.joinpath(f"{repo_type}s--{repo_id}")
 
-    if default_cache_dirpath.is_dir():
+    if repo_cache_dirpath.is_dir():
         delete_dir(repo_cache_dirpath)
 
 
