@@ -90,7 +90,7 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
             readme = get_huggingface_model_readme(model_id, hf_file_system)
             card_data = get_huggingface_model_card_data_from_readme(readme)
             labels = get_heuristic_annotations(model_id, card_data)
-        except:
+        except Exception as error:
             logger.error(f'Skip Label For Model ID = {model_id}: Error Occur While Extracting Model Card - {error}')
 
         for convert_index, onnx_model_filename in enumerate(onnx_model_filenames, start=1):
