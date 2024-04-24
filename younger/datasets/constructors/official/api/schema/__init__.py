@@ -10,6 +10,6 @@
 # LICENSE file in the root directory of this source tree.
 
 
-from younger.datasets.constructors.official.schema.schema import *
-from younger.datasets.constructors.official.schema.origin import *
-from younger.datasets.constructors.official.schema.dataset import *
+from younger.datasets.constructors.official.api.schema.schema import *
+from younger.datasets.constructors.official.api.schema.origin import *
+from younger.datasets.constructors.official.api.schema.dataset import *
