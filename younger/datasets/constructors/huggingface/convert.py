@@ -121,7 +121,7 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
                     status_file.write(f'{status}\n')
             logger.info(f'      > Converted.')
 
-        delete_dir(convert_cache_dirpath)
+        delete_dir(convert_cache_dirpath) # Do not need to set `only_clean` to True, main_export will create folder.
         clean_default_cache_repo(model_id)
         clean_specify_cache_repo(model_id, huggingface_cache_dirpath)
 
