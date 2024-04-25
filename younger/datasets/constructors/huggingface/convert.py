@@ -78,12 +78,21 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
             with open(status_filepath, 'a') as status_file:
                     status = json.dumps(dict(model_name=model_id, status='succ'))
                     status_file.write(f'{status}\n')
+            delete_dir(convert_cache_dirpath, only_clean=True)
+            clean_default_cache_repo(model_id)
+            clean_specify_cache_repo(model_id, huggingface_cache_dirpath)
             continue
         except RepositoryNotFoundError as error:
             logger.error(f'Model ID = {model_id}: Skip! Maybe Deleted By Author - {error}')
+            delete_dir(convert_cache_dirpath, only_clean=True)
+            clean_default_cache_repo(model_id)
+            clean_specify_cache_repo(model_id, huggingface_cache_dirpath)
             continue
         except Exception as error:
             logger.error(f'Model ID = {model_id}: Conversion Error - {error}')
+            delete_dir(convert_cache_dirpath, only_clean=True)
+            clean_default_cache_repo(model_id)
+            clean_specify_cache_repo(model_id, huggingface_cache_dirpath)
             continue
 
         logger.info(f'     Infered Repo Size = {convert_bytes(infered_model_size)}')
@@ -121,7 +130,7 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
                     status_file.write(f'{status}\n')
             logger.info(f'      > Converted.')
 
-        delete_dir(convert_cache_dirpath) # Do not need to set `only_clean` to True, main_export will create folder.
+        delete_dir(convert_cache_dirpath, only_clean=True)
         clean_default_cache_repo(model_id)
         clean_specify_cache_repo(model_id, huggingface_cache_dirpath)
 
