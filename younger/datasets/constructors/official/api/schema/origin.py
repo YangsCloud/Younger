@@ -10,7 +10,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
-from younger.datasets.constructors.official.schema import Schema
+from younger.datasets.constructors.official.api.schema import Schema
 
 
 class Model(Schema):
