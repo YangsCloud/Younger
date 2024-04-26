@@ -41,7 +41,7 @@ def infer_cluster_num(dataset: Dataset) -> int:
 def get_logging_metrics_str(metric_names: list[str], metric_values: list[str]) -> str:
     metrics_str = str()
     for metric_name, metric_value in zip(metric_names, metric_values):
-        metrics_str += f' {metric_name}: {metric_value} '
+        metrics_str += f' {metric_name}: {metric_value}'
     return metrics_str
 
 
@@ -60,7 +60,7 @@ def period_operation(
             distributed.all_reduce(digits, op = distributed.ReduceOp.SUM)
             digits = digits / world_size
         digits = [f'{float(digit):.4f}' for digit in digits]
-        logger.info(f'  [Epoch/Step]@[{epoch}/{step}] - {get_logging_metrics_str(digit_names, digits)}')
+        logger.info(f'  [Epoch/Step]@[{epoch}/{step}] -{get_logging_metrics_str(digit_names, digits)}')
 
     if step % train_period == 0 and is_master:
         logger.info('  -> Saving checkpoint ...')
@@ -88,49 +88,43 @@ def exact_check(device_descriptor: torch.device, model: torch.nn.Module, dataloa
     logger.info(f'  -> {split} Begin ...')
     tic = time.time()
     if mode == 'Supervised':
-        digit_names = ['Total-Loss', 'CLS-Acc', 'CLS-Loss (CRE)', 'REG-Loss (MSE)', 'Cluster-loss']
-        overall_loss = 0
-        overall_cls_main_loss = 0
-        overall_reg_main_loss = 0
-        overall_gnn_pooling_loss = 0
+        digit_names = ['ACC', 'MAE', 'RMSE']
+        overall_mae = 0
+        overall_mse = 0
 
         overall_correct = 0
         overall_predict = 0
     else:
         digit_names = ['Cluster-loss']
+        overall_global_pooling_loss = 0
     with torch.no_grad():
         for index, data in enumerate(dataloader, start=1):
             data: Data = data.to(device_descriptor)
             if mode == 'Supervised':
                 y = data.y.reshape(len(data), -1)
-                cls_output, reg_output, gnn_pooling_loss = model(data.x, data.edge_index, data.batch)
-                cls_main_loss = torch.nn.functional.cross_entropy(torch.nn.functional.softmax(cls_output, dim=-1), y[:, 0].long())
-                reg_main_loss = torch.nn.functional.mse_loss(reg_output.reshape(-1), y[:, 1])
-                loss = cls_main_loss + reg_main_loss + gnn_pooling_loss
-                overall_loss += loss
-                overall_cls_main_loss += cls_main_loss
-                overall_reg_main_loss += reg_main_loss
-                overall_gnn_pooling_loss += gnn_pooling_loss
+                cls_output, reg_output, _ = model(data.x, data.edge_index, data.batch)
+                mae = torch.nn.functional.l1_loss(reg_output.reshape(-1), y[:, 1], reduction='sum')
+                mse = torch.nn.functional.mse_loss(reg_output.reshape(-1), y[:, 1], reduction='sum')
+                overall_mae += mae
+                overall_mse += mse
 
-                _, cls_predict = torch.max(torch.nn.functional.softmax(cls_output, dim=-1), dim=-1)
+                cls_predict = torch.argmax(torch.nn.functional.softmax(cls_output, dim=-1), dim=-1)
                 cls_correct = (cls_predict == y[:, 0].long()).sum().item()
                 overall_correct += cls_correct
                 overall_predict += len(cls_predict)
             else:
-                gnn_pooling_loss = model(data.x, data.edge_index, data.batch)
-                overall_gnn_pooling_loss += gnn_pooling_loss
+                global_pooling_loss = model(data.x, data.edge_index, data.batch)
+                overall_global_pooling_loss += global_pooling_loss
     toc = time.time()
 
     if mode == 'Supervised':
         digits = torch.tensor([
-            overall_loss/index,
             overall_correct/overall_predict,
-            overall_cls_main_loss/index,
-            overall_reg_main_loss/index,
-            overall_gnn_pooling_loss/index
+            overall_mae/overall_predict,
+            torch.sqrt(overall_mse/overall_predict),
         ]).to(device_descriptor)
     else:
-        digits = torch.tensor([overall_gnn_pooling_loss/index]).to(device_descriptor)
+        digits = torch.tensor([overall_global_pooling_loss/index]).to(device_descriptor)
 
     if is_distribution:
         distributed.all_reduce(digits, op = distributed.ReduceOp.SUM)
@@ -227,20 +221,22 @@ def exact_train(
             data: Data = data.to(device_descriptor)
             if mode == 'Supervised':
                 y = data.y.reshape(len(data), -1)
-                cls_output, reg_output, gnn_pooling_loss = model(data.x, data.edge_index, data.batch)
+                cls_output, reg_output, global_pooling_loss = model(data.x, data.edge_index, data.batch)
                 # Now Try Classification
                 cls_main_loss = cre_criterian(torch.nn.functional.softmax(cls_output, dim=-1), y[:, 0].long())
                 # Now Try Regression
                 reg_main_loss = mse_criterian(reg_output.reshape(-1), y[:, 1])
-                loss = cls_main_loss + reg_main_loss + gnn_pooling_loss
-                loss.backward()
-                average_digits = torch.tensor([float(loss), float(cls_main_loss), float(reg_main_loss), float(gnn_pooling_loss)]).to(device_descriptor)
+                loss = cls_main_loss + reg_main_loss + global_pooling_loss
+                average_digits = torch.tensor([float(loss), float(cls_main_loss), float(reg_main_loss), float(global_pooling_loss)]).to(device_descriptor) / update_period
                 average_digit_names = ['Total-Loss', 'CLS-Loss (CRE)', 'REG-Loss (MSE)', 'Cluster-loss']
+                loss = loss / update_period
+                loss.backward()
             else:
-                gnn_pooling_loss = model(data.x, data.edge_index, data.batch)
-                gnn_pooling_loss.backward()
-                average_digits = torch.tensor([float(gnn_pooling_loss)]).to(device_descriptor)
+                global_pooling_loss = model(data.x, data.edge_index, data.batch)
+                average_digits = torch.tensor([float(global_pooling_loss)]).to(device_descriptor) / update_period
                 average_digit_names = ['Cluster-loss']
+                global_pooling_loss = global_pooling_loss / update_period
+                global_pooling_loss.backward()
 
             if step % update_period == 0:
                 optimizer.step()
