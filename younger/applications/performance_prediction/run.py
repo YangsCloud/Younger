@@ -41,7 +41,7 @@ def infer_cluster_num(dataset: Dataset) -> int:
 def get_logging_metrics_str(metric_names: list[str], metric_values: list[str]) -> str:
     metrics_str = str()
     for metric_name, metric_value in zip(metric_names, metric_values):
-        metrics_str += f' {metric_name}: {metric_value}'
+        metrics_str += f' {metric_name}: [{metric_value}]'
     return metrics_str
 
 
