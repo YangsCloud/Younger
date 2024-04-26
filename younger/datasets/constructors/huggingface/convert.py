@@ -19,7 +19,7 @@ from optimum.exporters.onnx import main_export
 from huggingface_hub import HfFileSystem, login
 from huggingface_hub.utils._errors import RepositoryNotFoundError
 
-from younger.commons.io import load_json
+from younger.commons.io import load_json, delete_dir
 from younger.commons.logging import logger
 
 from younger.datasets.modules import Instance
@@ -39,11 +39,26 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
     huggingface_cache_dirpath = cache_dirpath.joinpath('HuggingFace')
     convert_cache_dirpath = cache_dirpath.joinpath('Convert')
 
-    model_ids = load_json(model_ids_filepath)
+    model_ids = set(load_json(model_ids_filepath))
+
+    logger.info(f'-> Checking Existing Instances ...')
+    for index, instance_dirpath in enumerate(save_dirpath.iterdir()):
+        if len(model_ids) == 0:
+            logger.info(f'Finished. All Models Have Been Already Converted.')
+            break
+        instance = Instance()
+        instance.load(instance_dirpath)
+        if instance.labels['model_source'] == 'HuggingFace':
+            logger.info(f'Skip Total {index} - {instance.labels["model_name"]}')
+            model_ids = model_ids - {instance.labels['model_name']}
 
     logger.info(f'-> Instances Creating ...')
     for index, model_id in enumerate(model_ids, start=1):
-        infered_model_size = infer_model_size(model_id)
+        try:
+            infered_model_size = infer_model_size(model_id)
+        except Exception as error:
+            logger.error(f'Model ID = {model_id}: Cannot Get The Model. Access Maybe Requested - {error}')
+            continue
         if threshold is None:
             pass
         else:
@@ -60,10 +75,25 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
             main_export(model_id, convert_cache_dirpath, device=device, cache_dir=huggingface_cache_dirpath, monolith=True, do_validation=False, trust_remote_code=True, no_post_process=True)
         except MemoryError as error:
             logger.error(f'Model ID = {model_id}: Skip! Maybe OOM - {error}')
+            with open(status_filepath, 'a') as status_file:
+                    status = json.dumps(dict(model_name=model_id, status='succ'))
+                    status_file.write(f'{status}\n')
+            delete_dir(convert_cache_dirpath, only_clean=True)
+            clean_default_cache_repo(model_id)
+            clean_specify_cache_repo(model_id, huggingface_cache_dirpath)
+            continue
         except RepositoryNotFoundError as error:
             logger.error(f'Model ID = {model_id}: Skip! Maybe Deleted By Author - {error}')
+            delete_dir(convert_cache_dirpath, only_clean=True)
+            clean_default_cache_repo(model_id)
+            clean_specify_cache_repo(model_id, huggingface_cache_dirpath)
+            continue
         except Exception as error:
             logger.error(f'Model ID = {model_id}: Conversion Error - {error}')
+            delete_dir(convert_cache_dirpath, only_clean=True)
+            clean_default_cache_repo(model_id)
+            clean_specify_cache_repo(model_id, huggingface_cache_dirpath)
+            continue
 
         logger.info(f'     Infered Repo Size = {convert_bytes(infered_model_size)}')
 
@@ -79,7 +109,7 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
             readme = get_huggingface_model_readme(model_id, hf_file_system)
             card_data = get_huggingface_model_card_data_from_readme(readme)
             labels = get_heuristic_annotations(model_id, card_data)
-        except:
+        except Exception as error:
             logger.error(f'Skip Label For Model ID = {model_id}: Error Occur While Extracting Model Card - {error}')
 
         for convert_index, onnx_model_filename in enumerate(onnx_model_filenames, start=1):
@@ -99,8 +129,9 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
                     status = json.dumps(dict(model_name=model_id, status='fail'))
                     status_file.write(f'{status}\n')
             logger.info(f'      > Converted.')
+
+        delete_dir(convert_cache_dirpath, only_clean=True)
         clean_default_cache_repo(model_id)
-        clean_specify_cache_repo(model_id, convert_cache_dirpath)
         clean_specify_cache_repo(model_id, huggingface_cache_dirpath)
 
     logger.info(f'-> Instances Created.')

@@ -31,14 +31,15 @@ def create_dir(dirpath: pathlib.Path) -> None:
     return
 
 
-def delete_dir(dirpath: pathlib.Path):
+def delete_dir(dirpath: pathlib.Path, only_clean: bool = False):
     for filepath in dirpath.iterdir():
         if filepath.is_dir():
             shutil.rmtree(filepath)
         if filepath.is_file():
             os.remove(filepath)
 
-    os.rmdir(dirpath)
+    if not only_clean:
+        os.rmdir(dirpath)
 
 
 def tar_archive(ri: pathlib.Path | list[pathlib.Path], archive_filepath: pathlib.Path, compress: bool = True):
