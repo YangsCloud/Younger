@@ -27,7 +27,7 @@ from younger.commons.io import create_dir
 from younger.commons.logging import logger
 
 from younger.applications.utils.neural_network import get_model_parameters_number, get_device_descriptor, fix_random_procedure, set_deterministic, load_checkpoint, save_checkpoint
-from younger.applications.performance_prediction.models import NAPPGNNBase
+from younger.applications.performance_prediction.models import NAPPGATVaryV1
 from younger.applications.performance_prediction.datasets import YoungerDataset
 
 
@@ -351,7 +351,7 @@ def train(
         logger.info(f'  Cluster Number: {cluster_num}')
 
     logger.info(f'  v Building Younger Model ...')
-    model = NAPPGNNBase(
+    model = NAPPGATVaryV1(
         meta=meta,
         node_dim=node_dim,
         hidden_dim=hidden_dim,
@@ -441,7 +441,7 @@ def test(
     logger.info(f'  ^ Built.')
 
     logger.info(f'  v Building Younger Model ...')
-    model = NAPPGNNBase(
+    model = NAPPGATVaryV1(
         meta=meta,
         node_dim=node_dim,
         hidden_dim=hidden_dim,
