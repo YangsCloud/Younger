@@ -70,13 +70,13 @@ class NAPPGNNBase(torch.nn.Module):
         # v GNN Message Passing Body
         self.mp_body_layer_1 = GATConv(hidden_dim, hidden_dim, heads=1, concat=False, dropout=0)
         self.mp_body_activate_1 = ReLU(inplace=False)
-        self.mp_body_dropout_1 = Dropout(p=0.5)
+        self.mp_body_dropout_1 = Dropout(p=0.1)
 
         self.mp_body_sag_pooling = SAGPooling(hidden_dim, ratio=2000)
 
         self.mp_body_layer_2 = GATConv(hidden_dim, hidden_dim, heads=1, concat=False, dropout=0)
         self.mp_body_activate_2 = ReLU(inplace=False)
-        self.mp_body_dropout_2 = Dropout(p=0.5)
+        self.mp_body_dropout_2 = Dropout(p=0.1)
         # ^ GNN Message Passing Body
 
         # v GNN Whole Coarsening
