@@ -43,7 +43,7 @@ class DenseAggregation(torch.nn.Module):
         return x
 
 
-class NAPPGNNBase(torch.nn.Module):
+class NAPPGATVaryV1(torch.nn.Module):
     # Neural Architecture Performance Prediction - GNN - Base Model
     def __init__(
         self,
@@ -63,18 +63,18 @@ class NAPPGNNBase(torch.nn.Module):
         self.node_embedding_layer = Embedding(len(meta['o2i']), node_dim)
 
         # v GNN Message Passing Head
-        self.mp_head_layer = GATConv(node_dim, hidden_dim, heads=1, concat=False, dropout=0)
+        self.mp_head_layer = GATConv(node_dim, hidden_dim, heads=8, concat=False, dropout=0)
         self.mp_head_activate = ReLU(inplace=False)
         # ^ GNN Message Passing Head
 
         # v GNN Message Passing Body
-        self.mp_body_layer_1 = GATConv(hidden_dim, hidden_dim, heads=1, concat=False, dropout=0)
+        self.mp_body_layer_1 = GATConv(hidden_dim, hidden_dim, heads=8, concat=False, dropout=0)
         self.mp_body_activate_1 = ReLU(inplace=False)
         self.mp_body_dropout_1 = Dropout(p=0.1)
 
         self.mp_body_sag_pooling = SAGPooling(hidden_dim, ratio=2000)
 
-        self.mp_body_layer_2 = GATConv(hidden_dim, hidden_dim, heads=1, concat=False, dropout=0)
+        self.mp_body_layer_2 = GATConv(hidden_dim, hidden_dim, heads=8, concat=False, dropout=0)
         self.mp_body_activate_2 = ReLU(inplace=False)
         self.mp_body_dropout_2 = Dropout(p=0.1)
         # ^ GNN Message Passing Body
@@ -87,7 +87,7 @@ class NAPPGNNBase(torch.nn.Module):
             return
 
         # v GNN Message Passing Tail
-        self.mp_tail_layer = DenseGATConv(hidden_dim, hidden_dim, heads=1, concat=False, dropout=0)
+        self.mp_tail_layer = DenseGATConv(hidden_dim, hidden_dim, heads=8, concat=False, dropout=0)
         self.mp_tail_activate = ReLU(inplace=False)
         # ^ GNN Message Passing Tail
 
