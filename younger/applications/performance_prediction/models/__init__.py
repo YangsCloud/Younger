@@ -10,4 +10,6 @@
 # LICENSE file in the root directory of this source tree.
 
 
-from younger.applications.performance_prediction.models.napp_gnn_base import NAPPGNNBase
+from younger.applications.performance_prediction.models.napp_gat_base import NAPPGATBase
+from younger.applications.performance_prediction.models.napp_gin_base import NAPPGINBase
+from younger.applications.performance_prediction.models.napp_gat_vary_v1 import NAPPGATVaryV1

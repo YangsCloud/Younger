@@ -20,7 +20,7 @@ from torch_geometric.nn import resolver, MLP, DMoNPooling, GINConv, DenseGINConv
 from torch_geometric.utils import to_dense_adj, to_dense_batch
 
 
-class NAPPGNNBase(torch.nn.Module):
+class NAPPGINBase(torch.nn.Module):
     # Neural Architecture Performance Prediction - GNN - Base Model
     def __init__(
         self,
