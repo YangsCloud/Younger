@@ -54,6 +54,7 @@ def save_graph(parameters: tuple[pathlib.Path, pathlib.Path, dict[str, Any]]):
     instance = Instance()
     instance.load(i_path)
     graph = Network.simplify(instance.network.graph, preserve_node_attributes=['type', 'operator'])
+    graph.graph['instance_name'] = instance_statistics['instance_name']
     graph.graph['task'] = instance_statistics['task']
     graph.graph['dataset'] = instance_statistics['dataset']
     graph.graph['metric'] = instance_statistics['metric']
