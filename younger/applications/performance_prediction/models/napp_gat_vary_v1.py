@@ -49,6 +49,8 @@ class NAPPGATVaryV1(torch.nn.Module):
         self,
         meta: dict,
         node_dim: int = 100,
+        task_dim: int = 100,
+        dataset_dim: int = 100,
         hidden_dim: int = 100,
         readout_dim: int = 100,
         cluster_num: int = 16,
@@ -61,22 +63,24 @@ class NAPPGATVaryV1(torch.nn.Module):
 
         # Embedding
         self.node_embedding_layer = Embedding(len(meta['o2i']), node_dim)
+        self.task_embedding_layer = Embedding(len(meta['t2i']), task_dim)
+        self.dataset_embedding_layer = Embedding(len(meta['d2i']), dataset_dim)
 
         # v GNN Message Passing Head
-        self.mp_head_layer = GATConv(node_dim, hidden_dim, heads=8, concat=False, dropout=0)
+        self.mp_head_layer = GATConv(node_dim, hidden_dim, heads=4, concat=False, dropout=0.1)
         self.mp_head_activate = ReLU(inplace=False)
         # ^ GNN Message Passing Head
 
         # v GNN Message Passing Body
-        self.mp_body_layer_1 = GATConv(hidden_dim, hidden_dim, heads=8, concat=False, dropout=0)
+        self.mp_body_layer_1 = GATConv(hidden_dim, hidden_dim, heads=4, concat=False, dropout=0.1)
         self.mp_body_activate_1 = ReLU(inplace=False)
-        self.mp_body_dropout_1 = Dropout(p=0.1)
+        self.mp_body_dropout_1 = Dropout(p=0.3)
 
-        self.mp_body_sag_pooling = SAGPooling(hidden_dim, ratio=2000)
+        self.mp_body_sag_pooling = SAGPooling(hidden_dim, ratio=4000)
 
-        self.mp_body_layer_2 = GATConv(hidden_dim, hidden_dim, heads=8, concat=False, dropout=0)
+        self.mp_body_layer_2 = GATConv(hidden_dim, hidden_dim, heads=4, concat=False, dropout=0.1)
         self.mp_body_activate_2 = ReLU(inplace=False)
-        self.mp_body_dropout_2 = Dropout(p=0.1)
+        self.mp_body_dropout_2 = Dropout(p=0.3)
         # ^ GNN Message Passing Body
 
         # v GNN Whole Coarsening
@@ -87,26 +91,27 @@ class NAPPGATVaryV1(torch.nn.Module):
             return
 
         # v GNN Message Passing Tail
-        self.mp_tail_layer = DenseGATConv(hidden_dim, hidden_dim, heads=8, concat=False, dropout=0)
+        self.mp_tail_layer = DenseGATConv(hidden_dim, hidden_dim, heads=4, concat=False, dropout=0.1)
         self.mp_tail_activate = ReLU(inplace=False)
+        self.mp_tail_dropout = Dropout(p=0.3)
         # ^ GNN Message Passing Tail
 
         self.readout_layer = DenseAggregation(hidden_dim, readout_dim)
 
-        # Output Layer
-        # Task: t2i
-        # Dataset: d2i
-        # Metric: m2i
+        self.task_transform_layer = Linear(task_dim, hidden_dim)
+        self.task_transform_activate = ReLU(inplace=False)
 
-        # Now Try Classification
-        self.cls_output_layer = Linear(readout_dim, len(meta['m2i']))
+        self.dataset_transform_layer = Linear(dataset_dim, hidden_dim)
+        self.dataset_transform_activate = ReLU(inplace=False)
 
-        # Now Try Regression
-        self.reg_output_layer = Linear(readout_dim, 1)
+        self.fuse_layer = Linear(hidden_dim + hidden_dim + readout_dim, hidden_dim)
+        self.fuse_activate = ReLU(inplace=False)
+
+        self.output_layer = Linear(hidden_dim, 1)
 
         self.initialize_parameters()
 
-    def forward(self, x: torch.Tensor, edge_index: torch.Tensor, batch: torch.Tensor):
+    def forward(self, x: torch.Tensor, edge_index: torch.Tensor, batch: torch.Tensor, task: torch.Tensor, dataset: torch.Tensor):
         # x
         # total_node_number = sum(node_number_of_graph_{1}, ..., node_number_of_graph_{batch_size})
         # [ total_node_number X num_node_features ] (Current Version: num_node_features=1)
@@ -126,12 +131,12 @@ class NAPPGATVaryV1(torch.nn.Module):
         x = self.mp_body_dropout_1(x)
         # [ total_node_number X hidden_dim ]
 
-        x, edge_index, _, batch, _, _ = self.mp_body_sag_pooling(x, edge_index, batch=batch)
-        # [ total_pooled_node_number X hidden_dim ]
-
         x = self.mp_body_layer_2(x, edge_index)
         x = self.mp_body_activate_2(x)
         x = self.mp_body_dropout_2(x)
+        # [ total_pooled_node_number X hidden_dim ]
+
+        x, edge_index, _, batch, _, _ = self.mp_body_sag_pooling(x, edge_index, batch=batch)
         # [ total_pooled_node_number X hidden_dim ]
 
         (x, mask), adj = to_dense_batch(x, batch), to_dense_adj(edge_index, batch)
@@ -148,18 +153,29 @@ class NAPPGATVaryV1(torch.nn.Module):
 
         x = self.mp_tail_layer(x, adj)
         x = self.mp_tail_activate(x)
+        x = self.mp_tail_dropout(x)
         # [ batch_size X global_pooled_node_number X hidden_dim ]
 
         x = self.readout_layer(x)
         # [ batch_size X readout_dim ]
 
-        cls_output = self.cls_output_layer(x)
-        # cls_output - [ batch_size X _ ]
+        task = self.task_embedding_layer(task)
+        task = self.task_transform_layer(task)
+        task = self.task_transform_activate(task)
 
-        reg_output = self.reg_output_layer(x)
-        # reg_output - [ batch_size X 1 ]
+        dataset = self.dataset_embedding_layer(dataset)
+        dataset = self.dataset_transform_layer(dataset)
+        dataset = self.dataset_transform_activate(dataset)
 
-        return cls_output, reg_output, global_pooling_loss
+        fuse = self.fuse_layer(torch.concat([x, task, dataset], dim=-1))
+        fuse = self.fuse_activate(fuse)
+
+        output = self.output_layer(fuse)
+        # output - [ batch_size X 1 ]
+
+        return output, global_pooling_loss
 
     def initialize_parameters(self):
         torch.nn.init.normal_(self.node_embedding_layer.weight, mean=0, std=self.node_embedding_layer.embedding_dim ** -0.5)
+        torch.nn.init.normal_(self.task_embedding_layer.weight, mean=0, std=self.task_embedding_layer.embedding_dim ** -0.5)
+        torch.nn.init.normal_(self.dataset_embedding_layer.weight, mean=0, std=self.dataset_embedding_layer.embedding_dim ** -0.5)
