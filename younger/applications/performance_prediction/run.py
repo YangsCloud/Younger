@@ -23,7 +23,7 @@ from torch.utils.data import RandomSampler
 from torch_geometric.data import Dataset, Data
 from torch_geometric.loader import DataLoader
 
-from younger.commons.io import create_dir
+from younger.commons.io import create_dir, save_json
 from younger.commons.logging import logger
 
 from younger.applications.utils.neural_network import get_model_parameters_number, get_device_descriptor, fix_random_procedure, set_deterministic, load_checkpoint, save_checkpoint
@@ -88,39 +88,49 @@ def exact_check(device_descriptor: torch.device, model: torch.nn.Module, dataloa
     logger.info(f'  -> {split} Begin ...')
     tic = time.time()
     if mode == 'Supervised':
-        digit_names = ['ACC', 'MAE', 'RMSE']
+        digit_names = ['MAE', 'MSE', 'RMSE']
         overall_mae = 0
         overall_mse = 0
 
-        overall_correct = 0
         overall_predict = 0
     else:
         digit_names = ['Cluster-loss']
         overall_global_pooling_loss = 0
+    results = list()
     with torch.no_grad():
         for index, data in enumerate(dataloader, start=1):
             data: Data = data.to(device_descriptor)
             if mode == 'Supervised':
                 y = data.y.reshape(len(data), -1)
-                cls_output, reg_output, _ = model(data.x, data.edge_index, data.batch)
-                mae = torch.nn.functional.l1_loss(reg_output.reshape(-1), y[:, 1], reduction='sum')
-                mse = torch.nn.functional.mse_loss(reg_output.reshape(-1), y[:, 1], reduction='sum')
+                task = y[:, 2].long()
+                dataset = y[:, 3].long()
+                output, _ = model(data.x, data.edge_index, data.batch, task, dataset)
+
+                for task_id, dataset_id, output_value, y_value in zip(task, dataset, output, y[:, 1]):
+                    results.append(dict(
+                        task = dataloader.dataset.meta['i2t'][task_id],
+                        dataset = dataloader.dataset.meta['i2d'][dataset_id],
+                        predict = float(output_value[0]),
+                        golden = float(y_value))
+                    )
+
+                mae = torch.nn.functional.l1_loss(output.reshape(-1), y[:, 1], reduction='sum')
+                mse = torch.nn.functional.mse_loss(output.reshape(-1), y[:, 1], reduction='sum')
                 overall_mae += mae
                 overall_mse += mse
 
-                cls_predict = torch.argmax(torch.nn.functional.softmax(cls_output, dim=-1), dim=-1)
-                cls_correct = (cls_predict == y[:, 0].long()).sum().item()
-                overall_correct += cls_correct
-                overall_predict += len(cls_predict)
+                overall_predict += len(task)
             else:
                 global_pooling_loss = model(data.x, data.edge_index, data.batch)
                 overall_global_pooling_loss += global_pooling_loss
     toc = time.time()
 
+    save_json(results, pathlib.Path('results.json'), indent=2)
+
     if mode == 'Supervised':
         digits = torch.tensor([
-            overall_correct/overall_predict,
             overall_mae/overall_predict,
+            overall_mse/overall_predict,
             torch.sqrt(overall_mse/overall_predict),
         ]).to(device_descriptor)
     else:
@@ -207,7 +217,6 @@ def exact_train(
     logger.info(f'  Validate every {valid_period} Step;')
     logger.info(f'  Saving checkpoint every {train_period} Step.')
 
-    cre_criterian = torch.nn.CrossEntropyLoss()
     mse_criterian = torch.nn.MSELoss()
     model.train()
     optimizer.zero_grad()
@@ -221,14 +230,13 @@ def exact_train(
             data: Data = data.to(device_descriptor)
             if mode == 'Supervised':
                 y = data.y.reshape(len(data), -1)
-                cls_output, reg_output, global_pooling_loss = model(data.x, data.edge_index, data.batch)
-                # Now Try Classification
-                cls_main_loss = cre_criterian(torch.nn.functional.softmax(cls_output, dim=-1), y[:, 0].long())
-                # Now Try Regression
-                reg_main_loss = mse_criterian(reg_output.reshape(-1), y[:, 1])
-                loss = cls_main_loss + reg_main_loss + global_pooling_loss
-                average_digits = torch.tensor([float(loss), float(cls_main_loss), float(reg_main_loss), float(global_pooling_loss)]).to(device_descriptor) / update_period
-                average_digit_names = ['Total-Loss', 'CLS-Loss (CRE)', 'REG-Loss (MSE)', 'Cluster-loss']
+                task = y[:, 2].long()
+                dataset = y[:, 3].long()
+                output, global_pooling_loss = model(data.x, data.edge_index, data.batch, task, dataset)
+                main_loss = mse_criterian(output.reshape(-1), y[:, 1])
+                loss = main_loss + global_pooling_loss
+                average_digits = torch.tensor([float(loss), float(main_loss), float(global_pooling_loss)]).to(device_descriptor) / update_period
+                average_digit_names = ['Total-Loss', 'REG-Loss (MSE)', 'Cluster-loss']
                 loss = loss / update_period
                 loss.backward()
             else:
@@ -266,9 +274,11 @@ def train(
     checkpoint_dirpath: pathlib.Path,
     mode: Literal['Supervised', 'Unsupervised'] = 'Unsupervised',
     x_feature_get_type: Literal['OnlyOp'] = 'OnlyOp',
-    y_feature_get_type: Literal['OnlyMt'] = 'OnlyMt',
+    y_feature_get_type: Literal['OnlyMt', 'TkDsMt'] = 'OnlyMt',
 
     node_dim: int = 512,
+    task_dim: int = 512,
+    dataset_dim: int = 512,
     hidden_dim: int = 512,
     readout_dim: int = 256,
     cluster_num: int | None = None,
@@ -354,6 +364,8 @@ def train(
     model = NAPPGATVaryV1(
         meta=meta,
         node_dim=node_dim,
+        task_dim=task_dim,
+        dataset_dim=dataset_dim,
         hidden_dim=hidden_dim,
         readout_dim=readout_dim,
         cluster_num=cluster_num,
@@ -407,11 +419,13 @@ def test(
     test_dataset_dirpath: pathlib.Path,
     checkpoint_filepath: pathlib.Path,
     x_feature_get_type: Literal['OnlyOp'] = 'OnlyOp',
-    y_feature_get_type: Literal['OnlyMt'] = 'OnlyMt',
+    y_feature_get_type: Literal['OnlyMt', 'TkDsMt'] = 'OnlyMt',
 
     test_batch_size: int = 32,
 
     node_dim: int = 512,
+    task_dim: int = 512,
+    dataset_dim: int = 512,
     hidden_dim: int = 512,
     readout_dim: int = 256,
     cluster_num: int | None = None,
@@ -444,6 +458,8 @@ def test(
     model = NAPPGATVaryV1(
         meta=meta,
         node_dim=node_dim,
+        task_dim=task_dim,
+        dataset_dim=dataset_dim,
         hidden_dim=hidden_dim,
         readout_dim=readout_dim,
         cluster_num=cluster_num,

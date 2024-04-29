@@ -49,6 +49,8 @@ def performance_prediction_train_run(arguments):
         arguments.y_feature_get_type,
 
         arguments.node_dim,
+        arguments.task_dim,
+        arguments.dataset_dim,
         arguments.hidden_dim,
         arguments.readout_dim,
         arguments.cluster_num,
@@ -100,6 +102,8 @@ def performance_prediction_test_run(arguments):
         arguments.test_batch_size,
 
         arguments.node_dim,
+        arguments.task_dim,
+        arguments.dataset_dim,
         arguments.hidden_dim,
         arguments.readout_dim,
         arguments.cluster_num,
@@ -118,9 +122,11 @@ def set_applications_performance_perdiction_arguments(parser: argparse.ArgumentP
     train_parser.add_argument('--checkpoint-dirpath', type=str)
     train_parser.add_argument('--mode', type=str, choices=['Supervised', 'Unsupervised'], default='Unsupervised')
     train_parser.add_argument('--x-feature-get-type', type=str, choices=['OnlyOp'], default='OnlyOp')
-    train_parser.add_argument('--y-feature-get-type', type=str, choices=['OnlyMt'], default='OnlyMt')
+    train_parser.add_argument('--y-feature-get-type', type=str, choices=['OnlyMt', 'TkDsMt'], default='OnlyMt')
 
     train_parser.add_argument('--node-dim', type=int, default=512)
+    train_parser.add_argument('--task-dim', type=int, default=512)
+    train_parser.add_argument('--dataset-dim', type=int, default=512)
     train_parser.add_argument('--hidden-dim', type=int, default=512)
     train_parser.add_argument('--readout-dim', type=int, default=256)
     train_parser.add_argument('--cluster-num', type=int, default=16)
@@ -163,11 +169,13 @@ def set_applications_performance_perdiction_arguments(parser: argparse.ArgumentP
     test_parser.add_argument('--test-dataset-dirpath', type=str)
     test_parser.add_argument('--checkpoint-filepath', type=str)
     test_parser.add_argument('--x-feature-get-type', type=str, choices=['OnlyOp'], default='OnlyOp')
-    test_parser.add_argument('--y-feature-get-type', type=str, choices=['OnlyMt'], default='OnlyMt')
+    test_parser.add_argument('--y-feature-get-type', type=str, choices=['OnlyMt', 'TkDsMt'], default='OnlyMt')
 
     test_parser.add_argument('--test-batch-size', type=int, default=32)
 
     test_parser.add_argument('--node-dim', type=int, default=512)
+    test_parser.add_argument('--task-dim', type=int, default=512)
+    test_parser.add_argument('--dataset-dim', type=int, default=512)
     test_parser.add_argument('--hidden-dim', type=int, default=512)
     test_parser.add_argument('--readout-dim', type=int, default=256)
     test_parser.add_argument('--cluster-num', type=int, default=16)

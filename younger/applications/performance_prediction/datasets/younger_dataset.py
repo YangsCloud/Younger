@@ -36,7 +36,7 @@ class YoungerDataset(Dataset):
         force_reload: bool = False,
 
         x_feature_get_type: Literal['OnlyOp'] = 'OnlyOp',
-        y_feature_get_type: Literal['OnlyMt'] = 'OnlyMt',
+        y_feature_get_type: Literal['OnlyMt', 'TkDsMt'] = 'OnlyMt',
         worker_number: int = 4,
     ):
         self.worker_number = worker_number
@@ -178,6 +178,12 @@ class YoungerDataset(Dataset):
         if y_feature_get_type == 'OnlyMt':
             if metric is not None and metric_value is not None:
                 graph_feature = [meta['m2i'][metric], float(metric_value)]
+            else:
+                None
+
+        if y_feature_get_type == 'TkDsMt':
+            if metric is not None and metric_value is not None:
+                graph_feature = [meta['m2i'][metric], float(metric_value), meta['t2i'][task], meta['d2i'][dataset]]
             else:
                 None
 

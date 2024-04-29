@@ -46,16 +46,16 @@ def statistics_graph(graph: networkx.DiGraph) -> dict[str, dict[str, int] | int]
                         for sub_operator, sub_num_operator in sub_graph_statistics['num_operators'].items():
                             graph_statistics['num_operators'][sub_operator] = graph_statistics['num_operators'].get(sub_operator, 0) + sub_num_operator
                         graph_statistics['num_node'] = graph_statistics['num_node'] + sub_graph_statistics['num_node']
-                        graph_statistics['num_edge'] = graph_statistics['num_edge'] + sub_graph_statistics['sub_num_edge']
-                        graph_statistics['num_sub']  = graph_statistics['num_sub']  + sub_graph_statistics['sub_num_sub'] + 1
+                        graph_statistics['num_edge'] = graph_statistics['num_edge'] + sub_graph_statistics['num_edge']
+                        graph_statistics['num_sub']  = graph_statistics['num_sub']  + sub_graph_statistics['num_sub'] + 1
                 elif attribute_value['attr_type'] == onnx.defs.OpSchema.AttrType.GRAPH:
                     sub_graph = attribute_value['value']
                     sub_graph_statistics = statistics_graph(sub_graph)
                     for sub_operator, sub_num_operator in sub_graph_statistics['num_operators'].items():
                         graph_statistics['num_operators'][sub_operator] = graph_statistics['num_operators'].get(sub_operator, 0) + sub_num_operator
                     graph_statistics['num_node'] = graph_statistics['num_node'] + sub_graph_statistics['num_node']
-                    graph_statistics['num_edge'] = graph_statistics['num_edge'] + sub_graph_statistics['sub_num_edge']
-                    graph_statistics['num_sub']  = graph_statistics['num_sub']  + sub_graph_statistics['sub_num_sub'] + 1
+                    graph_statistics['num_edge'] = graph_statistics['num_edge'] + sub_graph_statistics['num_edge']
+                    graph_statistics['num_sub']  = graph_statistics['num_sub']  + sub_graph_statistics['num_sub'] + 1
         else:
             graph_statistics['num_node'] = graph_statistics['num_node'] - 1
             graph_statistics['num_edge'] = graph_statistics['num_edge'] - graph.degree(node_id)
