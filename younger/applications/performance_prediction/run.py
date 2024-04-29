@@ -23,7 +23,7 @@ from torch.utils.data import RandomSampler
 from torch_geometric.data import Dataset, Data
 from torch_geometric.loader import DataLoader
 
-from younger.commons.io import create_dir
+from younger.commons.io import create_dir, save_json
 from younger.commons.logging import logger
 
 from younger.applications.utils.neural_network import get_model_parameters_number, get_device_descriptor, fix_random_procedure, set_deterministic, load_checkpoint, save_checkpoint
@@ -96,6 +96,7 @@ def exact_check(device_descriptor: torch.device, model: torch.nn.Module, dataloa
     else:
         digit_names = ['Cluster-loss']
         overall_global_pooling_loss = 0
+    results = list()
     with torch.no_grad():
         for index, data in enumerate(dataloader, start=1):
             data: Data = data.to(device_descriptor)
@@ -104,6 +105,15 @@ def exact_check(device_descriptor: torch.device, model: torch.nn.Module, dataloa
                 task = y[:, 2].long()
                 dataset = y[:, 3].long()
                 output, _ = model(data.x, data.edge_index, data.batch, task, dataset)
+
+                for task_id, dataset_id, output_value, y_value in zip(task, dataset, output, y[:, 1]):
+                    results.append(dict(
+                        task = dataloader.dataset.meta['i2t'][task_id],
+                        dataset = dataloader.dataset.meta['i2d'][dataset_id],
+                        predict = float(output_value[0]),
+                        golden = float(y_value))
+                    )
+
                 mae = torch.nn.functional.l1_loss(output.reshape(-1), y[:, 1], reduction='sum')
                 mse = torch.nn.functional.mse_loss(output.reshape(-1), y[:, 1], reduction='sum')
                 overall_mae += mae
@@ -114,6 +124,8 @@ def exact_check(device_descriptor: torch.device, model: torch.nn.Module, dataloa
                 global_pooling_loss = model(data.x, data.edge_index, data.batch)
                 overall_global_pooling_loss += global_pooling_loss
     toc = time.time()
+
+    save_json(results, pathlib.Path('results.json'), indent=2)
 
     if mode == 'Supervised':
         digits = torch.tensor([
