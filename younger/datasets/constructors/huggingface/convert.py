@@ -80,19 +80,21 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
                     continue
 
                 if status['model_source'] != 'HuggingFace':
+                    logger.info(f'Skip No.{index}. Not HuggingFace Model.')
                     continue
 
-                if status['model_id'] not in model_ids:
+                if status['model_name'] not in model_ids:
+                    logger.info(f'Skip No.{index}. Not In Model ID List.')
                     continue
 
                 if re.fullmatch(f'threshold_(\d+)', status['status']):
                     origin_threshold = int(re.fullmatch(f'threshold_(\d+)', status['status']).group(1))
                     if threshold <= origin_threshold:
-                        model_ids = model_ids - {status['model_id']}
-                        logger.info(f'Skip. This Model Converted Before, But Exceed The Threshold.')
+                        model_ids = model_ids - {status['model_name']}
+                        logger.info(f'Skip No.{index}. This Model Converted Before, But Exceed The Threshold.')
                 else:
-                    logger.info(f'Skip. This Model Converted Before With Status: \"{status["status"]}\".')
-                    model_ids = model_ids - {status['model_id']}
+                    logger.info(f'Skip No.{index}. This Model Converted Before With Status: \"{status["status"]}\".')
+                    model_ids = model_ids - {status['model_name']}
     else:
         logger.info(f'-> Not Found Existing Status Files')
 
