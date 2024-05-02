@@ -10,6 +10,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import re
 import json
 import pathlib
 
@@ -27,6 +28,18 @@ from younger.datasets.modules import Instance
 from younger.datasets.constructors.utils import convert_bytes, get_instance_dirname
 from younger.datasets.constructors.huggingface.utils import infer_model_size, clean_default_cache_repo, clean_specify_cache_repo, get_huggingface_model_readme, get_huggingface_model_card_data_from_readme
 from younger.datasets.constructors.huggingface.annotations import get_heuristic_annotations
+
+
+def save_status(status_filepath: pathlib.Path, status: dict[str, str]):
+    with open(status_filepath, 'a') as status_file:
+        status = json.dumps(status)
+        status_file.write(f'{status}\n')
+
+
+def clean_all_cache(model_id: str, convert_cache_dirpath: pathlib.Path, huggingface_cache_dirpath: pathlib.Path):
+    clean_default_cache_repo(model_id)
+    delete_dir(convert_cache_dirpath, only_clean=True)
+    clean_specify_cache_repo(model_id, huggingface_cache_dirpath)
 
 
 def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_filepath: pathlib.Path, status_filepath: pathlib.Path, device: Literal['cpu', 'cuda'] = 'cpu', threshold: int | None = None, huggingface_token: str | None = None):
@@ -49,8 +62,39 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
         instance = Instance()
         instance.load(instance_dirpath)
         if instance.labels['model_source'] == 'HuggingFace':
-            logger.info(f'Skip Total {index} - {instance.labels["model_name"]}')
+            logger.info(f'Converted. Skip Total {index} - {instance.labels["model_name"]}')
             model_ids = model_ids - {instance.labels['model_name']}
+
+    if status_filepath.is_file():
+        logger.info(f'-> Found Existing Status File')
+        logger.info(f'-> Now Checking Status File ...')
+        with open(status_filepath, 'r') as status_file:
+            for index, line in enumerate(status_file):
+                line = line.strip()
+                if line == '':
+                    continue
+                try:
+                    status = json.loads(line)
+                except:
+                    logger.warn(f'Parse Error. Skip No.{index} Line in Status File: {line}')
+                    continue
+
+                if status['model_source'] != 'HuggingFace':
+                    continue
+
+                if status['model_id'] not in model_ids:
+                    continue
+
+                if re.fullmatch(f'threshold_(\d+)', status['status']):
+                    origin_threshold = int(re.fullmatch(f'threshold_(\d+)', status['status']).group(1))
+                    if threshold <= origin_threshold:
+                        model_ids = model_ids - {status['model_id']}
+                        logger.info(f'Skip. This Model Converted Before, But Exceed The Threshold.')
+                else:
+                    logger.info(f'Skip. This Model Converted Before With Status: \"{status["status"]}\".')
+                    model_ids = model_ids - {status['model_id']}
+    else:
+        logger.info(f'-> Not Found Existing Status Files')
 
     logger.info(f'-> Instances Creating ...')
     for index, model_id in enumerate(model_ids, start=1):
@@ -58,15 +102,14 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
             infered_model_size = infer_model_size(model_id)
         except Exception as error:
             logger.error(f'Model ID = {model_id}: Cannot Get The Model. Access Maybe Requested - {error}')
+            save_status(status_filepath, dict(model_source='HuggingFace', model_name=model_id, status='access_error'))
             continue
         if threshold is None:
             pass
         else:
             if infered_model_size > threshold:
                 logger.warn(f'Model Size: {convert_bytes(infered_model_size)} Larger Than Threshold! Skip.')
-                with open(status_filepath, 'a') as status_file:
-                    status = json.dumps(dict(model_name=model_id, status='oom'))
-                    status_file.write(f'{status}\n')
+                save_status(status_filepath, dict(model_source='HuggingFace', model_name=model_id, status=f'threshold_{threshold}'))
                 continue
 
         logger.info(f' # No.{index}: Now processing the model: {model_id} ...')
@@ -75,24 +118,18 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
             main_export(model_id, convert_cache_dirpath, device=device, cache_dir=huggingface_cache_dirpath, monolith=True, do_validation=False, trust_remote_code=True, no_post_process=True)
         except MemoryError as error:
             logger.error(f'Model ID = {model_id}: Skip! Maybe OOM - {error}')
-            with open(status_filepath, 'a') as status_file:
-                    status = json.dumps(dict(model_name=model_id, status='succ'))
-                    status_file.write(f'{status}\n')
-            delete_dir(convert_cache_dirpath, only_clean=True)
-            clean_default_cache_repo(model_id)
-            clean_specify_cache_repo(model_id, huggingface_cache_dirpath)
+            save_status(status_filepath, dict(model_source='HuggingFace', model_name=model_id, status='memory_error'))
+            clean_all_cache(model_id, convert_cache_dirpath, huggingface_cache_dirpath)
             continue
         except RepositoryNotFoundError as error:
             logger.error(f'Model ID = {model_id}: Skip! Maybe Deleted By Author - {error}')
-            delete_dir(convert_cache_dirpath, only_clean=True)
-            clean_default_cache_repo(model_id)
-            clean_specify_cache_repo(model_id, huggingface_cache_dirpath)
+            save_status(status_filepath, dict(model_source='HuggingFace', model_name=model_id, status='access_error'))
+            clean_all_cache(model_id, convert_cache_dirpath, huggingface_cache_dirpath)
             continue
         except Exception as error:
             logger.error(f'Model ID = {model_id}: Conversion Error - {error}')
-            delete_dir(convert_cache_dirpath, only_clean=True)
-            clean_default_cache_repo(model_id)
-            clean_specify_cache_repo(model_id, huggingface_cache_dirpath)
+            save_status(status_filepath, dict(model_source='HuggingFace', model_name=model_id, status='convert_error'))
+            clean_all_cache(model_id, convert_cache_dirpath, huggingface_cache_dirpath)
             continue
 
         logger.info(f'     Infered Repo Size = {convert_bytes(infered_model_size)}')
@@ -110,7 +147,8 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
             card_data = get_huggingface_model_card_data_from_readme(readme)
             labels = get_heuristic_annotations(model_id, card_data)
         except Exception as error:
-            logger.error(f'Skip Label For Model ID = {model_id}: Error Occur While Extracting Model Card - {error}')
+            logger.warn(f'Skip Label For Model ID = {model_id}: Error Occur While Extracting Model Card - {error}')
+            save_status(status_filepath, dict(model_source='HuggingFace', model_name=model_id, status='labels_miss'))
 
         for convert_index, onnx_model_filename in enumerate(onnx_model_filenames, start=1):
             onnx_model_filepath = convert_cache_dirpath.joinpath(onnx_model_filename)
@@ -120,18 +158,12 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
                 instance_save_dirpath = save_dirpath.joinpath(get_instance_dirname(model_id.replace('/', '--HF--'), 'HuggingFace', onnx_model_filename))
                 instance.save(instance_save_dirpath)
                 logger.info(f'        No.{convert_index} Instance Saved: {instance_save_dirpath}')
-                with open(status_filepath, 'a') as status_file:
-                    status = json.dumps(dict(model_name=model_id, status='succ'))
-                    status_file.write(f'{status}\n')
+                save_status(status_filepath, dict(model_source='HuggingFace', model_name=model_id, status='success'))
             except Exception as error:
                 logger.error(f'Error! [ONNX -> NetworkX Error] OR [Instance Saving Error] - {error}')
-                with open(status_filepath, 'a') as status_file:
-                    status = json.dumps(dict(model_name=model_id, status='fail'))
-                    status_file.write(f'{status}\n')
+                save_status(status_filepath, dict(model_source='HuggingFace', model_name=model_id, status='fail'))
             logger.info(f'      > Converted.')
 
-        delete_dir(convert_cache_dirpath, only_clean=True)
-        clean_default_cache_repo(model_id)
-        clean_specify_cache_repo(model_id, huggingface_cache_dirpath)
+        clean_all_cache(model_id, convert_cache_dirpath, huggingface_cache_dirpath)
 
     logger.info(f'-> Instances Created.')
