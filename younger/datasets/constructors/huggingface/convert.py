@@ -11,8 +11,10 @@
 
 
 import re
+import time
 import json
 import pathlib
+import multiprocessing
 
 from typing import Literal
 
@@ -28,6 +30,29 @@ from younger.datasets.modules import Instance
 from younger.datasets.constructors.utils import convert_bytes, get_instance_dirname
 from younger.datasets.constructors.huggingface.utils import infer_model_size, clean_default_cache_repo, clean_specify_cache_repo, get_huggingface_model_readme, get_huggingface_model_card_data_from_readme
 from younger.datasets.constructors.huggingface.annotations import get_heuristic_annotations
+
+
+def subprocess_export(model_id: str, convert_cache_dirpath: pathlib.Path, huggingface_cache_dirpath: pathlib.Path, status_filepath: pathlib.Path, device: str, result_queue: multiprocessing.Queue):
+    try:
+        main_export(model_id, convert_cache_dirpath, device=device, cache_dir=huggingface_cache_dirpath, monolith=True, do_validation=False, trust_remote_code=True, no_post_process=True)
+        result_queue.put(True)
+    except MemoryError as error:
+        logger.error(f'Model ID = {model_id}: Skip! Maybe OOM - {error}')
+        save_status(status_filepath, dict(model_source='HuggingFace', model_name=model_id, status='memory_error'))
+        clean_all_cache(model_id, convert_cache_dirpath, huggingface_cache_dirpath)
+        result_queue.put(False)
+    except RepositoryNotFoundError as error:
+        logger.error(f'Model ID = {model_id}: Skip! Maybe Deleted By Author - {error}')
+        save_status(status_filepath, dict(model_source='HuggingFace', model_name=model_id, status='access_error'))
+        clean_all_cache(model_id, convert_cache_dirpath, huggingface_cache_dirpath)
+        result_queue.put(False)
+    except Exception as error:
+        logger.error(f'Model ID = {model_id}: Conversion Error - {error}')
+        save_status(status_filepath, dict(model_source='HuggingFace', model_name=model_id, status='convert_error'))
+        clean_all_cache(model_id, convert_cache_dirpath, huggingface_cache_dirpath)
+        result_queue.put(False)
+    
+    return
 
 
 def save_status(status_filepath: pathlib.Path, status: dict[str, str]):
@@ -103,37 +128,31 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
         try:
             infered_model_size = infer_model_size(model_id)
         except Exception as error:
-            logger.error(f'Model ID = {model_id}: Cannot Get The Model. Access Maybe Requested - {error}')
+            logger.error(f' # No.{index}: Model ID = {model_id}: Cannot Get The Model. Access Maybe Requested - {error}')
             save_status(status_filepath, dict(model_source='HuggingFace', model_name=model_id, status='access_error'))
             continue
         if threshold is None:
             pass
         else:
             if infered_model_size > threshold:
-                logger.warn(f'Model Size: {convert_bytes(infered_model_size)} Larger Than Threshold! Skip.')
+                logger.warn(f' # No.{index}: Model ID = {model_id}: Model Size: {convert_bytes(infered_model_size)} Larger Than Threshold! Skip.')
                 save_status(status_filepath, dict(model_source='HuggingFace', model_name=model_id, status=f'threshold_{threshold}'))
                 continue
 
         logger.info(f' # No.{index}: Now processing the model: {model_id} ...')
         logger.info(f' v - Converting HuggingFace Model into ONNX:')
-        try:
-            main_export(model_id, convert_cache_dirpath, device=device, cache_dir=huggingface_cache_dirpath, monolith=True, do_validation=False, trust_remote_code=True, no_post_process=True)
-        except MemoryError as error:
-            logger.error(f'Model ID = {model_id}: Skip! Maybe OOM - {error}')
-            save_status(status_filepath, dict(model_source='HuggingFace', model_name=model_id, status='memory_error'))
-            clean_all_cache(model_id, convert_cache_dirpath, huggingface_cache_dirpath)
+        result_queue = multiprocessing.Queue()
+        subprocess = multiprocessing.Process(target=subprocess_export, args=(model_id, convert_cache_dirpath, huggingface_cache_dirpath, status_filepath, device, result_queue))
+        subprocess.start()
+        subprocess.join()
+        if result_queue.empty():
+            logger.warn(f'Export Process May Be Killed By System! Skip.')
+            save_status(status_filepath, dict(model_source='HuggingFace', model_name=model_id, status=f'system_kill'))
             continue
-        except RepositoryNotFoundError as error:
-            logger.error(f'Model ID = {model_id}: Skip! Maybe Deleted By Author - {error}')
-            save_status(status_filepath, dict(model_source='HuggingFace', model_name=model_id, status='access_error'))
-            clean_all_cache(model_id, convert_cache_dirpath, huggingface_cache_dirpath)
-            continue
-        except Exception as error:
-            logger.error(f'Model ID = {model_id}: Conversion Error - {error}')
-            save_status(status_filepath, dict(model_source='HuggingFace', model_name=model_id, status='convert_error'))
-            clean_all_cache(model_id, convert_cache_dirpath, huggingface_cache_dirpath)
-            continue
-
+        else:
+            result = result_queue.get()
+            if not result:
+                continue
         logger.info(f'     Infered Repo Size = {convert_bytes(infered_model_size)}')
 
         onnx_model_filenames: list[str] = list()
