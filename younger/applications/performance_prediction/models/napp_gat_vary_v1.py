@@ -98,16 +98,16 @@ class NAPPGATVaryV1(torch.nn.Module):
 
         self.readout_layer = DenseAggregation(hidden_dim, readout_dim)
 
-        self.task_transform_layer = Linear(task_dim, hidden_dim)
-        self.task_transform_activate = ReLU(inplace=False)
+        #self.task_transform_layer = Linear(task_dim, hidden_dim)
+        #self.task_transform_activate = ReLU(inplace=False)
 
-        self.dataset_transform_layer = Linear(dataset_dim, hidden_dim)
-        self.dataset_transform_activate = ReLU(inplace=False)
+        #self.dataset_transform_layer = Linear(dataset_dim, hidden_dim)
+        #self.dataset_transform_activate = ReLU(inplace=False)
 
-        self.fuse_layer = Linear(hidden_dim + hidden_dim + readout_dim, hidden_dim)
-        self.fuse_activate = ReLU(inplace=False)
+        #self.fuse_layer = Linear(hidden_dim + hidden_dim + readout_dim, hidden_dim)
+        #self.fuse_activate = ReLU(inplace=False)
 
-        self.output_layer = Linear(hidden_dim, 1)
+        self.output_layer = Linear(readout_dim, 1)
 
         self.initialize_parameters()
 
@@ -159,18 +159,18 @@ class NAPPGATVaryV1(torch.nn.Module):
         x = self.readout_layer(x)
         # [ batch_size X readout_dim ]
 
-        task = self.task_embedding_layer(task)
-        task = self.task_transform_layer(task)
-        task = self.task_transform_activate(task)
+        #task = self.task_embedding_layer(task)
+        #task = self.task_transform_layer(task)
+        #task = self.task_transform_activate(task)
 
-        dataset = self.dataset_embedding_layer(dataset)
-        dataset = self.dataset_transform_layer(dataset)
-        dataset = self.dataset_transform_activate(dataset)
+        #dataset = self.dataset_embedding_layer(dataset)
+        #dataset = self.dataset_transform_layer(dataset)
+        #dataset = self.dataset_transform_activate(dataset)
 
-        fuse = self.fuse_layer(torch.concat([x, task, dataset], dim=-1))
-        fuse = self.fuse_activate(fuse)
+        #fuse = self.fuse_layer(torch.concat([x, task, dataset], dim=-1))
+        #fuse = self.fuse_activate(fuse)
 
-        output = self.output_layer(fuse)
+        output = self.output_layer(x)
         # output - [ batch_size X 1 ]
 
         return output, global_pooling_loss

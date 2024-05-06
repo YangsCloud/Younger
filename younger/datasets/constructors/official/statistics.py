@@ -77,19 +77,19 @@ def statistics_instance(parameters: tuple[pathlib.Path, list, list, list, list, 
     graph_stats = statistics_graph(instance.network.graph)
 
     labels = instance.labels.get('labels', None)
-    if labels:
-        for label in labels:
-            task = label['task']
-            dataset = label['dataset'][0]
-            split = label['dataset'][1]
-            metric = label['metric'][0]
+    if labels and labels['eval_results']:
+        for eval_result in labels['eval_results']:
+            task = eval_result['task']
+            dataset = eval_result['dataset'][0]
+            split = eval_result['dataset'][1]
+            metric = eval_result['metric'][0]
             combined_filter_pattern = str((
                 task if has_task_filters else '*',
                 dataset if has_dataset_filters else '*',
                 split if has_split_filters else '*',
                 metric if has_metric_filters else '*',
             ))
-            metric_value = label['metric'][1]
+            metric_value = eval_result['metric'][1]
             if math.isnan(metric_value):
                 continue
             if combined_filter_pattern in statistics:

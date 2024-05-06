@@ -174,8 +174,29 @@ def parse_metric(metric_names: list[str]) -> str:
 
 
 def get_heuristic_annotations(model_id: str, model_card_data: ModelCardData) -> list[dict[str, dict[str, str]]] | None:
+    annotations = dict()
+    if model_card_data.datasets:
+        annotations['datasets'] = str(model_card_data.datasets)
+    else:
+        annotations['datasets'] = None
+
+    if model_card_data.metrics:
+        annotations['metrics'] = str(model_card_data.metrics)
+    else:
+        annotations['metrics'] = None
+
+    if model_card_data.language:
+        annotations['language'] = str(model_card_data.language)
+    else:
+        annotations['language'] = None
+
+    if model_card_data.base_model:
+        annotations['base_model'] = str(model_card_data.base_model)
+    else:
+        annotations['base_model'] = None
+
     if model_card_data.eval_results:
-        annotations = list()
+        annotations['eval_results'] = list()
         for eval_result in model_card_data.eval_results:
             hf_task_type = eval_result.task_type
             hf_task_name = eval_result.task_name if eval_result.task_name else ''
@@ -233,7 +254,7 @@ def get_heuristic_annotations(model_id: str, model_card_data: ModelCardData) -> 
             #      type: gsarti/change_it
             #      name: "CHANGE-IT"
             if hf_task_type == hf_dataset_type:
-                logger.warn(f'Annotations Maybe Wrong. Try To Fix: Model ID {model_id}')
+                logger.warn(f'Eval Results Annotations Maybe Wrong. Try To Fix: Model ID {model_id}')
                 hf_task_name, hf_dataset_name = hf_task_type, hf_task_name
                 hf_task_type, hf_dataset_type = '', ''
             elif hf_dataset_name in hf_task_type:
@@ -245,7 +266,7 @@ def get_heuristic_annotations(model_id: str, model_card_data: ModelCardData) -> 
                     words = [word for word in hf_dataset_name.split()] + [word for word in hf_dataset_type.split()]
                     for word in words:
                         if word in hf_task_name:
-                            logger.warn(f'Annotations Maybe Wrong. Try To Fix: Model ID {model_id}')
+                            logger.warn(f'Eval Results Annotations Maybe Wrong. Try To Fix: Model ID {model_id}')
                             hf_task_type, hf_dataset_name = hf_dataset_type, hf_task_name
                             hf_task_name, hf_dataset_type = '', ''
                             break
@@ -296,7 +317,7 @@ def get_heuristic_annotations(model_id: str, model_card_data: ModelCardData) -> 
                     split = 'test'
                 dataset_info = (dataset_name, split)
 
-                annotations.append(
+                annotations['eval_results'].append(
                     dict(
                         task=task_name,
                         dataset=dataset_info,
@@ -304,7 +325,7 @@ def get_heuristic_annotations(model_id: str, model_card_data: ModelCardData) -> 
                     )
                 )
     else:
-        annotations = None
+        annotations['eval_results'] = None
     
     return annotations
 
