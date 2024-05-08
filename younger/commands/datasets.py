@@ -106,6 +106,7 @@ def set_datasets_convert_arguments(parser: argparse.ArgumentParser):
     huggingface_parser.add_argument('--threshold', type=int, default=3*1024*1024*1024)
     huggingface_parser.add_argument('--logging-filepath', type=str, default=None)
     huggingface_parser.add_argument('--huggingface-token', type=str, default=None)
+    huggingface_parser.add_argument('--mode', type=str, choices=['optimum', 'onnx'], default='optimum')
     huggingface_parser.set_defaults(run=convert_huggingface_run)
 
     onnx_parser = subparser.add_parser('onnx')
@@ -124,7 +125,7 @@ def set_datasets_retrieve_arguments(parser: argparse.ArgumentParser):
     huggingface_parser.add_argument('--mode', type=str, choices=['Models', 'Model_Infos', 'Model_IDs', 'Metrics', 'Tasks'], required=True)
     huggingface_parser.add_argument('--save-dirpath', type=str, default='.')
     huggingface_parser.add_argument('--cache-dirpath', type=str, default='.')
-    huggingface_parser.add_argument('--library', type=str, default='transformers')
+    huggingface_parser.add_argument('--library', type=str, default=None)
     huggingface_parser.add_argument('--logging-filepath', type=str, default=None)
     huggingface_parser.set_defaults(run=retrieve_huggingface_run)
 
