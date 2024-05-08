@@ -19,11 +19,20 @@ from huggingface_hub import list_metrics
 from younger.commons.io import save_json
 from younger.commons.logging import logger
 
-from younger.datasets.constructors.huggingface.utils import get_huggingface_model_ids, get_huggingface_tasks
+from younger.datasets.constructors.huggingface.utils import get_huggingface_model_infos, get_huggingface_model_ids, get_huggingface_tasks
 
 
 def save_huggingface_models(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path):
     pass
+
+
+def save_huggingface_model_infos(save_dirpath: pathlib.Path, library: str | None = None):
+    filter_list = [library] if library else None
+    model_infos = list(get_huggingface_model_infos(filter_list=filter_list, full=True, config=True))
+    suffix = f'_{library}.json' if library else '.json'
+    save_filepath = save_dirpath.joinpath(f'model_infos{suffix}')
+    save_json(model_infos, save_filepath)
+    logger.info(f'Total {len(model_infos)} Model Infos{f" (Library - {library})" if library else ""}. Results Saved In: \'{save_filepath}\'.')
 
 
 def save_huggingface_model_ids(save_dirpath: pathlib.Path, library: str | None = None):
@@ -56,6 +65,10 @@ def main(mode: Literal['Models', 'Model_Infos', 'Model_IDs', 'Metrics', 'Tasks']
 
     if mode == 'Models':
         save_huggingface_models(save_dirpath, cache_dirpath)
+        return
+
+    if mode == 'Model_Infos':
+        save_huggingface_model_infos(save_dirpath, library=kwargs['library'])
         return
 
     if mode == 'Model_IDs':
