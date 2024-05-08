@@ -421,7 +421,7 @@ def trans_node_io(node_proto: onnx.NodeProto) -> tuple[dict[str, int], dict[str,
     return (operands, results)
 
 
-def trans_node_proto(node_proto: onnx.NodeProto, trans_graph_proto_method: Callable[[onnx.GraphProto, ], Any], neglect_tensor_values: bool = True) -> dict:
+def trans_node_proto(node_proto: onnx.NodeProto, opset_import: dict[str, int], trans_graph_proto_method: Callable[[onnx.GraphProto, ], Any], neglect_tensor_values: bool = True) -> dict:
     # TODO: Code ignores the processing of all third-party operators, excluding those defined by the official ONNX specification and user-defined functions.
     # TODO: In the future, functionality to handle these third-party operators will need to be added.
     # NOTE: A node input in a nested subgraph MAY refer to names introduced in outer graphs (as node outputs, graph inputs, or graph initializers).
@@ -448,7 +448,7 @@ def trans_node_proto(node_proto: onnx.NodeProto, trans_graph_proto_method: Calla
     domain: str = node_proto.domain
 
     try:
-        schema = onnx.defs.get_schema(op_type, domain=domain)
+        schema = onnx.defs.get_schema(op_type, max_inclusive_version=opset_import[domain], domain=domain)
     except onnx.defs.SchemaError:
         schema = None
     except Exception as exception:
@@ -515,7 +515,7 @@ def trans_node_proto(node_proto: onnx.NodeProto, trans_graph_proto_method: Calla
     return node_proto_dict
 
 
-def trans_graph_proto(ox_graph: onnx.GraphProto, outer_dataflow2source: dict[str, tuple[int, int]] | None = None, neglect_tensor_values: bool = True, verbose: bool = False) -> networkx.DiGraph:
+def trans_graph_proto(ox_graph: onnx.GraphProto, opset_import: dict[str, int], outer_dataflow2source: dict[str, tuple[int, int]] | None = None, neglect_tensor_values: bool = True, verbose: bool = False) -> networkx.DiGraph:
     # TODO: Some `value_info` may not be inferred by the `onnx.shape_inference.infer_shapes` method.
     # TODO: This is because there are operators outside the official ONNX domain in the graph.
     # TODO: Support for this part will need to be added in the future.
@@ -739,8 +739,8 @@ def trans_graph_proto(ox_graph: onnx.GraphProto, outer_dataflow2source: dict[str
         all_outer_dataflow2source = dict()
         all_outer_dataflow2source.update(dataflow2source)
         all_outer_dataflow2source.update(outer_dataflow2source)
-        trans_graph_proto_method = partial(trans_graph_proto, outer_dataflow2source=all_outer_dataflow2source, neglect_tensor_values=neglect_tensor_values, verbose=verbose)
-        node = trans_node_proto(node, trans_graph_proto_method, neglect_tensor_values=neglect_tensor_values)
+        trans_graph_proto_method = partial(trans_graph_proto, opset_import, outer_dataflow2source=all_outer_dataflow2source, neglect_tensor_values=neglect_tensor_values, verbose=verbose)
+        node = trans_node_proto(node, opset_import, trans_graph_proto_method, neglect_tensor_values=neglect_tensor_values)
         nx_graph.add_node(f'{len(nx_graph)}', **get_complete_node_attributes('operator', node))
 
     nx_graph.add_node(input_node_index, **get_complete_node_attributes('input', dict(graph_inputs=graph_inputs)))
@@ -763,14 +763,14 @@ def trans_graph_proto(ox_graph: onnx.GraphProto, outer_dataflow2source: dict[str
             if input_name in dataflow2source:
                 (tail_index, emit_index) = dataflow2source[input_name]
                 attributes = dict(
-                    connection=dict(emit_index=emit_index, trap_index=trap_index),
+                    connection = dict(emit_index=emit_index, trap_index=trap_index),
                     default_value = default_values.get(input_name, None),
                     dataflow = dataflows.get(input_name, None),
                 )
             elif input_name in outer_dataflow2source:
                 tail_index = outer_node_index
                 attributes = dict(
-                    connection=dict(emit_index=None, trap_index=trap_index),
+                    connection = dict(emit_index=None, trap_index=trap_index),
                     default_value = None,
                     dataflow = None,
                 )
@@ -809,6 +809,11 @@ def trans_model_proto(model: onnx.ModelProto, neglect_tensor_values: bool = True
     # };
     assert isinstance(model, onnx.ModelProto), f'Argument \"model\" must be an ONNX Model Proto (onnx.ModelProto) instead \"{type(model)}\"!'
 
+    # If IR version >= 3, the model must specify opset_import. If IR version < 3, the model cannot have any opset_import specified.
+    # https://onnx.ai/onnx/api/checker.html#onnx.checker.check_model
+    # https://onnx.ai/onnx/repo-docs/Versioning.html#released-versions
+    assert 3 <= model.ir_version, f'IR Version {model.ir_version} Not Support! Only Accept 3 <= IR Version (1.0 <= ONNX Version).'
+
     model = inline_local_functions(model) # Expand all local functions of the model.
     model = infer_shapes(model) # Infer all shape of hiddens.
 
@@ -820,17 +825,30 @@ def trans_model_proto(model: onnx.ModelProto, neglect_tensor_values: bool = True
     model_version: int = model.model_version
     doc_string: str = model.doc_string
 
-    opset_import: list[dict[str, str | int]] = list()
+    # OperatorSetIdProto
+    # This is the type of attribute opset_import of class ModelProto.
+    # This attribute specifies the versions of operators used in the model.
+    # Every operator or node belongs to a domain. All operators for the same domain share the same version.
+    # https://onnx.ai/onnx/api/classes.html#operatorsetidproto
+    # It's schema can be loaded by using onnx.defs.get_schema(*args, **kwargs)
+    # 1. get_schema(op_type: str, max_inclusive_version: int, domain: str = ‘’) -> onnx.onnx_cpp2py_export.defs.OpSchema
+    #    Return the schema of the operator op_type and for a specific version.
+    # 2. get_schema(op_type: str, domain: str = ‘’) -> onnx.onnx_cpp2py_export.defs.OpSchema
+    #    Return the schema of the operator op_type and for a specific version.
+    # https://onnx.ai/onnx/api/defs.html#onnx.defs.get_schema
+    opset_import: dict[str, int] = dict()
     for ox_model_opset_import in model.opset_import:
         ox_model_opset_import: dict[str, str | int] = trans_operator_set_id_proto(ox_model_opset_import)
-        opset_import.append(ox_model_opset_import)
+        domain: str = ox_model_opset_import['domain']
+        version: int = ox_model_opset_import['version']
+        opset_import[domain] = version
 
     metadata_props: list[dict[str, str]] = list()
     for ox_model_metadata_props in model.metadata_props:
         ox_model_metadata_props: dict[str, str] = trans_string_string_entry_proto(ox_model_metadata_props)
         metadata_props.append(ox_model_metadata_props)
 
-    graph: networkx.DiGraph = trans_graph_proto(model.graph, neglect_tensor_values=neglect_tensor_values, verbose=verbose)
+    graph: networkx.DiGraph = trans_graph_proto(model.graph, opset_import=opset_import, neglect_tensor_values=neglect_tensor_values, verbose=verbose)
 
     graph_attributes = dict(
         ir_version = ir_version,
