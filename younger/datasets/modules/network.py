@@ -52,7 +52,7 @@ class Network(object):
         self._graph = graph
 
         ir_version: int = graph.graph.get('ir_version', None)
-        opset_import: list[dict[str, str | int]] = graph.graph.get('opset_import', None)
+        opset_import: dict[str, int] = graph.graph.get('opset_import', None)
         producer_name: str | None = graph.graph.get('producer_name', None)
         producer_version: str | None = graph.graph.get('producer_version', None)
         domain: str | None = graph.graph.get('domain', None)
