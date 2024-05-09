@@ -138,8 +138,8 @@ class Network(object):
     def cleanse(cls, graph: networkx.DiGraph) -> networkx.DiGraph:
         flattened_graph = cls.flatten(graph)
         cleansed_graph = networkx.DiGraph()
-        cleansed_graph.add_nodes_from(flattened_graph.nodes())
-        cleansed_graph.add_edges_from(flattened_graph.edges())
+        cleansed_graph.add_nodes_from(flattened_graph.nodes(data=True))
+        cleansed_graph.add_edges_from(flattened_graph.edges(data=True))
 
         for node_index, node_attrs in flattened_graph.nodes.items():
             if node_attrs['type'] != 'operator' or (node_attrs['operator'] and (node_attrs['operator']['op_type'] == 'Constant' and node_attrs['operator']['domain'] == '')):

@@ -539,7 +539,7 @@ def trans_graph_proto(ox_graph: onnx.GraphProto, opset_import: dict[str, int], o
             graph_constants = None,
         )
         operator_attributes = dict(
-            name = node_type,
+            name = None,
             doc_string = None,
             operator = None,
             operands = None,
