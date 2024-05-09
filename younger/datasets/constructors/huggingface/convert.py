@@ -132,13 +132,13 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
                     logger.info(f' . Skip No.{index}. Not In Model ID List.')
                     continue
 
-                if re.fullmatch(f'model_size_threshold_(\d+)', status['status']):
-                    origin_repo_size_threshold = int(re.fullmatch(f'model_size_threshold_(\d+)', status['status']).group(1))
+                if re.fullmatch(f'model_size_threshold_(\d+)', status['flag']):
+                    origin_repo_size_threshold = int(re.fullmatch(f'model_size_threshold_(\d+)', status['flag']).group(1))
                     if model_size_threshold and model_size_threshold <= origin_repo_size_threshold:
                         model_ids = model_ids - {status['model_name']}
                         logger.info(f' . Skip No.{index}. This Model Converted Before, But Exceed The Threshold.')
                 else:
-                    logger.info(f' . Skip No.{index}. This Model Converted Before With Status: \"{status["status"]}\".')
+                    logger.info(f' . Skip No.{index}. This Model Converted Before With Status: \"{status["flag"]}\".')
                     model_ids = model_ids - {status['model_name']}
     else:
         logger.info(f'-> Not Found Existing Status Files')
