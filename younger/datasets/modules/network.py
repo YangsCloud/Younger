@@ -82,7 +82,7 @@ class Network(object):
 
     @property
     def hash(self) -> str:
-        return networkx.weisfeiler_lehman_graph_hash(self._graph, edge_attr='connection', node_attr='operator', iterations=6, digest_size=16)
+        return networkx.weisfeiler_lehman_graph_hash(self.__class__.cleanse(self._graph), node_attr='operator', iterations=6, digest_size=16)
 
     def load(self, network_dirpath: pathlib.Path) -> None:
         assert network_dirpath.is_dir(), f'There is no \"Network\" can be loaded from the specified directory \"{network_dirpath.absolute()}\".'
