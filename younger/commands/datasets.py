@@ -81,7 +81,7 @@ def retrieve_huggingface_run(arguments):
 
     from younger.datasets.constructors.huggingface import retrieve
 
-    retrieve.main(arguments.mode, save_dirpath, cache_dirpath, library=arguments.library)
+    retrieve.main(arguments.mode, save_dirpath, cache_dirpath, library=arguments.library, label=arguments.label, token=arguments.token)
 
 
 def convert_onnx_run(arguments):
@@ -126,6 +126,8 @@ def set_datasets_retrieve_arguments(parser: argparse.ArgumentParser):
     huggingface_parser.add_argument('--save-dirpath', type=str, default='.')
     huggingface_parser.add_argument('--cache-dirpath', type=str, default='.')
     huggingface_parser.add_argument('--library', type=str, default=None)
+    huggingface_parser.add_argument('--token', type=str, default=None)
+    huggingface_parser.add_argument('--label', action='store_true')
     huggingface_parser.add_argument('--logging-filepath', type=str, default=None)
     huggingface_parser.set_defaults(run=retrieve_huggingface_run)
 

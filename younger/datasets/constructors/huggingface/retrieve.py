@@ -26,17 +26,17 @@ def save_huggingface_models(save_dirpath: pathlib.Path, cache_dirpath: pathlib.P
     pass
 
 
-def save_huggingface_model_infos(save_dirpath: pathlib.Path, library: str | None = None):
+def save_huggingface_model_infos(save_dirpath: pathlib.Path, library: str | None = None, label: bool | None = True, token: str | None = None):
     filter_list = [library] if library else None
-    model_infos = list(get_huggingface_model_infos(filter_list=filter_list, full=True, config=True))
+    model_infos = list(get_huggingface_model_infos(filter_list=filter_list, full=True, config=True, label=label, token=token))
     suffix = f'_{library}.json' if library else '.json'
     save_filepath = save_dirpath.joinpath(f'model_infos{suffix}')
     save_json(model_infos, save_filepath)
     logger.info(f'Total {len(model_infos)} Model Infos{f" (Library - {library})" if library else ""}. Results Saved In: \'{save_filepath}\'.')
 
 
-def save_huggingface_model_ids(save_dirpath: pathlib.Path, library: str | None = None):
-    model_ids = get_huggingface_model_ids(library)
+def save_huggingface_model_ids(save_dirpath: pathlib.Path, library: str | None = None, label: bool | None = True, token: str | None = None):
+    model_ids = list(get_huggingface_model_ids(library, label=label, token=token))
     suffix = f'_{library}.json' if library else '.json'
     save_filepath = save_dirpath.joinpath(f'model_ids{suffix}')
     save_json(model_ids, save_filepath)
@@ -68,11 +68,11 @@ def main(mode: Literal['Models', 'Model_Infos', 'Model_IDs', 'Metrics', 'Tasks']
         return
 
     if mode == 'Model_Infos':
-        save_huggingface_model_infos(save_dirpath, library=kwargs['library'])
+        save_huggingface_model_infos(save_dirpath, library=kwargs['library'], label=kwargs['label'], token=kwargs['token'])
         return
 
     if mode == 'Model_IDs':
-        save_huggingface_model_ids(save_dirpath, library=kwargs['library'])
+        save_huggingface_model_ids(save_dirpath, library=kwargs['library'], label=kwargs['label'], token=kwargs['token'])
         return
 
     if mode == 'Metrics':
