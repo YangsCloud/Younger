@@ -173,14 +173,13 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
         logger.info(f' # No.{index} Model ID = {model_id}: Now Converting ...') 
         logger.info(f'   v Converting HuggingFace Model into ONNX:')
         flag, onnx_model_filepaths = support_convert_method[mode](model_id, convert_cache_dirpath, huggingface_cache_dirpath, hf_file_system, device)
-        logger.info(f'   ^ Finish With Flag - \"{flag}\".')
-
         if flag == 'success':
             pass
         else:
             logger.warn(f'   - Conversion Not Success - Flag: {flag}.')
             save_status(status_filepath, dict(model_name=model_id, flag=flag))
             continue
+        logger.info(f'   ^ Finished.')
 
         model_info = None
         readme = None

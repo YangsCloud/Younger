@@ -76,9 +76,8 @@ def statistics_instance(parameters: tuple[pathlib.Path, list, list, list, list, 
     instance_name = path.name
     graph_stats = statistics_graph(instance.network.graph)
 
-    labels = instance.labels.get('labels', None)
-    if labels and labels['eval_results']:
-        for eval_result in labels['eval_results']:
+    if instance.labels['annotations'] and instance.labels['annotations']['eval_results']:
+        for eval_result in instance.labels['annotations']['eval_results']:
             task = eval_result['task']
             dataset = eval_result['dataset'][0]
             split = eval_result['dataset'][1]

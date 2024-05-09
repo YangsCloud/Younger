@@ -135,6 +135,19 @@ class Network(object):
             return tobe_saved
 
     @classmethod
+    def cleanse(cls, graph: networkx.DiGraph) -> networkx.DiGraph:
+        flattened_graph = cls.flatten(graph)
+        cleansed_graph = networkx.DiGraph()
+        cleansed_graph.add_nodes_from(flattened_graph.nodes())
+        cleansed_graph.add_edges_from(flattened_graph.edges())
+
+        for node_index, node_attrs in flattened_graph.nodes.items():
+            if node_attrs['type'] != 'operator':
+                cleansed_graph.remove_node(node_index)
+        
+        return cleansed_graph
+
+    @classmethod
     def simplify(cls, graph: networkx.DiGraph, preserve_node_attributes: list[str] | None= None, preserve_edge_attributes: list[str] | None= None) -> networkx.DiGraph:
         preserve_node_attributes = [] if preserve_node_attributes is None else preserve_node_attributes
         preserve_edge_attributes = [] if preserve_edge_attributes is None else preserve_edge_attributes
