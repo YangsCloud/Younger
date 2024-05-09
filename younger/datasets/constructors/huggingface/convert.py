@@ -73,7 +73,7 @@ def convert_optimum(model_id: set[str], convert_cache_dirpath: pathlib.Path, hug
 
     onnx_model_filepaths: list[pathlib.Path] = list()
     for filepath in convert_cache_dirpath.iterdir():
-        if filepath.suffix != '.onnx':
+        if filepath.suffix == '.onnx':
             onnx_model_filepaths.append(filepath)
     if len(onnx_model_filepaths) == 0:
         flag = 'convert_nothing'
@@ -178,6 +178,7 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
         if flag == 'success':
             pass
         else:
+            logger.warn(f'   - Conversion Not Success - Flag: {flag}.')
             save_status(status_filepath, dict(model_name=model_id, flag=flag))
             continue
 
