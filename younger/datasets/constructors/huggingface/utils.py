@@ -62,9 +62,8 @@ def get_huggingface_model_infos(
     config: bool | None = None,
     sort: str | None = None,
     direction: Literal[-1] | None = None,
-    label: bool | None = None,
     token: str | None = None,
-) -> Iterable[tuple[dict[str, Any], bool | None]]:
+) -> Iterable[dict[str, Any]]:
     # [NOTE] The Code are modified based on the official Hugging Face Hub source codes. (https://github.com/huggingface/huggingface_hub/blob/main/src/huggingface_hub/hf_api.py [Method: list_models])
 
     huggingface_hub_api_models_path = f'{huggingface_hub_api_path}/models'
@@ -89,25 +88,20 @@ def get_huggingface_model_infos(
         params['config'] = config
 
     logger.info(f' v Retrieving All Model Infos ...')
-    huggingface_model_infos = huggingface_paginate(huggingface_hub_api_models_path, params=params, token=token)
+    paginated_model_infos = huggingface_paginate(huggingface_hub_api_models_path, params=params, token=token)
 
     if limit is not None:
-        huggingface_model_infos = itertools.islice(huggingface_model_infos, limit)
+        paginated_model_infos = itertools.islice(paginated_model_infos, limit)
         # In Offical Source Code, huggingface_model_info will be instantiated as a ModelInfo object: model_info = ModelInfo(**huggingface_model_info)
-    
-    total = len(list(huggingface_model_infos))
-    logger.info(f' ^ Retrieved Total = {total}.')
+    logger.info(f' ^ Retrieved.')
 
-    logger.info(f' -> Yield Label ({"Yes" if label is True else "No"})')
-    hf_file_system = HfFileSystem(token=token)
-    with tqdm.tqdm(total=total) as progress_bar:
-        for huggingface_model_info in huggingface_model_infos:
-            if label:
-                label_status = check_huggingface_model_eval_results(huggingface_model_info['id'], hf_file_system)
-            else:
-                label_status = None
-            yield [huggingface_model_info, label_status]
-            progress_bar.update()
+    model_infos = list()
+    logger.info(f' v Checking The Number of Retrieved Model Infos ...')
+    for paginated_model_info in tqdm.tqdm(paginated_model_infos):
+        model_infos.append(paginated_model_info)
+    logger.info(f' ^ Total = {len(model_infos)}.')
+
+    return model_infos
 
 
 def get_huggingface_model_readmes(model_ids: list[str], ignore_errors: bool = False) -> Generator[str, None, None]:
@@ -145,11 +139,11 @@ def get_huggingface_model_readme(model_id: str, hf_file_system: HfFileSystem) ->
         raise FileNotFoundError
 
 
-def get_huggingface_model_ids(library: str | None = None, label: bool | None = True, token: str | None = None) -> Iterable[str]:
+def get_huggingface_model_ids(library: str | None = None, token: str | None = None) -> Iterable[str]:
     filter_list = [library] if library else None
-    model_infos = get_huggingface_model_infos(filter_list=filter_list, full=True, config=True, label=label, token=token)
-    for model_info, label_status in model_infos:
-        yield model_info['id'], label_status
+    model_infos = get_huggingface_model_infos(filter_list=filter_list, full=True, config=True, token=token)
+    model_ids = [model_info['id'] for model_info in model_infos]
+    return model_ids
 
 
 def get_huggingface_tasks(token: str | None = None) -> dict[str, dict[str, str]]:
