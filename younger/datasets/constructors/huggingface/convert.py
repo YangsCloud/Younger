@@ -200,12 +200,12 @@ def main(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_file
                 instance = Instance(
                     model=onnx_model_filepath,
                     labels=dict(
-                        model_source='HuggingFace',
-                        model_name=model_id,
+                        source='HuggingFace',
+                        name=model_id,
                         onnx_model_filename=onnx_model_filepath.name,
-                        downloads=model_info['downloads'],
-                        likes=model_info['likes'],
-                        tags=model_info['tags'],
+                        download=model_info['downloads'],
+                        like=model_info['likes'],
+                        tag=model_info['tags'],
                         readme=readme,
                         annotations=annotations
                     )

@@ -94,9 +94,13 @@ ONNXAttributeType.freeze()
 class INSTANCE_LABEL_NAME(Constant):
     def initialize(self) -> None:
         self.NAME = 'name'
-        self.FRAMEWORK = 'framework'
+        self.SOURCE = 'source'
+        self.ONNX_MODEL_NAME = 'onnx_model_name'
         self.DOWNLOAD = 'download'
         self.LIKE = 'like'
+        self.TAG = 'tag'
+        self.README = 'readme'
+        self.ANNOTATIONS = 'annotations'
 
 InstanceLabelName = INSTANCE_LABEL_NAME()
 InstanceLabelName.initialize()
