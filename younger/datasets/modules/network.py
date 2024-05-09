@@ -142,7 +142,7 @@ class Network(object):
         cleansed_graph.add_edges_from(flattened_graph.edges())
 
         for node_index, node_attrs in flattened_graph.nodes.items():
-            if node_attrs['type'] != 'operator':
+            if node_attrs['type'] != 'operator' or (node_attrs['operator'] and (node_attrs['operator']['op_type'] == 'Constant' and node_attrs['operator']['domain'] == '')):
                 cleansed_graph.remove_node(node_index)
         
         return cleansed_graph
