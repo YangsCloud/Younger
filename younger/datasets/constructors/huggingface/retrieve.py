@@ -44,9 +44,7 @@ def save_huggingface_model_infos(save_dirpath: pathlib.Path, json_indent: int | 
         all_label_status = list()
         with multiprocessing.Pool(worker_number) as pool:
             with tqdm.tqdm(total=len(model_infos)) as progress_bar:
-                for index, label_status in enumerate(pool.imap_unordered(get_huggingface_model_label_status, model_infos)):
-                    if index == 100:
-                        break
+                for label_status in pool.imap_unordered(get_huggingface_model_label_status, model_infos):
                     all_label_status.append(label_status)
                     progress_bar.update()
         model_infos = [dict(model_info=model_info, label_status=label_status) for model_info, label_status in zip(model_infos, all_label_status)]
