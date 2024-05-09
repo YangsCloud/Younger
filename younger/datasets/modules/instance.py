@@ -155,6 +155,10 @@ class Instance(object):
                     model = load_model(model_handler)
 
                 self._network = Network(trans_model_proto(model, neglect_tensor_values=True))
+            else:
+                # TODO: If Check Is Invalid, There Is No model
+                pass
+
             # TODO: Set Unique
             self._unique = unique
         return
