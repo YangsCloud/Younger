@@ -40,9 +40,10 @@ def save_huggingface_model_infos(save_dirpath: pathlib.Path, json_indent: int | 
 
     logger.info(f' -> Retrieve Label Status: {"Yes" if label is True else "No"}')
     if label:
-        suffix = f'_{library}-without-label-status.json' if library else '-without-label-status.json'
+        suffix = f'_{library}-without_label_status.json' if library else '-without_label_status.json'
         save_filepath = save_dirpath.joinpath(f'model_infos{suffix}')
         save_json(model_infos, save_filepath, indent=json_indent)
+        logger.info(f'   Results Without Label Status Saved In: \'{save_filepath}\'.')
         logger.info(f' v Retrieving ...')
         all_label_status = list()
         with multiprocessing.Pool(worker_number) as pool:
@@ -53,7 +54,7 @@ def save_huggingface_model_infos(save_dirpath: pathlib.Path, json_indent: int | 
         model_infos = [dict(model_info=model_info, label_status=label_status) for model_info, label_status in zip(model_infos, all_label_status)]
         logger.info(f' ^ Retrieved')
 
-    suffix = f'_{library}-with-label-status.json' if library else '-with-label-status.json'
+    suffix = f'_{library}-with_label_status.json' if library else '-with_label_status.json'
     save_filepath = save_dirpath.joinpath(f'model_infos{suffix}')
     save_json(model_infos, save_filepath, indent=json_indent)
     logger.info(f'Total {len(model_infos)} Model Infos{f" (Library - {library})" if library else ""}. Results Saved In: \'{save_filepath}\'.')
