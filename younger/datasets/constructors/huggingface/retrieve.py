@@ -16,7 +16,7 @@ import pandas
 import pathlib
 import multiprocessing
 
-from typing import Literal, Any
+from typing import Literal
 from huggingface_hub import login, list_metrics, HfFileSystem
 
 from younger.commons.io import load_json, save_json
