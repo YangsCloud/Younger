@@ -87,6 +87,7 @@ def retrieve_huggingface_run(arguments):
         token=arguments.token,
         worker_number=arguments.worker_number,
         min_json=arguments.min_json,
+        force_reload=arguments.force_reload,
     )
 
     retrieve.main(arguments.mode, save_dirpath, cache_dirpath, **kwargs)
@@ -138,6 +139,7 @@ def set_datasets_retrieve_arguments(parser: argparse.ArgumentParser):
     huggingface_parser.add_argument('--worker-number', type=int, default=10)
     huggingface_parser.add_argument('--label', action='store_true')
     huggingface_parser.add_argument('--min-json', action='store_true')
+    huggingface_parser.add_argument('--force-reload', action='store_true')
     huggingface_parser.add_argument('--logging-filepath', type=str, default=None)
     huggingface_parser.set_defaults(run=retrieve_huggingface_run)
 

@@ -10,6 +10,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import json
 import tqdm
 import pandas
 import pathlib
@@ -18,46 +19,72 @@ import multiprocessing
 from typing import Literal, Any
 from huggingface_hub import login, list_metrics, HfFileSystem
 
-from younger.commons.io import save_json
+from younger.commons.io import load_json, save_json
 from younger.commons.logging import logger
 
 from younger.datasets.constructors.huggingface.utils import get_huggingface_model_infos, get_huggingface_model_ids, get_huggingface_tasks, check_huggingface_model_eval_results
-
-
-def get_huggingface_model_label_status(model_info: dict[str, Any]) -> bool:
-    return check_huggingface_model_eval_results(model_info['id'], HfFileSystem())
 
 
 def save_huggingface_models(save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, json_indent: int | None):
     pass
 
 
-def save_huggingface_model_infos(save_dirpath: pathlib.Path, json_indent: int | None, library: str | None = None, label: bool | None = True, token: str | None = None, worker_number: int = 10):
-    login(token=token)
+def get_huggingface_model_label_status(model_id: str) -> tuple[str, bool]:
+    return (model_id, check_huggingface_model_eval_results(model_id, HfFileSystem()))
 
-    filter_list = [library] if library else None
-    model_infos = list(get_huggingface_model_infos(filter_list=filter_list, full=True, config=True, token=token))
+
+def save_huggingface_model_infos(save_dirpath: pathlib.Path, json_indent: int | None, library: str | None = None, label: bool | None = True, token: str | None = None, force_reload: bool | None = None, worker_number: int = 10):
+    login(token=token)
+    suffix = f'_{library}.json' if library else '.json'
+    save_filepath = save_dirpath.joinpath(f'model_infos{suffix}')
+    if save_filepath.is_file() and not force_reload:
+        model_infos = load_json(save_filepath)
+        logger.info(f' -> Already Retrieved. Total {len(model_infos)} Model Infos{f" (Library - {library})" if library else ""}. Results Saved In: \'{save_filepath}\'.')
+    else:
+        filter_list = [library] if library else None
+        model_infos = list(get_huggingface_model_infos(filter_list=filter_list, full=True, config=True, token=token))
+        logger.info(f' -> Total {len(model_infos)} Model Infos{f" (Library - {library})" if library else ""}.')
+        logger.info(f' v Saving Results Into {save_filepath} ...')
+        save_json(model_infos, save_filepath, indent=json_indent)
+        logger.info(f' ^ Saved.')
 
     logger.info(f' -> Retrieve Label Status: {"Yes" if label is True else "No"}')
     if label:
-        suffix = f'_{library}-without_label_status.json' if library else '-without_label_status.json'
-        save_filepath = save_dirpath.joinpath(f'model_infos{suffix}')
-        save_json(model_infos, save_filepath, indent=json_indent)
-        logger.info(f'   Results Without Label Status Saved In: \'{save_filepath}\'.')
-        logger.info(f' v Retrieving ...')
-        all_label_status = list()
-        with multiprocessing.Pool(worker_number) as pool:
-            with tqdm.tqdm(total=len(model_infos)) as progress_bar:
-                for label_status in pool.imap_unordered(get_huggingface_model_label_status, model_infos):
-                    all_label_status.append(label_status)
-                    progress_bar.update()
-        model_infos = [dict(model_info=model_info, label_status=label_status) for model_info, label_status in zip(model_infos, all_label_status)]
-        logger.info(f' ^ Retrieved')
+        json_miwls_suffix = f'_{library}-with_label_status.json' if library else '-with_label_status.json'
+        json_miwls_save_filepath = save_dirpath.joinpath(f'model_ids{json_miwls_suffix}')
+        temp_miwls_suffix = f'_{library}-with_label_status.temp' if library else '-with_label_status.temp'
+        temp_miwls_save_filepath = save_dirpath.joinpath(f'model_ids{temp_miwls_suffix}')
+        if json_miwls_save_filepath.is_file() and not force_reload:
+            model_ids_with_label_status = load_json(json_miwls_save_filepath)
+            logger.info(f' -> Already Retrieved. Total {len(model_ids_with_label_status)} Model Ids With Label Status{f" (Library - {library})" if library else ""}. Results Saved In: \'{json_miwls_save_filepath}\'.')
+        else:
+            model_ids = set([model_info['id'] for model_info in model_infos])
+            model_ids_with_label_status = dict()
 
-    suffix = f'_{library}-with_label_status.json' if library else '-with_label_status.json'
-    save_filepath = save_dirpath.joinpath(f'model_infos{suffix}')
-    save_json(model_infos, save_filepath, indent=json_indent)
-    logger.info(f'Total {len(model_infos)} Model Infos{f" (Library - {library})" if library else ""}. Results Saved In: \'{save_filepath}\'.')
+            if temp_miwls_save_filepath.is_file() and not force_reload:
+                with open(temp_miwls_save_filepath, 'r') as temp_miwls_save_file:
+                    for line in temp_miwls_save_file:
+                        model_id, label_status = json.loads(line)
+                        model_ids_with_label_status[model_id] = label_status
+                        model_ids.remove(model_id)
+            else:
+                temp_miwls_save_filepath.unlink()
+                temp_miwls_save_filepath.touch()
+
+            logger.info(f' v Retrieving ...')
+            with multiprocessing.Pool(worker_number) as pool:
+                with tqdm.tqdm(total=len(model_ids)) as progress_bar:
+                    for index, (model_id, label_status) in enumerate(pool.imap_unordered(get_huggingface_model_label_status, model_ids), start=1):
+                        model_ids_with_label_status[model_id] = label_status
+                        with open(temp_miwls_save_filepath, 'a') as temp_miwls_save_file:
+                            model_id_with_label_status = json.dumps([model_id, label_status])
+                            temp_miwls_save_file.write(f'{model_id_with_label_status}\n')
+                        progress_bar.update()
+            logger.info(f' ^ Retrieved.')
+            logger.info(f' v Saving Results Into {json_miwls_save_filepath} ...')
+            save_json(model_ids_with_label_status, json_miwls_save_filepath, indent=json_indent)
+            logger.info(f' ^ Saved.')
+    logger.info(f' => Finished')
 
 
 def save_huggingface_model_ids(save_dirpath: pathlib.Path, json_indent: int | None, library: str | None = None, token: str | None = None):
@@ -95,7 +122,7 @@ def main(mode: Literal['Models', 'Model_Infos', 'Model_IDs', 'Metrics', 'Tasks']
         return
 
     if mode == 'Model_Infos':
-        save_huggingface_model_infos(save_dirpath, json_indent, library=kwargs['library'], label=kwargs['label'], token=kwargs['token'], worker_number=kwargs['worker_number'])
+        save_huggingface_model_infos(save_dirpath, json_indent, library=kwargs['library'], label=kwargs['label'], token=kwargs['token'], force_reload=kwargs['force_reload'], worker_number=kwargs['worker_number'])
         return
 
     if mode == 'Model_IDs':
