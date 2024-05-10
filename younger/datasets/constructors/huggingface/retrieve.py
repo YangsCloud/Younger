@@ -39,7 +39,7 @@ def save_huggingface_model_infos(save_dirpath: pathlib.Path, json_indent: int | 
     save_filepath = save_dirpath.joinpath(f'model_infos{suffix}')
     if save_filepath.is_file() and not force_reload:
         model_infos = load_json(save_filepath)
-        logger.info(f' -> Already Retrieved. Total {len(model_infos)} Model Infos{f" (Library - {library})" if library else ""}. Results Saved In: \'{save_filepath}\'.')
+        logger.info(f' -> Already Retrieved. Total {len(model_infos)} Model Infos{f" (Library - {library})" if library else ""}. Results From: \'{save_filepath}\'.')
     else:
         filter_list = [library] if library else None
         model_infos = list(get_huggingface_model_infos(filter_list=filter_list, full=True, config=True, token=token))
