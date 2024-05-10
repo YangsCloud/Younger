@@ -71,7 +71,7 @@ def convert_huggingface_run(arguments):
 
     from younger.datasets.constructors.huggingface import convert
 
-    convert.main(save_dirpath, cache_dirpath, model_ids_filepath, status_filepath, device=arguments.device, threshold=arguments.threshold, huggingface_token=arguments.huggingface_token)
+    convert.main(save_dirpath, cache_dirpath, model_ids_filepath, status_filepath, device=arguments.device, model_size_threshold=arguments.model_size_threshold, huggingface_token=arguments.huggingface_token, mode=arguments.mode)
 
 
 def retrieve_huggingface_run(arguments):
@@ -81,7 +81,16 @@ def retrieve_huggingface_run(arguments):
 
     from younger.datasets.constructors.huggingface import retrieve
 
-    retrieve.main(arguments.mode, save_dirpath, cache_dirpath, library=arguments.library)
+    kwargs = dict(
+        library=arguments.library,
+        label=arguments.label,
+        token=arguments.token,
+        worker_number=arguments.worker_number,
+        min_json=arguments.min_json,
+        force_reload=arguments.force_reload,
+    )
+
+    retrieve.main(arguments.mode, save_dirpath, cache_dirpath, **kwargs)
 
 
 def convert_onnx_run(arguments):
@@ -103,9 +112,10 @@ def set_datasets_convert_arguments(parser: argparse.ArgumentParser):
     huggingface_parser.add_argument('--cache-dirpath', type=str, default='.')
     huggingface_parser.add_argument('--status-filepath', type=str, default='./status.flg')
     huggingface_parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cpu')
-    huggingface_parser.add_argument('--threshold', type=int, default=3*1024*1024*1024)
+    huggingface_parser.add_argument('--model-size-threshold', type=int, default=3*1024*1024*1024)
     huggingface_parser.add_argument('--logging-filepath', type=str, default=None)
     huggingface_parser.add_argument('--huggingface-token', type=str, default=None)
+    huggingface_parser.add_argument('--mode', type=str, choices=['optimum', 'onnx'], default='optimum')
     huggingface_parser.set_defaults(run=convert_huggingface_run)
 
     onnx_parser = subparser.add_parser('onnx')
@@ -124,7 +134,12 @@ def set_datasets_retrieve_arguments(parser: argparse.ArgumentParser):
     huggingface_parser.add_argument('--mode', type=str, choices=['Models', 'Model_Infos', 'Model_IDs', 'Metrics', 'Tasks'], required=True)
     huggingface_parser.add_argument('--save-dirpath', type=str, default='.')
     huggingface_parser.add_argument('--cache-dirpath', type=str, default='.')
-    huggingface_parser.add_argument('--library', type=str, default='transformers')
+    huggingface_parser.add_argument('--library', type=str, default=None)
+    huggingface_parser.add_argument('--token', type=str, default=None)
+    huggingface_parser.add_argument('--worker-number', type=int, default=10)
+    huggingface_parser.add_argument('--label', action='store_true')
+    huggingface_parser.add_argument('--min-json', action='store_true')
+    huggingface_parser.add_argument('--force-reload', action='store_true')
     huggingface_parser.add_argument('--logging-filepath', type=str, default=None)
     huggingface_parser.set_defaults(run=retrieve_huggingface_run)
 

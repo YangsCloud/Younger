@@ -11,6 +11,7 @@
 
 
 import re
+import tqdm
 import pathlib
 import requests
 import itertools
@@ -86,12 +87,21 @@ def get_huggingface_model_infos(
     if config:
         params['config'] = config
 
-    huggingface_model_infos = huggingface_paginate(huggingface_hub_api_models_path, params=params, token=token)
+    logger.info(f' v Retrieving All Model Infos ...')
+    paginated_model_infos = huggingface_paginate(huggingface_hub_api_models_path, params=params, token=token)
 
     if limit is not None:
-        huggingface_model_infos = itertools.islice(huggingface_model_infos, limit)
+        paginated_model_infos = itertools.islice(paginated_model_infos, limit)
         # In Offical Source Code, huggingface_model_info will be instantiated as a ModelInfo object: model_info = ModelInfo(**huggingface_model_info)
-    return huggingface_model_infos
+    logger.info(f' ^ Retrieved.')
+
+    model_infos = list()
+    logger.info(f' v Checking The Number of Retrieved Model Infos ...')
+    for paginated_model_info in tqdm.tqdm(paginated_model_infos):
+        model_infos.append(paginated_model_info)
+    logger.info(f' ^ Total = {len(model_infos)}.')
+
+    return model_infos
 
 
 def get_huggingface_model_readmes(model_ids: list[str], ignore_errors: bool = False) -> Generator[str, None, None]:
@@ -129,12 +139,10 @@ def get_huggingface_model_readme(model_id: str, hf_file_system: HfFileSystem) ->
         raise FileNotFoundError
 
 
-def get_huggingface_model_ids(library: str | None = None) -> list[str]:
+def get_huggingface_model_ids(library: str | None = None, token: str | None = None) -> Iterable[str]:
     filter_list = [library] if library else None
-    model_infos = get_huggingface_model_infos(filter_list=filter_list, full=True, config=True)
-    model_ids = list()
-    for model_info in model_infos:
-        model_ids.append(model_info['id'])
+    model_infos = get_huggingface_model_infos(filter_list=filter_list, full=True, config=True, token=token)
+    model_ids = [model_info['id'] for model_info in model_infos]
     return model_ids
 
 
@@ -145,7 +153,7 @@ def get_huggingface_tasks(token: str | None = None) -> dict[str, dict[str, str]]
     return tasks
 
 
-def get_huggingface_model_card_data(model_id, hf_file_system: HfFileSystem) -> ModelCardData:
+def get_huggingface_model_card_data(model_id: str, hf_file_system: HfFileSystem) -> ModelCardData:
     readme = get_huggingface_model_readme(model_id, hf_file_system)
     return get_huggingface_model_card_data_from_readme(readme)
 
@@ -162,6 +170,19 @@ def get_huggingface_model_card_data_from_readme(readme: str) -> ModelCardData:
     except Exception as error:
         logger.error(f' !!! Unknow ModelCard Parse Error !!! Format of YAML at the Begin of README File Maybe Wrong. Error: {error}')
         raise error
+
+
+def check_huggingface_model_eval_results(model_id: str, hf_file_system: HfFileSystem) -> bool:
+    try:
+        card_data = get_huggingface_model_card_data(model_id, hf_file_system)
+        if card_data.eval_results:
+            flag = True
+        else:
+            flag = False
+    except Exception as error:
+        flag = False
+
+    return flag
 
 
 def remove_card_related_from_readme(readme: str) -> str:

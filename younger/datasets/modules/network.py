@@ -52,7 +52,7 @@ class Network(object):
         self._graph = graph
 
         ir_version: int = graph.graph.get('ir_version', None)
-        opset_import: list[dict[str, str | int]] = graph.graph.get('opset_import', None)
+        opset_import: dict[str, int] = graph.graph.get('opset_import', None)
         producer_name: str | None = graph.graph.get('producer_name', None)
         producer_version: str | None = graph.graph.get('producer_version', None)
         domain: str | None = graph.graph.get('domain', None)
@@ -82,7 +82,7 @@ class Network(object):
 
     @property
     def hash(self) -> str:
-        return networkx.weisfeiler_lehman_graph_hash(self._graph, edge_attr='connection', node_attr='operator', iterations=6, digest_size=16)
+        return networkx.weisfeiler_lehman_graph_hash(self.__class__.cleanse(self._graph), node_attr='operator', iterations=6, digest_size=16)
 
     def load(self, network_dirpath: pathlib.Path) -> None:
         assert network_dirpath.is_dir(), f'There is no \"Network\" can be loaded from the specified directory \"{network_dirpath.absolute()}\".'
@@ -133,6 +133,19 @@ class Network(object):
             return '_YoungBench_None_'
         else:
             return tobe_saved
+
+    @classmethod
+    def cleanse(cls, graph: networkx.DiGraph) -> networkx.DiGraph:
+        flattened_graph = cls.flatten(graph)
+        cleansed_graph = networkx.DiGraph()
+        cleansed_graph.add_nodes_from(flattened_graph.nodes(data=True))
+        cleansed_graph.add_edges_from(flattened_graph.edges(data=True))
+
+        for node_index, node_attrs in flattened_graph.nodes.items():
+            if node_attrs['type'] != 'operator' or (node_attrs['operator'] and (node_attrs['operator']['op_type'] == 'Constant' and node_attrs['operator']['domain'] == '')):
+                cleansed_graph.remove_node(node_index)
+        
+        return cleansed_graph
 
     @classmethod
     def simplify(cls, graph: networkx.DiGraph, preserve_node_attributes: list[str] | None= None, preserve_edge_attributes: list[str] | None= None) -> networkx.DiGraph:
