@@ -61,14 +61,16 @@ def save_huggingface_model_infos(save_dirpath: pathlib.Path, json_indent: int | 
             model_ids = set([model_info['id'] for model_info in model_infos])
             model_ids_with_label_status = dict()
 
-            if temp_miwls_save_filepath.is_file() and not force_reload:
-                with open(temp_miwls_save_filepath, 'r') as temp_miwls_save_file:
-                    for line in temp_miwls_save_file:
-                        model_id, label_status = json.loads(line)
-                        model_ids_with_label_status[model_id] = label_status
-                        model_ids.remove(model_id)
+            if temp_miwls_save_filepath.is_file():
+                if force_reload:
+                    temp_miwls_save_filepath.unlink()
+                else:
+                    with open(temp_miwls_save_filepath, 'r') as temp_miwls_save_file:
+                        for line in temp_miwls_save_file:
+                            model_id, label_status = json.loads(line)
+                            model_ids_with_label_status[model_id] = label_status
+                            model_ids.remove(model_id)
             else:
-                temp_miwls_save_filepath.unlink()
                 temp_miwls_save_filepath.touch()
 
             logger.info(f' v Retrieving ...')
