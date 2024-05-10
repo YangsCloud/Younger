@@ -13,6 +13,7 @@ import os
 import sys
 import json
 import pickle
+import psutil
 import shutil
 import tarfile
 import pathlib
@@ -120,3 +121,28 @@ def save_pickle(serializable_object: object, filepath: pathlib.Path) -> None:
         sys.exit(1)
 
     return
+
+
+def get_disk_free_size(path: pathlib.Path) -> int:
+    disk_usage = psutil.disk_usage(path)
+    return disk_usage.free
+
+
+def get_path_size(path: pathlib.Path) -> int:
+    if path.is_file():
+        return get_file_size(path)
+    else:
+        return get_dir_size(path)
+
+
+def get_file_size(filepath: pathlib.Path) -> int:
+    return os.path.getsize(filepath)
+
+
+def get_dir_size(dirpath: pathlib.Path) -> int:
+    total_size = 0
+    for root, _, files in os.walk(dirpath):
+        for file in files:
+            file_path = os.path.join(root, file)
+            total_size += os.path.getsize(file_path)
+    return total_size
