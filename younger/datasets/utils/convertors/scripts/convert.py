@@ -537,8 +537,7 @@ def main():
     # Step 5. Delete all files or folders except the instance file
     if conv_args.remove_other_files:
         for item in pathlib.Path(output_parent_dir).iterdir():
-            item = pathlib.Path(item)
-            if item.is_dir() and item.name == model_id:
+            if item.is_dir() and item.name == model_id or item.name == model_id.split("/")[0]:
                 shutil.rmtree(item)
 
 
