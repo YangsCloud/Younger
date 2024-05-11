@@ -13,8 +13,6 @@
 import os
 import re
 import math
-import psutil
-import pathlib
 
 from younger.datasets.utils.constants import READMEPattern
 
@@ -27,20 +25,6 @@ def convert_bytes(size_in_bytes: int) -> str:
     p = math.pow(1024, i)
     s = round(size_in_bytes / p, 2)
     return f'{s} {size_name[i]}'
-
-
-def get_disk_free_size(path: pathlib.Path) -> int:
-    disk_usage = psutil.disk_usage(path)
-    return disk_usage.free
-
-
-def get_directory_size(directory: pathlib.Path) -> int:
-    total_size = 0
-    for root, _, files in os.walk(directory):
-        for file in files:
-            file_path = os.path.join(root, file)
-            total_size += os.path.getsize(file_path)
-    return total_size
 
 
 def get_instance_dirname(model_name: str, model_source: str, onnx_model_filename: str) -> str:

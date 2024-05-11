@@ -115,7 +115,7 @@ def set_datasets_convert_arguments(parser: argparse.ArgumentParser):
     huggingface_parser.add_argument('--model-size-threshold', type=int, default=3*1024*1024*1024)
     huggingface_parser.add_argument('--logging-filepath', type=str, default=None)
     huggingface_parser.add_argument('--huggingface-token', type=str, default=None)
-    huggingface_parser.add_argument('--mode', type=str, choices=['optimum', 'onnx'], default='optimum')
+    huggingface_parser.add_argument('--mode', type=str, choices=['optimum', 'onnx', 'keras', 'tflite'], default='optimum')
     huggingface_parser.set_defaults(run=convert_huggingface_run)
 
     onnx_parser = subparser.add_parser('onnx')
