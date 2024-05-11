@@ -25,6 +25,7 @@ from younger.commons.logging import logger
 
 
 def main_export(model_path: pathlib.Path, output_path: pathlib.Path, model_type: Literal['saved_model', 'keras', 'tflite', 'tfjs'] = 'saved_model'):
+    # [NOTE] The Code are modified based on the official tensorflow-onnx source codes. (https://github.com/onnx/tensorflow-onnx/blob/main/tf2onnx/convert.py [Method: main])
     assert model_type in {'saved_model', 'keras', 'tflite', 'tfjs'}
 
     model_name = model_path.name
