@@ -171,7 +171,7 @@ def main(
         tflite = convert_tflite,
     )
 
-    assert mode in {'optimum', 'onnx', 'keras', 'tflite', 'skl'}
+    assert mode in {'optimum', 'onnx', 'keras', 'tflite'}
 
     if huggingface_token is not None:
         login(huggingface_token)
