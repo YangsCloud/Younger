@@ -86,21 +86,62 @@ def retrieve_huggingface_run(arguments):
         label=arguments.label,
         token=arguments.token,
         worker_number=arguments.worker_number,
-        min_json=arguments.min_json,
         force_reload=arguments.force_reload,
     )
 
-    retrieve.main(arguments.mode, save_dirpath, cache_dirpath, **kwargs)
+    retrieve.main(arguments.mode, save_dirpath, cache_dirpath, arguments.min_json, **kwargs)
 
 
 def convert_onnx_run(arguments):
     update_logger(arguments)
     save_dirpath = pathlib.Path(arguments.save_dirpath)
     cache_dirpath = pathlib.Path(arguments.cache_dirpath)
+    model_ids_filepath = pathlib.Path(arguments.model_ids_filepath)
+    status_filepath = pathlib.Path(arguments.status_filepath)
 
     from younger.datasets.constructors.onnx import convert
 
-    convert.main(save_dirpath, cache_dirpath)
+    convert.main(save_dirpath, cache_dirpath, model_ids_filepath, status_filepath)
+
+
+def convert_torchvision_run(arguments):
+    update_logger(arguments)
+    save_dirpath = pathlib.Path(arguments.save_dirpath)
+    cache_dirpath = pathlib.Path(arguments.cache_dirpath)
+    model_ids_filepath = pathlib.Path(arguments.model_ids_filepath)
+    status_filepath = pathlib.Path(arguments.status_filepath)
+
+    from younger.datasets.constructors.torchvision import convert
+
+    convert.main(save_dirpath, cache_dirpath, model_ids_filepath, status_filepath)
+
+
+def retrieve_onnx_run(arguments):
+    update_logger(arguments)
+    save_dirpath = pathlib.Path(arguments.save_dirpath)
+    cache_dirpath = pathlib.Path(arguments.cache_dirpath)
+
+    from younger.datasets.constructors.onnx import retrieve
+
+    kwargs = dict(
+        force_reload=arguments.force_reload,
+    )
+
+    retrieve.main(arguments.mode, save_dirpath, cache_dirpath, arguments.min_json, **kwargs)
+
+
+def retrieve_torchvision_run(arguments):
+    update_logger(arguments)
+    save_dirpath = pathlib.Path(arguments.save_dirpath)
+    cache_dirpath = pathlib.Path(arguments.cache_dirpath)
+
+    from younger.datasets.constructors.torchvision import retrieve
+
+    kwargs = dict(
+        force_reload=arguments.force_reload,
+    )
+
+    retrieve.main(arguments.mode, save_dirpath, cache_dirpath, arguments.min_json, **kwargs)
 
 
 def set_datasets_convert_arguments(parser: argparse.ArgumentParser):
@@ -119,10 +160,20 @@ def set_datasets_convert_arguments(parser: argparse.ArgumentParser):
     huggingface_parser.set_defaults(run=convert_huggingface_run)
 
     onnx_parser = subparser.add_parser('onnx')
+    onnx_parser.add_argument('--model-ids-filepath', type=str, required=True)
     onnx_parser.add_argument('--save-dirpath', type=str, default='.')
     onnx_parser.add_argument('--cache-dirpath', type=str, default='.')
+    onnx_parser.add_argument('--status-filepath', type=str, default='./status.flg')
     onnx_parser.add_argument('--logging-filepath', type=str, default=None)
     onnx_parser.set_defaults(run=convert_onnx_run)
+
+    torchvision_parser = subparser.add_parser('torchvision')
+    torchvision_parser.add_argument('--model-ids-filepath', type=str, required=True)
+    torchvision_parser.add_argument('--save-dirpath', type=str, default='.')
+    torchvision_parser.add_argument('--cache-dirpath', type=str, default='.')
+    torchvision_parser.add_argument('--status-filepath', type=str, default='./status.flg')
+    torchvision_parser.add_argument('--logging-filepath', type=str, default=None)
+    torchvision_parser.set_defaults(run=convert_torchvision_run)
 
     parser.set_defaults(run=convert_run)
 
@@ -142,6 +193,24 @@ def set_datasets_retrieve_arguments(parser: argparse.ArgumentParser):
     huggingface_parser.add_argument('--force-reload', action='store_true')
     huggingface_parser.add_argument('--logging-filepath', type=str, default=None)
     huggingface_parser.set_defaults(run=retrieve_huggingface_run)
+
+    onnx_parser = subparser.add_parser('onnx')
+    onnx_parser.add_argument('--mode', type=str, choices=['Models', 'Model_Infos', 'Model_IDs'], required=True)
+    onnx_parser.add_argument('--save-dirpath', type=str, default='.')
+    onnx_parser.add_argument('--cache-dirpath', type=str, default='.')
+    onnx_parser.add_argument('--min-json', action='store_true')
+    onnx_parser.add_argument('--force-reload', action='store_true')
+    onnx_parser.add_argument('--logging-filepath', type=str, default=None)
+    onnx_parser.set_defaults(run=retrieve_onnx_run)
+
+    torchvision_parser = subparser.add_parser('torchvision')
+    torchvision_parser.add_argument('--mode', type=str, choices=['Models', 'Model_Infos', 'Model_IDs'], required=True)
+    torchvision_parser.add_argument('--save-dirpath', type=str, default='.')
+    torchvision_parser.add_argument('--cache-dirpath', type=str, default='.')
+    torchvision_parser.add_argument('--min-json', action='store_true')
+    torchvision_parser.add_argument('--force-reload', action='store_true')
+    torchvision_parser.add_argument('--logging-filepath', type=str, default=None)
+    torchvision_parser.set_defaults(run=retrieve_torchvision_run)
 
     parser.set_defaults(run=retrieve_run)
 
