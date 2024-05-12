@@ -26,7 +26,7 @@ from younger.commons.logging import logger
 
 from younger.datasets.utils.constants import READMEPattern
 
-from younger.datasets.constructors.utils import extract_table_related_metrics_from_readme, extract_digit_related_metrics_from_readme
+from younger.datasets.constructors.utils import extract_table_related_metrics_from_readme, extract_digit_related_metrics_from_readme, convert_bytes
 
 
 huggingface_hub_api_path = 'https://huggingface.co/api'
@@ -124,6 +124,10 @@ def get_huggingface_model_info(model_id: str, token: str | None = None) -> dict[
 def get_huggingface_model_readme(model_id: str, hf_file_system: HfFileSystem) -> str:
     if hf_file_system.exists(f'{model_id}/README.md'):
         try:
+            readme_file_size = hf_file_system.size(f'{model_id}/README.md')
+            if 1*1024*1024*1024 < readme_file_size:
+                logger.error(f"REPO: {model_id}. Strange README File Error - File Size To Large: {convert_bytes(readme_file_size)}")
+                raise MemoryError
             with hf_file_system.open(f'{model_id}/README.md', mode='r', encoding='utf-8') as readme_file:
                 readme = readme_file.read()
                 readme = readme.replace('\t', ' ')
