@@ -21,7 +21,7 @@ from younger.commons.io import load_json, create_dir, delete_dir
 from younger.commons.logging import logger
 
 from younger.datasets.constructors.utils import get_instance_dirname
-from younger.datasets.constructors.torchvision.utils import get_torchvision_model_info, get_torchvision_model_input
+from younger.datasets.constructors.torchvision.utils import get_torchvision_model_info, get_torchvision_model_input, get_torchvision_model_type
 from younger.datasets.constructors.torchvision.annotations import get_heuristic_annotations
 
 
@@ -77,7 +77,7 @@ def main(
         logger.info(f'   v Converting TorchVision Model into ONNX:')
         model_input = get_torchvision_model_input(model_id)
         if model_input is None:
-            flag = 'unknown_input'
+            flag = f'unknown_input-model_type:{get_torchvision_model_type(model_id)}'
             logger.warn(f'   - Conversion Not Success - Flag: {flag}.')
             save_status(status_filepath, dict(model_name=model_id, flag=flag))
             continue
