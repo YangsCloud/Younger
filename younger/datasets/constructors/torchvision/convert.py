@@ -4,16 +4,16 @@
 # Copyright (c) Jason Young (杨郑鑫).
 #
 # E-Mail: <AI.Jason.Young@outlook.com>
-# 2024-04-05 01:34
+# 2024-05-12 08:56
 #
 # This source code is licensed under the Apache-2.0 license found in the
 # LICENSE file in the root directory of this source tree.
 
 
 import json
+import torch
 import pathlib
-
-from onnx import hub
+import torchvision
 
 from younger.datasets.modules import Instance
 
@@ -21,7 +21,8 @@ from younger.commons.io import load_json, create_dir, delete_dir
 from younger.commons.logging import logger
 
 from younger.datasets.constructors.utils import get_instance_dirname
-from younger.datasets.constructors.onnx.utils import get_onnx_model_info
+from younger.datasets.constructors.torchvision.utils import get_torchvision_model_info, get_torchvision_model_input
+from younger.datasets.constructors.torchvision.annotations import get_heuristic_annotations
 
 
 def save_status(status_filepath: pathlib.Path, status: dict[str, str]):
@@ -33,9 +34,6 @@ def save_status(status_filepath: pathlib.Path, status: dict[str, str]):
 def main(
     save_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, model_ids_filepath: pathlib.Path, status_filepath: pathlib.Path,
 ):
-    hub.set_dir(str(cache_dirpath.absolute()))
-    logger.info(f'ONNX Hub cache location is set to: {hub.get_dir()}')
-
     model_ids: set[str] = set(load_json(model_ids_filepath))
 
     logger.info(f'-> Checking Existing Instances ...')
@@ -45,7 +43,7 @@ def main(
             break
         instance = Instance()
         instance.load(instance_dirpath)
-        if instance.labels['model_source'] == 'ONNX':
+        if instance.labels['model_source'] == 'TorchVision':
             logger.info(f' . Converted. Skip Total {index} - {instance.labels["model_name"]}')
             model_ids = model_ids - {instance.labels['model_name']}
 
@@ -69,45 +67,55 @@ def main(
     else:
         logger.info(f'-> Not Found Existing Status Files')
 
-    onnx_cache_dirpath = cache_dirpath.joinpath('ONNX')
-    create_dir(onnx_cache_dirpath)
-    hub.set_dir(onnx_cache_dirpath)
+    convert_cache_dirpath = cache_dirpath.joinpath('Convert')
+    create_dir(convert_cache_dirpath)
+    onnx_model_filepath = convert_cache_dirpath.joinpath('model.onnx')
 
     logger.info(f'-> Instances Creating ...')
     for index, model_id in enumerate(model_ids, start=1):
         logger.info(f' # No.{index} Model ID = {model_id}: Now Converting ...') 
-        model_info = get_onnx_model_info(model_id)
+        logger.info(f'   v Converting TorchVision Model into ONNX:')
+        model_input = get_torchvision_model_input(model_id)
+        if model_input:
+            model = torchvision.get_model(model_id, weights=None)
+            onnx_model = torch.onnx.export(model, model_input, onnx_model_filepath, verbose=True)
+        else:
+            flag = 'unknown_input'
+            logger.warn(f'   - Conversion Not Success - Flag: {flag}.')
+            save_status(status_filepath, dict(model_name=model_id, flag=flag))
+            continue
+        logger.info(f'   ^ Finished.')
+
+        model_info = get_torchvision_model_info(model_id)
+        annotations = get_heuristic_annotations(model_id, model_info['metrics'])
 
         logger.info(f'   v Converting ONNX Model into NetworkX ...')
-        for convert_index, variation in enumerate(model_info['variations'], start=1):
-            onnx_model = hub.load(model=model_id, opset=variation['opset'])
-            onnx_model_filepath = onnx_cache_dirpath.joinpath(variation['path'])
-            try:
-                instance = Instance(
-                    model=onnx_model,
-                    labels=dict(
-                        model_source='ONNX',
-                        model_name=model_id,
-                        onnx_model_filename=onnx_model_filepath.name,
-                        download=None,
-                        like=None,
-                        tag=variation['tags'],
-                        readme=None,
-                        annotations=None
-                    )
+        try:
+            instance = Instance(
+                model=onnx_model,
+                labels=dict(
+                    model_source='TorchVision',
+                    model_name=model_id,
+                    onnx_model_filename=onnx_model_filepath.name,
+                    download=None,
+                    like=None,
+                    tag=None,
+                    readme=None,
+                    annotations=annotations
                 )
-                instance_save_dirpath = save_dirpath.joinpath(get_instance_dirname(model_id.replace(' ', '_'), 'ONNX', onnx_model_filepath.name))
-                instance.save(instance_save_dirpath)
-                logger.info(f'     ┌ No.{convert_index} (Opset={variation['opset']}) Converted')
-                logger.info(f'     | From: {onnx_model_filepath}')
-                logger.info(f'     └ Save: {instance_save_dirpath}')
-                flag = 'success'
-            except Exception as error:
-                logger.info(f'     ┌ No.{convert_index} (Opset={variation['opset']}) Error')
-                logger.error(f'    └ [ONNX -> NetworkX Error] OR [Instance Saving Error] - {error}')
-                flag = 'fail'
+            )
+            instance_save_dirpath = save_dirpath.joinpath(get_instance_dirname(model_id.replace(' ', '_'), 'TorchVision', onnx_model_filepath.name))
+            instance.save(instance_save_dirpath)
+            logger.info(f'     ┌ No.0 Converted')
+            logger.info(f'     | From: {onnx_model_filepath}')
+            logger.info(f'     └ Save: {instance_save_dirpath}')
+            flag = 'success'
+        except Exception as error:
+            logger.info(f'     ┌ No.0 Error')
+            logger.error(f'    └ [ONNX -> NetworkX Error] OR [Instance Saving Error] - {error}')
+            flag = 'fail'
         logger.info(f'   ^ Converted.')
         save_status(status_filepath, dict(model_name=model_id, flag=flag))
-        delete_dir(onnx_cache_dirpath, only_clean=True)
+        delete_dir(convert_cache_dirpath, only_clean=True)
 
     logger.info(f'-> Instances Created.')
