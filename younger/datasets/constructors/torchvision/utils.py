@@ -50,6 +50,7 @@ def get_torchvision_model_types() -> dict[str, str]:
         'torchvision.models.segmentation': 'segmentation',
         'torchvision.models.detection': 'detection',
         'torchvision.models.video': 'video',
+        'torchvision.models.quantization': 'quantization',
     }
     model_types: dict[str, str] = dict()
     model_ids = get_torchvision_model_ids()
@@ -85,6 +86,7 @@ def get_torchvision_model_input(model_id: str) -> torch.Tensor | None:
         classification = general_image_input,
         segmentation = general_image_input,
         detection = general_image_input,
+        quantization = general_image_input,
         video = None,
         _unknown_ = None,
     )
