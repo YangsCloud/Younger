@@ -51,6 +51,7 @@ def get_torchvision_model_types() -> dict[str, str]:
         'torchvision.models.detection': 'detection',
         'torchvision.models.video': 'video',
         'torchvision.models.quantization': 'quantization',
+        'torchvision.models.optical_flow': 'optical_flow',
     }
     model_types: dict[str, str] = dict()
     model_ids = get_torchvision_model_ids()
@@ -82,11 +83,13 @@ def get_torchvision_model_type(model_id: str) -> str:
 
 def get_torchvision_model_input(model_id: str) -> torch.Tensor | None:
     general_image_input = torch.randn(1, 3, 224, 224)
+    optical_image_input = torch.randn(1, 3, 128, 128)
     model_inputs = dict(
         classification = general_image_input,
         segmentation = general_image_input,
         detection = general_image_input,
         quantization = general_image_input,
+        optical_flow = optical_image_input,
         video = None,
         _unknown_ = None,
     )
