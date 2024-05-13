@@ -81,7 +81,7 @@ def get_torchvision_model_type(model_id: str) -> str:
     return model_types[model_module]
 
 
-def get_torchvision_model_input(model_id: str) -> torch.Tensor | None:
+def get_torchvision_model_input(model_id: str) -> torch.Tensor | tuple[torch.Tensor] | None:
     general_image_input = torch.randn(1, 3, 224, 224)
     optical_image_input = torch.randn(1, 3, 128, 128)
     model_inputs = dict(
@@ -89,7 +89,7 @@ def get_torchvision_model_input(model_id: str) -> torch.Tensor | None:
         segmentation = general_image_input,
         detection = general_image_input,
         quantization = general_image_input,
-        optical_flow = optical_image_input,
+        optical_flow = (optical_image_input, optical_image_input),
         video = None,
         _unknown_ = None,
     )
