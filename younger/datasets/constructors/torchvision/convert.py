@@ -92,7 +92,7 @@ def main(
         logger.info(f'   v Converting ONNX Model into NetworkX ...')
         try:
             instance = Instance(
-                model=str(onnx_model_filepath),
+                model=onnx_model_filepath,
                 labels=dict(
                     model_source='TorchVision',
                     model_name=model_id,
