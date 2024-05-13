@@ -76,14 +76,14 @@ def main(
         logger.info(f' # No.{index} Model ID = {model_id}: Now Converting ...') 
         logger.info(f'   v Converting TorchVision Model into ONNX:')
         model_input = get_torchvision_model_input(model_id)
-        if model_input:
-            model = torchvision.get_model(model_id, weights=None)
-            onnx_model = torch.onnx.export(model, model_input, onnx_model_filepath, verbose=True)
-        else:
+        if model_input is None:
             flag = 'unknown_input'
             logger.warn(f'   - Conversion Not Success - Flag: {flag}.')
             save_status(status_filepath, dict(model_name=model_id, flag=flag))
             continue
+        else:
+            model = torchvision.models.get_model(model_id, weights=None)
+            onnx_model = torch.onnx.export(model, model_input, onnx_model_filepath, verbose=True)
         logger.info(f'   ^ Finished.')
 
         model_info = get_torchvision_model_info(model_id)
