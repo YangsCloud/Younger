@@ -21,7 +21,7 @@ from younger.commons.io import load_json, create_dir, delete_dir
 from younger.commons.logging import logger
 
 from younger.datasets.constructors.utils import get_instance_dirname
-from younger.datasets.constructors.torchvision.utils import get_torchvision_model_info, get_torchvision_model_input, get_torchvision_model_type
+from younger.datasets.constructors.torchvision.utils import get_torchvision_model_info, get_torchvision_model_input, get_torchvision_model_module
 from younger.datasets.constructors.torchvision.annotations import get_heuristic_annotations
 
 
@@ -77,13 +77,13 @@ def main(
         logger.info(f'   v Converting TorchVision Model into ONNX:')
         model_input = get_torchvision_model_input(model_id)
         if model_input is None:
-            flag = f'unknown_input-model_type:{get_torchvision_model_type(model_id)}'
+            flag = f'unknown_input-model_type:{get_torchvision_model_module(model_id)}'
             logger.warn(f'   - Conversion Not Success - Flag: {flag}.')
             save_status(status_filepath, dict(model_name=model_id, flag=flag))
             continue
         else:
             model = torchvision.models.get_model(model_id, weights=None)
-            onnx_model = torch.onnx.export(model, model_input, onnx_model_filepath, verbose=True)
+            torch.onnx.export(model, model_input, str(onnx_model_filepath), verbose=True)
         logger.info(f'   ^ Finished.')
 
         model_info = get_torchvision_model_info(model_id)
@@ -92,7 +92,7 @@ def main(
         logger.info(f'   v Converting ONNX Model into NetworkX ...')
         try:
             instance = Instance(
-                model=onnx_model,
+                model=str(onnx_model_filepath),
                 labels=dict(
                     model_source='TorchVision',
                     model_name=model_id,
