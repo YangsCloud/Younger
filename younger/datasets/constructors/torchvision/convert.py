@@ -104,7 +104,7 @@ def main(
                     annotations=annotations
                 )
             )
-            instance_save_dirpath = save_dirpath.joinpath(get_instance_dirname(model_id.replace(' ', '_'), 'TorchVision', onnx_model_filepath.name))
+            instance_save_dirpath = save_dirpath.joinpath(get_instance_dirname(model_id.replace(' ', '_').replace('/', '--TV--'), 'TorchVision', onnx_model_filepath.stem))
             instance.save(instance_save_dirpath)
             logger.info(f'     ┌ No.0 Converted')
             logger.info(f'     | From: {onnx_model_filepath}')
