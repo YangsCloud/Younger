@@ -7,9 +7,6 @@ from dataclasses import dataclass, field
 from typing import Optional, Set
 from tqdm import tqdm
 
-from younger.commons.io import delete_dir
-
-from younger.commons.logging import logger
 from younger.datasets.modules.instance import Instance
 from younger.datasets.constructors.utils import get_instance_dirname
 from younger.datasets.constructors.huggingface.utils import get_huggingface_model_readme, get_huggingface_model_info
@@ -168,16 +165,10 @@ class ConversionArguments:
             "help": "Whether to quantize the model."
         }
     )
-    onnx_output_dir: str = field(
+    output_parent_dir: str = field(
         default='./models/',
         metadata={
             "help": "Path where the converted model will be saved to."
-        }
-    )
-    instance_output_dir: str = field(
-        default='./instances/',
-        metadata={
-            "help": "Path where the converted instance will be saved to."
         }
     )
 
@@ -256,10 +247,10 @@ class ConversionArguments:
         }
     )
 
-    clean_onnx_dir: bool = field(
+    remove_other_files: bool = field(
         default=False,
         metadata={
-            "help": "Delete all files in the onnx folder. This can help save space."
+            "help": "Delete all files or folders except the instance file. This can help save space."
         }
     )
 
@@ -349,10 +340,9 @@ def main():
 
     model_id = conv_args.model_id
     tokenizer_id = conv_args.tokenizer_id or model_id
-    onnx_output_dir = conv_args.onnx_output_dir
-    instance_output_dir = conv_args.instance_output_dir
+    output_parent_dir = conv_args.output_parent_dir
 
-    output_model_folder = os.path.join(conv_args.onnx_output_dir, model_id)
+    output_model_folder = os.path.join(conv_args.output_parent_dir, model_id)
 
     # Create output folder
     os.makedirs(output_model_folder, exist_ok=True)
@@ -469,53 +459,47 @@ def main():
         pass  # TODO
 
     # Step 1. convert huggingface model to onnx
-    try:
-        if not conv_args.split_modalities:
-            main_export(**export_kwargs)
-        else:
-            custom_export_kwargs = dict(
-                output_dir=output_model_folder,
-                **core_export_kwargs,
+    if not conv_args.split_modalities:
+        main_export(**export_kwargs)
+    else:
+        custom_export_kwargs = dict(
+            output_dir=output_model_folder,
+            **core_export_kwargs,
+        )
+
+        if config.model_type == 'clip':
+            # Handle special case for exporting text and vision models separately
+            from .extra.clip import CLIPTextModelWithProjectionOnnxConfig, CLIPVisionModelWithProjectionOnnxConfig
+            from transformers.models.clip import CLIPTextModelWithProjection, CLIPVisionModelWithProjection
+
+            text_model = CLIPTextModelWithProjection.from_pretrained(model_id, **from_pretrained_kwargs)
+            vision_model = CLIPVisionModelWithProjection.from_pretrained(model_id, **from_pretrained_kwargs)
+
+            export_models(
+                models_and_onnx_configs={
+                    "text_model": (text_model, CLIPTextModelWithProjectionOnnxConfig(text_model.config)),
+                    "vision_model": (vision_model, CLIPVisionModelWithProjectionOnnxConfig(vision_model.config)),
+                },
+                **custom_export_kwargs,
             )
 
-            if config.model_type == 'clip':
-                # Handle special case for exporting text and vision models separately
-                from .extra.clip import CLIPTextModelWithProjectionOnnxConfig, CLIPVisionModelWithProjectionOnnxConfig
-                from transformers.models.clip import CLIPTextModelWithProjection, CLIPVisionModelWithProjection
+        elif config.model_type == 'siglip':
+            # Handle special case for exporting text and vision models separately
+            from .extra.siglip import SiglipTextModelOnnxConfig, SiglipVisionModelOnnxConfig
+            from transformers.models.siglip import SiglipTextModel, SiglipVisionModel
 
-                text_model = CLIPTextModelWithProjection.from_pretrained(model_id, **from_pretrained_kwargs)
-                vision_model = CLIPVisionModelWithProjection.from_pretrained(model_id, **from_pretrained_kwargs)
+            text_model = SiglipTextModel.from_pretrained(model_id, **from_pretrained_kwargs)
+            vision_model = SiglipVisionModel.from_pretrained(model_id, **from_pretrained_kwargs)
 
-                export_models(
-                    models_and_onnx_configs={
-                        "text_model": (text_model, CLIPTextModelWithProjectionOnnxConfig(text_model.config)),
-                        "vision_model": (vision_model, CLIPVisionModelWithProjectionOnnxConfig(vision_model.config)),
-                    },
-                    **custom_export_kwargs,
-                )
-
-            elif config.model_type == 'siglip':
-                # Handle special case for exporting text and vision models separately
-                from .extra.siglip import SiglipTextModelOnnxConfig, SiglipVisionModelOnnxConfig
-                from transformers.models.siglip import SiglipTextModel, SiglipVisionModel
-
-                text_model = SiglipTextModel.from_pretrained(model_id, **from_pretrained_kwargs)
-                vision_model = SiglipVisionModel.from_pretrained(model_id, **from_pretrained_kwargs)
-
-                export_models(
-                    models_and_onnx_configs={
-                        "text_model": (text_model, SiglipTextModelOnnxConfig(text_model.config)),
-                        "vision_model": (vision_model, SiglipVisionModelOnnxConfig(vision_model.config)),
-                    },
-                    **custom_export_kwargs,
-                )
-            else:
-                raise Exception(f'Unable to export {config.model_type} model with `--split_modalities`.')
-
-    except Exception as error:
-        delete_dir(pathlib.Path(onnx_output_dir), True)
-        logger.info(f'     ┌ ONNX -> NetworkX Error')
-        logger.error(f'    └ {error}')
+            export_models(
+                models_and_onnx_configs={
+                    "text_model": (text_model, SiglipTextModelOnnxConfig(text_model.config)),
+                    "vision_model": (vision_model, SiglipVisionModelOnnxConfig(vision_model.config)),
+                },
+                **custom_export_kwargs,
+            )
+        else:
+            raise Exception(f'Unable to export {config.model_type} model with `--split_modalities`.')
 
     # Step 2. (optional, recommended) quantize the converted model for fast inference and to reduce model size.
     if conv_args.quantize:
@@ -539,7 +523,7 @@ def main():
     # Step 3. Convert onnx to instance
     for file in pathlib.Path(output_model_folder).iterdir():
         if file.suffix == '.onnx' or file.suffix == '.quantized.onnx':
-            onnx2instance(model_id, file, pathlib.Path(instance_output_dir))
+            onnx2instance(model_id, file, pathlib.Path(output_parent_dir))
 
     # Step 4. Update the generation config if necessary
     if config.model_type == 'whisper':
@@ -551,11 +535,13 @@ def main():
         generation_config.save_pretrained(output_model_folder)
     
     # Step 5. Delete all files or folders except the instance file
-    if conv_args.clean_onnx_dir:
-        delete_dir(pathlib.Path(onnx_output_dir), True)
+    if conv_args.remove_other_files:
+        for item in pathlib.Path(output_parent_dir).iterdir():
+            if item.is_dir() and item.name == model_id or item.name == model_id.split("/")[0]:
+                shutil.rmtree(item)
 
 
-def onnx2instance(model_id: str, onnx_model_filepath: pathlib.Path, instance_output_dir: pathlib.Path):
+def onnx2instance(model_id: str, onnx_model_filepath: pathlib.Path, output_parent_dir: os.path):
     model_info = get_huggingface_model_info(model_id)
     hf_file_system = HfFileSystem()
     readme = get_huggingface_model_readme(model_id, hf_file_system)
@@ -569,7 +555,7 @@ def onnx2instance(model_id: str, onnx_model_filepath: pathlib.Path, instance_out
             readme=readme,
             annotations=None
         )
-    instance_save_dirpath = instance_output_dir.joinpath(get_instance_dirname(model_id.replace('/', '--HF--'), 'HuggingFace', onnx_model_filepath.name))
+    instance_save_dirpath = output_parent_dir.joinpath(get_instance_dirname(model_id.replace('/', '--HF--'), 'HuggingFace', onnx_model_filepath.name))
     instance = Instance(model=pathlib.Path(onnx_model_filepath), labels=labels)
     instance.save(pathlib.Path(instance_save_dirpath))
     

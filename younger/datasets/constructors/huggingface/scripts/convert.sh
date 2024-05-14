@@ -9,20 +9,19 @@
 # LICENSE file in the root directory of this source tree.
 
 
-if [ "$#" -ne 2 ]; then
+if [ "$#" -ne 3 ]; then
     echo "Usage:"
-    echo "    ./convert.sh {model_ids_filepath} {save_dirpath}"
+    echo "    ./convert.sh {model_ids_filepath} {cache_dirpath} {save_dirpath}"
     exit 1
 fi
 
 MODEL_IDS_FILEPATH=${1}
-SAVE_DIRPATH=${2}
+ONNX_OUTPUT_DIR=${2}
+INSTANCE_OUTPUT_DIR=${3}
 
-tasks=($(jq -r 'keys[]' "${MODEL_IDS_FILEPATH}"))
 model_ids=($(jq -r '.[]' "${MODEL_IDS_FILEPATH}"))
 
-for ((i=0; i<${#tasks[@]}; i++)); do
-    task=${tasks[i]}
+for ((i=0; i<${#model_ids[@]}; i++)); do
     model_id=${model_ids[i]}
-    python younger/datasets/utils/convertors/scripts/convert.py --quantize --task "$task" --model_id "$model_id" --trust_remote_code --skip_validation --output_parent_dir "${SAVE_DIRPATH}" --remove_other_files
+    python -m scripts.convert --quantize --model_id "$model_id" --trust_remote_code --skip_validation --onnx_output_dir "${ONNX_OUTPUT_DIR}" --instance_output_dir "$INSTANCE_OUTPUT_DIR" --clean_onnx_dir
 done
