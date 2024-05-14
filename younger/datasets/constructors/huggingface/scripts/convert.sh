@@ -10,7 +10,8 @@
 
 
 if [ "$#" -ne 3 ]; then
-    echo "Error: Need Exact 3 Argument"
+    echo "Usage:"
+    echo "    ./convert.sh {model_ids_filepath} {cache_dirpath} {save_dirpath}"
     exit 1
 fi
 

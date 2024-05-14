@@ -10,6 +10,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import os
 import re
 import tqdm
 import pathlib
@@ -244,8 +245,11 @@ def infer_model_size(model_id: str) -> int:
     hf_file_system = HfFileSystem()
     filenames = list()
     filenames.extend(hf_file_system.glob(model_id+'/*.bin'))
+    filenames.extend(hf_file_system.glob(model_id+'/*.pb'))
     filenames.extend(hf_file_system.glob(model_id+'/*.h5'))
+    filenames.extend(hf_file_system.glob(model_id+'/*.hdf5'))
     filenames.extend(hf_file_system.glob(model_id+'/*.ckpt'))
+    filenames.extend(hf_file_system.glob(model_id+'/*.keras'))
     filenames.extend(hf_file_system.glob(model_id+'/*.msgpack'))
     filenames.extend(hf_file_system.glob(model_id+'/*.safetensors'))
     infered_model_size = 0
@@ -265,15 +269,27 @@ def clean_cache_root(cache_dirpath: pathlib.Path):
     delete_strategy.execute()
 
 
-def clean_default_cache_repo(repo_id: str):
-    clean_specify_cache_repo(repo_id, pathlib.Path(HUGGINGFACE_HUB_CACHE))
+def clean_model_default_cache(model_id: str):
+    clean_model_specify_cache(model_id, pathlib.Path(HUGGINGFACE_HUB_CACHE))
 
 
-def clean_specify_cache_repo(repo_id: str, specify_cache_dirpath: pathlib.Path):
-    repo_id = repo_id.replace("/", "--")
-    repo_type = "model"
+def clean_model_specify_cache(model_id: str, specify_cache_dirpath: pathlib.Path):
+    model_id = model_id.replace("/", "--")
 
-    repo_cache_dirpath = specify_cache_dirpath.joinpath(f"{repo_type}s--{repo_id}")
+    model_cache_dirpath = specify_cache_dirpath.joinpath(f"models--{model_id}")
 
-    if repo_cache_dirpath.is_dir():
-        delete_dir(repo_cache_dirpath)
+    if model_cache_dirpath.is_dir():
+        delete_dir(model_cache_dirpath, only_clean=True)
+
+
+def get_huggingface_model_file_indicators(model_id: str, suffixes: list[str] | None = None) -> list[tuple[str, str]]:
+    hf_file_system = HfFileSystem()
+    model_file_indicators = list()
+    for dirpath, dirnames, filenames in hf_file_system.walk(model_id):
+        for filename in filenames:
+            if suffixes is None:
+                model_file_indicators.append((dirpath[len(model_id)+1:], filename))
+            else:
+                if os.path.splitext(filename)[1] in suffixes:
+                    model_file_indicators.append((dirpath[len(model_id)+1:], filename))
+    return model_file_indicators

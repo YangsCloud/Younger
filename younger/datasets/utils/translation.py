@@ -739,7 +739,7 @@ def trans_graph_proto(ox_graph: onnx.GraphProto, opset_import: dict[str, int], o
         all_outer_dataflow2source = dict()
         all_outer_dataflow2source.update(dataflow2source)
         all_outer_dataflow2source.update(outer_dataflow2source)
-        trans_graph_proto_method = partial(trans_graph_proto, opset_import, outer_dataflow2source=all_outer_dataflow2source, neglect_tensor_values=neglect_tensor_values, verbose=verbose)
+        trans_graph_proto_method = partial(trans_graph_proto, opset_import=opset_import, outer_dataflow2source=all_outer_dataflow2source, neglect_tensor_values=neglect_tensor_values, verbose=verbose)
         node = trans_node_proto(node, opset_import, trans_graph_proto_method, neglect_tensor_values=neglect_tensor_values)
         nx_graph.add_node(f'{len(nx_graph)}', **get_complete_node_attributes('operator', node))
 

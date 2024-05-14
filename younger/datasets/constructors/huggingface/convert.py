@@ -10,6 +10,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import os
 import re
 import json
 import pathlib
@@ -26,7 +27,7 @@ from younger.commons.logging import logger
 from younger.datasets.modules import Instance
 
 from younger.datasets.constructors.utils import convert_bytes, get_instance_dirname
-from younger.datasets.constructors.huggingface.utils import infer_model_size, clean_default_cache_repo, clean_specify_cache_repo, get_huggingface_model_readme, get_huggingface_model_card_data_from_readme, get_huggingface_model_info
+from younger.datasets.constructors.huggingface.utils import infer_model_size, clean_model_default_cache, clean_model_specify_cache, get_huggingface_model_readme, get_huggingface_model_card_data_from_readme, get_huggingface_model_info, get_huggingface_model_file_indicators
 from younger.datasets.constructors.huggingface.annotations import get_heuristic_annotations
 
 
@@ -37,9 +38,9 @@ def save_status(status_filepath: pathlib.Path, status: dict[str, str]):
 
 
 def clean_all_cache(model_id: str, convert_cache_dirpath: pathlib.Path, huggingface_cache_dirpath: pathlib.Path):
-    clean_default_cache_repo(model_id)
+    clean_model_default_cache(model_id)
     delete_dir(convert_cache_dirpath, only_clean=True)
-    clean_specify_cache_repo(model_id, huggingface_cache_dirpath)
+    clean_model_specify_cache(model_id, huggingface_cache_dirpath)
 
 
 def safe_optimum_export(model_id: str, convert_cache_dirpath: pathlib.Path, huggingface_cache_dirpath: pathlib.Path, device: str, flag_queue: multiprocessing.Queue):
@@ -58,7 +59,7 @@ def safe_optimum_export(model_id: str, convert_cache_dirpath: pathlib.Path, hugg
         flag_queue.put('convert_error')
 
 
-def convert_optimum(model_id: set[str], convert_cache_dirpath: pathlib.Path, huggingface_cache_dirpath: pathlib.Path, hf_file_system: HfFileSystem, device: Literal['cpu', 'cuda'] = 'cpu') -> tuple[str, list[pathlib.Path]]:
+def convert_optimum(model_id: str, convert_cache_dirpath: pathlib.Path, huggingface_cache_dirpath: pathlib.Path, hf_file_system: HfFileSystem, device: Literal['cpu', 'cuda'] = 'cpu') -> tuple[str, list[pathlib.Path]]:
     assert device in {'cpu', 'cuda'}
 
     flag_queue = multiprocessing.Queue()
@@ -80,12 +81,12 @@ def convert_optimum(model_id: set[str], convert_cache_dirpath: pathlib.Path, hug
     return flag, onnx_model_filepaths
 
 
-def convert_onnx(model_id: set[str], convert_cache_dirpath: pathlib.Path, huggingface_cache_dirpath: pathlib.Path, hf_file_system: HfFileSystem, device: Literal['cpu', 'cuda'] = 'cpu') -> tuple[str, list[pathlib.Path]]:
+def convert_onnx(model_id: str, convert_cache_dirpath: pathlib.Path, huggingface_cache_dirpath: pathlib.Path, hf_file_system: HfFileSystem, device: Literal['cpu', 'cuda'] = 'cpu') -> tuple[str, list[pathlib.Path]]:
     flag = 'success'
     onnx_model_filepaths: list[pathlib.Path] = list()
-    remote_onnx_model_filepaths = hf_file_system.glob(model_id + '/' + '**.onnx')
-    for remote_onnx_model_filepath in remote_onnx_model_filepaths:
-        onnx_model_filepath = hf_hub_download(model_id, remote_onnx_model_filepath[len(model_id):], cache_dir=huggingface_cache_dirpath, local_dir=convert_cache_dirpath)
+    remote_onnx_model_file_indicators = get_huggingface_model_file_indicators(model_id, ['.onnx'])
+    for remote_onnx_model_dirpath, remote_onnx_model_filename in remote_onnx_model_file_indicators:
+        onnx_model_filepath = hf_hub_download(model_id, remote_onnx_model_filename, subfolder=remote_onnx_model_dirpath, local_dir=convert_cache_dirpath.joinpath(model_id))
         onnx_model_filepaths.append(pathlib.Path(onnx_model_filepath))
     if len(onnx_model_filepaths) == 0:
         flag = 'convert_nothing'
@@ -94,34 +95,57 @@ def convert_onnx(model_id: set[str], convert_cache_dirpath: pathlib.Path, huggin
 
 def safe_keras_export(keras_model_path: pathlib.Path, onnx_model_filepath: pathlib.Path, flag_queue: multiprocessing.Queue):
     from younger.datasets.utils.convertors.tensorflow2onnx import main_export
+    if keras_model_path.is_dir():
+        model_type = 'saved_model'
+    if keras_model_path.is_file():
+        model_type = 'keras'
     try:
-        main_export(keras_model_path, onnx_model_filepath, model_type='saved_model')
+        main_export(keras_model_path, onnx_model_filepath, model_type=model_type)
         flag_queue.put('success')
     except Exception as error:
         flag_queue.put('convert_error')
 
 
-def convert_keras(model_id: set[str], convert_cache_dirpath: pathlib.Path, huggingface_cache_dirpath: pathlib.Path, hf_file_system: HfFileSystem, device: Literal['cpu', 'cuda'] = 'cpu') -> tuple[str, list[pathlib.Path]]:
-    flag = 'success'
+def convert_keras(model_id: str, convert_cache_dirpath: pathlib.Path, huggingface_cache_dirpath: pathlib.Path, hf_file_system: HfFileSystem, device: Literal['cpu', 'cuda'] = 'cpu') -> tuple[str, list[pathlib.Path]]:
+    overall_flag = 'success'
     onnx_model_filepath = convert_cache_dirpath.joinpath('model.onnx')
-    keras_model_path = snapshot_download(model_id, cache_dir=huggingface_cache_dirpath, local_dir=convert_cache_dirpath)
-    flag_queue = multiprocessing.Queue()
-    subprocess = multiprocessing.Process(target=safe_keras_export, args=(keras_model_path, onnx_model_filepath, flag_queue))
-    subprocess.start()
-    subprocess.join()
+
+    remote_keras_model_paths = list()
+    remote_keras_model_filepaths = list()
+    for remote_keras_model_dirpath, remote_keras_model_filename in get_huggingface_model_file_indicators(model_id, ['.keras', '.hdf5', '.h5']):
+        remote_keras_model_filepaths.append(os.path.join(remote_keras_model_dirpath, remote_keras_model_filename))
+    remote_keras_model_dirpaths = list()
+    for remote_keras_model_dirpath, remote_keras_model_filename in get_huggingface_model_file_indicators(model_id, ['.pbtxt', '.pb']):
+        remote_keras_model_dirpaths.append(remote_keras_model_dirpath)
+    remote_keras_model_paths = remote_keras_model_paths + remote_keras_model_filepaths + list(set(remote_keras_model_dirpaths))
 
     onnx_model_filepaths = list()
-    if flag_queue.empty():
-        logger.warn(f'Export Process May Be Killed By System! Skip.')
-        flag = 'system_kill'
-    else:
-        flag = flag_queue.get()
+    if remote_keras_model_paths:
+        keras_model_dirpath = snapshot_download(model_id, local_dir=huggingface_cache_dirpath.joinpath(model_id))
+        keras_model_dirpath = pathlib.Path(keras_model_dirpath)
+        for index, remote_keras_model_path in enumerate(remote_keras_model_paths):
+            keras_model_path = keras_model_dirpath.joinpath(remote_keras_model_path)
+            if keras_model_path.is_dir():
+                onnx_model_filepath = convert_cache_dirpath.joinpath(f'from_pb_{index}.onnx')
+            if keras_model_path.is_file():
+                suffix_name = keras_model_path.suffix[1:]
+                onnx_model_filepath = convert_cache_dirpath.joinpath(f'from_{suffix_name}_{index}.onnx')
+            flag_queue = multiprocessing.Queue()
+            subprocess = multiprocessing.Process(target=safe_keras_export, args=(keras_model_path, onnx_model_filepath, flag_queue))
+            subprocess.start()
+            subprocess.join()
+            if flag_queue.empty():
+                flag = 'system_kill'
+            else:
+                flag = flag_queue.get()
+            logger.info(f'    ~ No.{index} Conversion Status: {flag} - Model Path: {keras_model_path}.')
 
-    if onnx_model_filepath.is_file():
-        onnx_model_filepaths.append(onnx_model_filepath)
-    else:
-        flag = 'convert_nothing'
-    return flag, onnx_model_filepaths
+            if onnx_model_filepath.is_file():
+                onnx_model_filepaths.append(onnx_model_filepath)
+
+    if len(onnx_model_filepaths) == 0:
+        overall_flag = 'convert_nothing'
+    return overall_flag, onnx_model_filepaths
 
 
 def safe_tflite_export(tflite_model_path: pathlib.Path, onnx_model_filepath: pathlib.Path, flag_queue: multiprocessing.Queue):
@@ -133,27 +157,30 @@ def safe_tflite_export(tflite_model_path: pathlib.Path, onnx_model_filepath: pat
         flag_queue.put('convert_error')
 
 
-def convert_tflite(model_id: set[str], convert_cache_dirpath: pathlib.Path, huggingface_cache_dirpath: pathlib.Path, hf_file_system: HfFileSystem, device: Literal['cpu', 'cuda'] = 'cpu') -> tuple[str, list[pathlib.Path]]:
-    flag = 'success'
-    onnx_model_filepath = convert_cache_dirpath.joinpath('model.onnx')
-    tflite_model_path = snapshot_download(model_id, cache_dir=huggingface_cache_dirpath, local_dir=convert_cache_dirpath)
-    flag_queue = multiprocessing.Queue()
-    subprocess = multiprocessing.Process(target=safe_tflite_export, args=(tflite_model_path, onnx_model_filepath, flag_queue))
-    subprocess.start()
-    subprocess.join()
+def convert_tflite(model_id: str, convert_cache_dirpath: pathlib.Path, huggingface_cache_dirpath: pathlib.Path, hf_file_system: HfFileSystem, device: Literal['cpu', 'cuda'] = 'cpu') -> tuple[str, list[pathlib.Path]]:
+    overall_flag = 'success'
+    onnx_model_filepaths: list[pathlib.Path] = list()
+    remote_tflite_model_file_indicators = get_huggingface_model_file_indicators(model_id, ['.tflite'])
+    for index, (remote_tflite_model_dirpath, remote_tflite_model_filename) in enumerate(remote_tflite_model_file_indicators):
+        tflite_model_filepath = hf_hub_download(model_id, remote_tflite_model_filename, subfolder=remote_tflite_model_dirpath, local_dir=huggingface_cache_dirpath.joinpath(model_id))
+        tflite_model_filepath = pathlib.Path(tflite_model_filepath)
+        onnx_model_filepath = convert_cache_dirpath.joinpath(remote_tflite_model_dirpath).joinpath(f'{os.path.splitext(remote_tflite_model_filename)[0]}.onnx')
+        flag_queue = multiprocessing.Queue()
+        subprocess = multiprocessing.Process(target=safe_tflite_export, args=(tflite_model_filepath, onnx_model_filepath, flag_queue))
+        subprocess.start()
+        subprocess.join()
+        if flag_queue.empty():
+            flag = 'system_kill'
+        else:
+            flag = flag_queue.get()
+        logger.info(f'    ~ No.{index} Conversion Status: {flag} - Model Path: {tflite_model_filepath}.')
 
-    onnx_model_filepaths = list()
-    if flag_queue.empty():
-        logger.warn(f'Export Process May Be Killed By System! Skip.')
-        flag = 'system_kill'
-    else:
-        flag = flag_queue.get()
+        if onnx_model_filepath.is_file():
+            onnx_model_filepaths.append(onnx_model_filepath)
 
-    if onnx_model_filepath.is_file():
-        onnx_model_filepaths.append(onnx_model_filepath)
-    else:
-        flag = 'convert_nothing'
-    return flag, onnx_model_filepaths
+    if len(onnx_model_filepaths) == 0:
+        overall_flag = 'convert_nothing'
+    return overall_flag, onnx_model_filepaths
 
 
 def main(
@@ -281,7 +308,7 @@ def main(
                         annotations=annotations
                     )
                 )
-                instance_save_dirpath = save_dirpath.joinpath(get_instance_dirname(model_id.replace('/', '--HF--'), 'HuggingFace', onnx_model_filepath.name))
+                instance_save_dirpath = save_dirpath.joinpath(get_instance_dirname(model_id.replace('/', '--HF--'), 'HuggingFace', f'{onnx_model_filepath.stem}-{convert_index}'))
                 instance.save(instance_save_dirpath)
                 logger.info(f'     ┌ No.{convert_index} Converted')
                 logger.info(f'     | From: {onnx_model_filepath}')

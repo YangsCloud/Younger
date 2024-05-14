@@ -36,10 +36,10 @@ def get_onnx_model_infos() -> list[dict[str, Any]]:
 
 def get_onnx_model_info(model_id: str) -> dict[str, Any]:
     model_info = list()
-    for model in sorted(hub.list_models(model=model_id)):
+    for model in hub.list_models(model=model_id):
         model_info.append(
             dict(
-                tags = model.tags,
+                tags = list(model.tags),
                 meta = model.metadata,
                 path = model.model_path,
                 hash = model.model_sha,

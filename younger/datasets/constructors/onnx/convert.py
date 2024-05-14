@@ -96,14 +96,14 @@ def main(
                         annotations=None
                     )
                 )
-                instance_save_dirpath = save_dirpath.joinpath(get_instance_dirname(model_id.replace(' ', '_'), 'ONNX', onnx_model_filepath.name))
+                instance_save_dirpath = save_dirpath.joinpath(get_instance_dirname(model_id.replace(' ', '_').replace('/', '--TV--'), 'ONNX', f'{onnx_model_filepath.stem}-{convert_index}'))
                 instance.save(instance_save_dirpath)
-                logger.info(f'     ┌ No.{convert_index} (Opset={variation['opset']}) Converted')
+                logger.info(f'     ┌ No.{convert_index} (Opset={variation["opset"]}) Converted')
                 logger.info(f'     | From: {onnx_model_filepath}')
                 logger.info(f'     └ Save: {instance_save_dirpath}')
                 flag = 'success'
             except Exception as error:
-                logger.info(f'     ┌ No.{convert_index} (Opset={variation['opset']}) Error')
+                logger.info(f'     ┌ No.{convert_index} (Opset={variation["opset"]}) Error')
                 logger.error(f'    └ [ONNX -> NetworkX Error] OR [Instance Saving Error] - {error}')
                 flag = 'fail'
         logger.info(f'   ^ Converted.')
