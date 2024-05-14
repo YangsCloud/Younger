@@ -54,17 +54,18 @@ except FileNotFoundError:
 # Required
 REQUIRED = [
     'tqdm',
+    'psutil',
     'networkx',
     'python-semantic-release'
 ]
 
 # Optional
-DATASET_ONNX_EXTRAS = set(['onnx', 'psutil'])
-DATASET_TORCHVISION_EXTRAS = set(['onnx', 'psutil', 'torch', 'torchvision'])
-DATASET_HUGGINGFACE_OPTIMUM_EXTRAS = set(['onnx', 'psutil', 'isocodes', 'huggingface-hub', 'optimum[exporters]'])
-DATASET_HUGGINGFACE_ONNX_EXTRAS = set(['onnx', 'psutil', 'isocodes', 'huggingface-hub'])
-DATASET_HUGGINGFACE_KERAS_EXTRAS = set(['onnx', 'psutil', 'isocodes', 'huggingface-hub', 'tensorflow>=2.9,<=2.15', 'tf2onnx'])
-DATASET_HUGGINGFACE_TFLITE_EXTRAS = set(['onnx', 'psutil', 'isocodes', 'huggingface-hub', 'tensorflow>=2.9,<=2.15', 'tf2onnx'])
+DATASET_ONNX_EXTRAS = set(['onnx'])
+DATASET_TORCHVISION_EXTRAS = set(['onnx', 'torch', 'torchvision'])
+DATASET_HUGGINGFACE_OPTIMUM_EXTRAS = set(['onnx', 'isocodes', 'huggingface-hub', 'optimum[exporters]'])
+DATASET_HUGGINGFACE_ONNX_EXTRAS = set(['onnx', 'isocodes', 'huggingface-hub'])
+DATASET_HUGGINGFACE_KERAS_EXTRAS = set(['onnx', 'isocodes', 'huggingface-hub', 'tensorflow>=2.9,<=2.15', 'tf2onnx'])
+DATASET_HUGGINGFACE_TFLITE_EXTRAS = set(['onnx', 'isocodes', 'huggingface-hub', 'tensorflow>=2.9,<=2.15', 'tf2onnx'])
 BENCHMARK_EXTRAS = set([])
 APPLICATION_EXTRAS = set(['pytorch-geometric'])
 
