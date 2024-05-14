@@ -53,21 +53,30 @@ except FileNotFoundError:
 # Required Packages and Optional Packages
 # Required
 REQUIRED = [
+    'tqdm',
     'networkx',
     'python-semantic-release'
 ]
 
 # Optional
-DATASET_EXTRAS = set(['yaml', 'onnx', 'psutil', 'pandas', 'networkx'])
+DATASET_ONNX_EXTRAS = set(['onnx', 'psutil'])
+DATASET_TORCHVISION_EXTRAS = set(['onnx', 'psutil', 'torch', 'torchvision'])
+DATASET_HUGGINGFACE_OPTIMUM_EXTRAS = set(['onnx', 'psutil', 'isocodes', 'huggingface-hub', 'optimum[exporters]'])
+DATASET_HUGGINGFACE_ONNX_EXTRAS = set(['onnx', 'psutil', 'isocodes', 'huggingface-hub'])
+DATASET_HUGGINGFACE_KERAS_EXTRAS = set(['onnx', 'psutil', 'isocodes', 'huggingface-hub', 'tensorflow>=2.9,<=2.15', 'tf2onnx'])
+DATASET_HUGGINGFACE_TFLITE_EXTRAS = set(['onnx', 'psutil', 'isocodes', 'huggingface-hub', 'tensorflow>=2.9,<=2.15', 'tf2onnx'])
 BENCHMARK_EXTRAS = set([])
 APPLICATION_EXTRAS = set(['pytorch-geometric'])
-FULL = DATASET_EXTRAS | BENCHMARK_EXTRAS | APPLICATION_EXTRAS
 
 EXTRAS = {
-    'dataset': DATASET_EXTRAS,
+    'dataset-onnx': DATASET_ONNX_EXTRAS,
+    'dataset-torchvision': DATASET_TORCHVISION_EXTRAS,
+    'dataset-huggingface-optimum': DATASET_HUGGINGFACE_OPTIMUM_EXTRAS,
+    'dataset-huggingface-onnx': DATASET_HUGGINGFACE_ONNX_EXTRAS,
+    'dataset-huggingface-keras': DATASET_HUGGINGFACE_KERAS_EXTRAS,
+    'dataset-huggingface-tflite': DATASET_HUGGINGFACE_TFLITE_EXTRAS,
     'benchmark': BENCHMARK_EXTRAS,
     'application': APPLICATION_EXTRAS,
-    'full': FULL,
 }
 
 
@@ -125,6 +134,7 @@ def setup_my_package():
         long_description=PACKAGE_INFO['Long_Description'],
         long_description_content_type='text/markdown',
         packages=setuptools.find_packages(include=('younger', 'benchmarks', 'applications')),
+        python_requires='>=3.10',
         install_requires=REQUIRED,
         extras_require=EXTRAS,
         include_package_data=True,
