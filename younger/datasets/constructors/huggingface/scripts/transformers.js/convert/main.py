@@ -519,23 +519,29 @@ def main():
         logger.error(f'    └ {error}')
 
     # Step 2. (optional, recommended) quantize the converted model for fast inference and to reduce model size.
-    if conv_args.quantize:
-        # Update quantize config with model specific defaults
-        quantize_config = MODEL_SPECIFIC_QUANTIZE_PARAMS.get(
-            config.model_type, DEFAULT_QUANTIZE_PARAMS)
+    try:
+        if conv_args.quantize:
+            # Update quantize config with model specific defaults
+            quantize_config = MODEL_SPECIFIC_QUANTIZE_PARAMS.get(
+                config.model_type, DEFAULT_QUANTIZE_PARAMS)
 
-        # Update if user specified values
-        if conv_args.per_channel is not None:
-            quantize_config['per_channel'] = conv_args.per_channel
+            # Update if user specified values
+            if conv_args.per_channel is not None:
+                quantize_config['per_channel'] = conv_args.per_channel
 
-        if conv_args.reduce_range is not None:
-            quantize_config['reduce_range'] = conv_args.reduce_range
+            if conv_args.reduce_range is not None:
+                quantize_config['reduce_range'] = conv_args.reduce_range
 
-        quantize([
-            os.path.join(output_model_folder, x)
-            for x in os.listdir(output_model_folder)
-            if x.endswith('.onnx') and not x.endswith('_quantized.onnx')
-        ], **quantize_config)
+            quantize([
+                os.path.join(output_model_folder, x)
+                for x in os.listdir(output_model_folder)
+                if x.endswith('.onnx') and not x.endswith('_quantized.onnx')
+            ], **quantize_config)
+    except Exception as error:
+        delete_dir(pathlib.Path(onnx_output_dir), True)
+        clean_model_default_cache(model_id)
+        logger.info(f'     ┌ ONNX -> NetworkX Error')
+        logger.error(f'    └ {error}')
 
     # Step 3. Convert onnx to instance
     for file in pathlib.Path(output_model_folder).iterdir():
