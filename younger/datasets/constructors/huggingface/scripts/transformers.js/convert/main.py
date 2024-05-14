@@ -12,7 +12,7 @@ from younger.commons.io import delete_dir
 from younger.commons.logging import logger
 from younger.datasets.modules.instance import Instance
 from younger.datasets.constructors.utils import get_instance_dirname
-from younger.datasets.constructors.huggingface.utils import get_huggingface_model_readme, get_huggingface_model_info
+from younger.datasets.constructors.huggingface.utils import get_huggingface_model_readme, get_huggingface_model_info, clean_model_default_cache
 
 from transformers import (
     AutoConfig,
@@ -514,6 +514,7 @@ def main():
 
     except Exception as error:
         delete_dir(pathlib.Path(onnx_output_dir), True)
+        clean_model_default_cache(model_id)
         logger.info(f'     ┌ ONNX -> NetworkX Error')
         logger.error(f'    └ {error}')
 
@@ -553,6 +554,7 @@ def main():
     # Step 5. Delete all files or folders except the instance file
     if conv_args.clean_onnx_dir:
         delete_dir(pathlib.Path(onnx_output_dir), True)
+        clean_model_default_cache(model_id)
 
 
 def onnx2instance(model_id: str, onnx_model_filepath: pathlib.Path, instance_output_dir: pathlib.Path):
@@ -569,7 +571,7 @@ def onnx2instance(model_id: str, onnx_model_filepath: pathlib.Path, instance_out
             readme=readme,
             annotations=None
         )
-    instance_save_dirpath = instance_output_dir.joinpath(get_instance_dirname(model_id.replace('/', '--HF--'), 'HuggingFace', onnx_model_filepath.name))
+    instance_save_dirpath = instance_output_dir.joinpath(get_instance_dirname(model_id.replace('/', '--HF--'), 'HuggingFace', onnx_model_filepath.stem))
     instance = Instance(model=pathlib.Path(onnx_model_filepath), labels=labels)
     instance.save(pathlib.Path(instance_save_dirpath))
     
