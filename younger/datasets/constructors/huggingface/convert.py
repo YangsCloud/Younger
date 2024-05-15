@@ -86,7 +86,7 @@ def convert_onnx(model_id: str, convert_cache_dirpath: pathlib.Path, huggingface
     onnx_model_filepaths: list[pathlib.Path] = list()
     remote_onnx_model_file_indicators = get_huggingface_model_file_indicators(model_id, ['.onnx'])
     for remote_onnx_model_dirpath, remote_onnx_model_filename in remote_onnx_model_file_indicators:
-        onnx_model_filepath = hf_hub_download(model_id, remote_onnx_model_filename, subfolder=remote_onnx_model_dirpath, local_dir=convert_cache_dirpath.joinpath(model_id))
+        onnx_model_filepath = hf_hub_download(model_id, os.path.join(remote_onnx_model_dirpath, remote_onnx_model_filename), local_dir=convert_cache_dirpath.joinpath(model_id))
         onnx_model_filepaths.append(pathlib.Path(onnx_model_filepath))
     if len(onnx_model_filepaths) == 0:
         flag = 'convert_nothing'
@@ -162,7 +162,7 @@ def convert_tflite(model_id: str, convert_cache_dirpath: pathlib.Path, huggingfa
     onnx_model_filepaths: list[pathlib.Path] = list()
     remote_tflite_model_file_indicators = get_huggingface_model_file_indicators(model_id, ['.tflite'])
     for index, (remote_tflite_model_dirpath, remote_tflite_model_filename) in enumerate(remote_tflite_model_file_indicators):
-        tflite_model_filepath = hf_hub_download(model_id, remote_tflite_model_filename, subfolder=remote_tflite_model_dirpath, local_dir=huggingface_cache_dirpath.joinpath(model_id))
+        tflite_model_filepath = hf_hub_download(model_id, os.path.join(remote_tflite_model_dirpath, remote_tflite_model_filename), local_dir=huggingface_cache_dirpath.joinpath(model_id))
         tflite_model_filepath = pathlib.Path(tflite_model_filepath)
         onnx_model_filepath = convert_cache_dirpath.joinpath(remote_tflite_model_dirpath).joinpath(f'{os.path.splitext(remote_tflite_model_filename)[0]}.onnx')
         flag_queue = multiprocessing.Queue()
