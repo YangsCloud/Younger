@@ -141,7 +141,7 @@ class YoungerDataset(Dataset):
     def get_edge_index(cls, instance: networkx.DiGraph) -> torch.Tensor:
         mapping = dict(zip(instance.nodes(), range(instance.number_of_nodes())))
         edge_index = torch.empty((2, instance.number_of_edges()), dtype=torch.long)
-        for index, (src, dst) in instance.edges():
+        for index, (src, dst) in enumerate(instance.edges()):
             edge_index[0, index] = mapping[src]
             edge_index[1, index] = mapping[dst]
         return edge_index
