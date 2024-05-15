@@ -21,7 +21,7 @@ import multiprocessing
 from younger.commons.io import save_json
 from younger.commons.logging import logger
 
-from younger.datasets.modules import Instance
+from younger.datasets.modules import Instance, Network
 from younger.datasets.utils.detectors.metrics import normalize
 
 
@@ -74,7 +74,7 @@ def statistics_instance(parameters: tuple[pathlib.Path, list, list, list, list, 
     instance.load(path)
 
     instance_name = path.name
-    graph_stats = statistics_graph(instance.network.graph)
+    graph_stats = statistics_graph(Network.standardize(instance.network.graph))
 
     if instance.labels['annotations'] and instance.labels['annotations']['eval_results']:
         for eval_result in instance.labels['annotations']['eval_results']:
