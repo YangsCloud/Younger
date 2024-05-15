@@ -279,7 +279,7 @@ def clean_model_specify_cache(model_id: str, specify_cache_dirpath: pathlib.Path
     model_cache_dirpath = specify_cache_dirpath.joinpath(f"models--{model_id}")
 
     if model_cache_dirpath.is_dir():
-        delete_dir(model_cache_dirpath, only_clean=True)
+        delete_dir(model_cache_dirpath)
 
 
 def get_huggingface_model_file_indicators(model_id: str, suffixes: list[str] | None = None) -> list[tuple[str, str]]:

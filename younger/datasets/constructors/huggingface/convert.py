@@ -86,7 +86,7 @@ def convert_onnx(model_id: str, convert_cache_dirpath: pathlib.Path, huggingface
     onnx_model_filepaths: list[pathlib.Path] = list()
     remote_onnx_model_file_indicators = get_huggingface_model_file_indicators(model_id, ['.onnx'])
     for remote_onnx_model_dirpath, remote_onnx_model_filename in remote_onnx_model_file_indicators:
-        onnx_model_filepath = hf_hub_download(model_id, os.path.join(remote_onnx_model_dirpath, remote_onnx_model_filename), local_dir=convert_cache_dirpath.joinpath(model_id))
+        onnx_model_filepath = hf_hub_download(model_id, os.path.join(remote_onnx_model_dirpath, remote_onnx_model_filename), cache_dir=huggingface_cache_dirpath)
         onnx_model_filepaths.append(pathlib.Path(onnx_model_filepath))
     if len(onnx_model_filepaths) == 0:
         flag = 'convert_nothing'
@@ -121,7 +121,7 @@ def convert_keras(model_id: str, convert_cache_dirpath: pathlib.Path, huggingfac
 
     onnx_model_filepaths = list()
     if remote_keras_model_paths:
-        keras_model_dirpath = snapshot_download(model_id, local_dir=huggingface_cache_dirpath.joinpath(model_id))
+        keras_model_dirpath = snapshot_download(model_id, cache_dir=huggingface_cache_dirpath)
         keras_model_dirpath = pathlib.Path(keras_model_dirpath)
         for index, remote_keras_model_path in enumerate(remote_keras_model_paths):
             keras_model_path = keras_model_dirpath.joinpath(remote_keras_model_path)
@@ -162,7 +162,7 @@ def convert_tflite(model_id: str, convert_cache_dirpath: pathlib.Path, huggingfa
     onnx_model_filepaths: list[pathlib.Path] = list()
     remote_tflite_model_file_indicators = get_huggingface_model_file_indicators(model_id, ['.tflite'])
     for index, (remote_tflite_model_dirpath, remote_tflite_model_filename) in enumerate(remote_tflite_model_file_indicators):
-        tflite_model_filepath = hf_hub_download(model_id, os.path.join(remote_tflite_model_dirpath, remote_tflite_model_filename), local_dir=huggingface_cache_dirpath.joinpath(model_id))
+        tflite_model_filepath = hf_hub_download(model_id, os.path.join(remote_tflite_model_dirpath, remote_tflite_model_filename), cache_dir=huggingface_cache_dirpath)
         tflite_model_filepath = pathlib.Path(tflite_model_filepath)
         onnx_model_filepath = convert_cache_dirpath.joinpath(remote_tflite_model_dirpath).joinpath(f'{os.path.splitext(remote_tflite_model_filename)[0]}.onnx')
         flag_queue = multiprocessing.Queue()
@@ -277,6 +277,7 @@ def main(
         else:
             logger.warn(f'   - Conversion Not Success - Flag: {flag}.')
             save_status(status_filepath, dict(model_name=model_id, flag=flag))
+            clean_all_cache(model_id, convert_cache_dirpath, huggingface_cache_dirpath)
             continue
         logger.info(f'   ^ Finished.')
 
