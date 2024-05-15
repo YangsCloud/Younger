@@ -86,7 +86,11 @@ def convert_onnx(model_id: str, convert_cache_dirpath: pathlib.Path, huggingface
     onnx_model_filepaths: list[pathlib.Path] = list()
     remote_onnx_model_file_indicators = get_huggingface_model_file_indicators(model_id, ['.onnx'])
     for remote_onnx_model_dirpath, remote_onnx_model_filename in remote_onnx_model_file_indicators:
-        onnx_model_filepath = hf_hub_download(model_id, os.path.join(remote_onnx_model_dirpath, remote_onnx_model_filename), cache_dir=huggingface_cache_dirpath)
+        try:
+            onnx_model_filepath = hf_hub_download(model_id, os.path.join(remote_onnx_model_dirpath, remote_onnx_model_filename), cache_dir=huggingface_cache_dirpath)
+        except Exception as error:
+            logger.warn(f'Access Denied. Server Error - {error}')
+            continue
         onnx_model_filepaths.append(pathlib.Path(onnx_model_filepath))
     if len(onnx_model_filepaths) == 0:
         flag = 'convert_nothing'
