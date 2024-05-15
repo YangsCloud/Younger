@@ -115,7 +115,6 @@ class YoungerDataset(Dataset):
         meta['size'] = loaded_meta['size']
         meta['url'] = loaded_meta['url']
 
-
         meta['i2o'] = [
             YoungerDatasetNodeType.UNK,
             YoungerDatasetNodeType.OUTER,
@@ -140,10 +139,11 @@ class YoungerDataset(Dataset):
 
     @classmethod
     def get_edge_index(cls, instance: networkx.DiGraph) -> torch.Tensor:
-        edges = list(instance.edges)
-        src = [int(edge[0]) for edge in edges]
-        dst = [int(edge[1]) for edge in edges]
-        edge_index = torch.tensor([src, dst])
+        mapping = dict(zip(instance.nodes(), range(instance.number_of_nodes())))
+        edge_index = torch.empty((2, instance.number_of_edges()), dtype=torch.long)
+        for index, (src, dst) in instance.edges():
+            edge_index[0, index] = mapping[src]
+            edge_index[1, index] = mapping[dst]
         return edge_index
 
     @classmethod
