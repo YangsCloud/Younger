@@ -130,7 +130,7 @@ def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, tasks: list[
 
     occurrence: dict[str, int] = dict()
     statistics: dict[str, list] = dict()
-    mum: dict[str, list[float]] = dict()
+    mum: dict[str, list[float]] = dict() # Maximum & Minimum
     for combined_filter in combined_filters:
         statistics[str(combined_filter)] = list()
 
