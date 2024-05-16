@@ -135,34 +135,47 @@ class Network(object):
             return tobe_saved
 
     @classmethod
-    def cleanse(cls, graph: networkx.DiGraph) -> networkx.DiGraph:
-        flattened_graph = cls.flatten(graph)
-        cleansed_graph = networkx.DiGraph()
-        cleansed_graph.add_nodes_from(flattened_graph.nodes(data=True))
-        cleansed_graph.add_edges_from(flattened_graph.edges(data=True))
+    def standardize(cls, graph: networkx.DiGraph) -> networkx.DiGraph:
+        graph = cls.cleanse(graph, flatten=True)
+        graph = cls.simplify(graph, preserve_node_attributes=['operator', 'attributes'], preserve_edge_attributes=['connection'], flatten=False)
+        for node_index in graph.nodes():
+            graph[node_index]['features'] = dict(
+                operator = graph[node_index]['operator'],
+                attributes = graph[node_index]['attributes']
+            )
+        return graph
 
-        for node_index, node_attrs in flattened_graph.nodes.items():
+    @classmethod
+    def cleanse(cls, graph: networkx.DiGraph, flatten: bool = True) -> networkx.DiGraph:
+        if flatten:
+            graph = cls.flatten(graph)
+        cleansed_graph = networkx.DiGraph()
+        cleansed_graph.add_nodes_from(graph.nodes(data=True))
+        cleansed_graph.add_edges_from(graph.edges(data=True))
+
+        for node_index, node_attrs in graph.nodes.items():
             if node_attrs['type'] != 'operator' or (node_attrs['operator'] and (node_attrs['operator']['op_type'] == 'Constant' and node_attrs['operator']['domain'] == '')):
                 cleansed_graph.remove_node(node_index)
 
         return cleansed_graph
 
     @classmethod
-    def simplify(cls, graph: networkx.DiGraph, preserve_node_attributes: list[str] | None= None, preserve_edge_attributes: list[str] | None= None) -> networkx.DiGraph:
+    def simplify(cls, graph: networkx.DiGraph, preserve_node_attributes: list[str] | None= None, preserve_edge_attributes: list[str] | None= None, flatten: bool = True) -> networkx.DiGraph:
+        if flatten:
+            graph = cls.flatten(graph)
         preserve_node_attributes = [] if preserve_node_attributes is None else preserve_node_attributes
         preserve_edge_attributes = [] if preserve_edge_attributes is None else preserve_edge_attributes
-        flattened_graph = cls.flatten(graph)
         simplified_graph = networkx.DiGraph()
 
-        simplified_graph.add_nodes_from(flattened_graph.nodes())
-        simplified_graph.add_edges_from(flattened_graph.edges())
+        simplified_graph.add_nodes_from(graph.nodes())
+        simplified_graph.add_edges_from(graph.edges())
 
         for preserve_node_attribute in preserve_node_attributes:
-            attributes_keyed_by_nodes = networkx.get_node_attributes(flattened_graph, preserve_node_attribute)
+            attributes_keyed_by_nodes = networkx.get_node_attributes(graph, preserve_node_attribute)
             networkx.set_node_attributes(simplified_graph, attributes_keyed_by_nodes, preserve_node_attribute)
 
         for preserve_edge_attribute in preserve_edge_attributes:
-            attributes_keyed_by_edges = networkx.get_edge_attributes(flattened_graph, preserve_edge_attribute)
+            attributes_keyed_by_edges = networkx.get_edge_attributes(graph, preserve_edge_attribute)
             networkx.set_edge_attributes(simplified_graph, attributes_keyed_by_edges, preserve_edge_attribute)
 
         return simplified_graph
