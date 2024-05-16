@@ -151,10 +151,11 @@ def get_huggingface_model_ids(library: str | None = None, token: str | None = No
     return model_ids
 
 
-def get_huggingface_tasks(token: str | None = None) -> dict[str, dict[str, str]]:
+def get_huggingface_tasks(token: str | None = None) -> list[str]:
     huggingface_hub_api_tasks_path = f'{huggingface_hub_api_path}/tasks'
     response = get_huggingface_hub_api_response(huggingface_hub_api_tasks_path, token=token)
-    tasks = {task: {'id': details['id'], 'label': details['label']} for task, details in response.json().items()}
+    #tasks = {task: {'id': details['id'], 'label': details['label']} for task, details in response.json().items()}
+    tasks = [details['id'] for task, details in response.json().items()]
     return tasks
 
 

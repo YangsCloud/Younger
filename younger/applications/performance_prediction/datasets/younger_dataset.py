@@ -12,6 +12,7 @@
 
 import os
 import tqdm
+import numpy
 import torch
 import networkx
 import multiprocessing
@@ -22,6 +23,7 @@ from torch_geometric.data import Data, Dataset, download_url
 
 from younger.commons.io import load_json, load_pickle, tar_extract
 
+from younger.datasets.modules import Network
 from younger.datasets.utils.constants import YoungerDatasetAddress, YoungerDatasetNodeType
 
 
@@ -35,8 +37,7 @@ class YoungerDataset(Dataset):
         log: bool = True,
         force_reload: bool = False,
 
-        x_feature_get_type: Literal['OnlyOp'] = 'OnlyOp',
-        y_feature_get_type: Literal['OnlyMt', 'TkDsMt'] = 'OnlyMt',
+        feature_get_type: Literal['none', 'mean', 'rand'] = 'mean',
         worker_number: int = 4,
     ):
         self.worker_number = worker_number
@@ -45,8 +46,7 @@ class YoungerDataset(Dataset):
         assert os.path.isfile(meta_filepath), f'Please Download The \'meta.json\' File Of A Specific Version Of The Younger Dataset From Official Website.'
         self.meta = self.__class__.load_meta(meta_filepath)
 
-        self.x_feature_get_type = x_feature_get_type
-        self.y_feature_get_type = y_feature_get_type
+        self.feature_get_type = feature_get_type
 
         super().__init__(root, transform, pre_transform, pre_filter, log, force_reload)
 
@@ -62,17 +62,17 @@ class YoungerDataset(Dataset):
 
     @property
     def raw_file_names(self):
-        return [f'instance-{index}.pkl' for index in range(self.meta['size'])]
+        return [f'sample-{index}.pkl' for index in range(self.meta['size'])]
 
     @property
     def processed_file_names(self):
-        return [f'instance-{index}.pth' for index in range(self.meta['size'])]
+        return [f'sample-{index}.pth' for index in range(self.meta['size'])]
 
     def len(self) -> int:
         return self.meta['size']
 
     def get(self, index: int):
-        return torch.load(os.path.join(self.processed_dir, f'instance-{index}.pth'))
+        return torch.load(os.path.join(self.processed_dir, f'sample-{index}.pth'))
 
     def download(self):
         archive_filepath = os.path.join(self.root, self.meta['archive'])
@@ -81,7 +81,7 @@ class YoungerDataset(Dataset):
         tar_extract(archive_filepath, self.raw_dir)
 
         for index in range(self.meta['size']):
-            assert fs.exists(os.path.join(self.raw_dir, f'instance-{index}.pkl'))
+            assert fs.exists(os.path.join(self.raw_dir, f'sample-{index}.pkl'))
 
     def process(self):
         with multiprocessing.Pool(self.worker_number) as pool:
@@ -90,110 +90,100 @@ class YoungerDataset(Dataset):
                     progress_bar.update()
 
     def process_instance(self, index):
-        instance_filepath = os.path.join(self.raw_dir, f'instance-{index}.pkl')
-        instance = load_pickle(instance_filepath)
+        sample_filepath = os.path.join(self.raw_dir, f'sample-{index}.pkl')
+        sample = load_pickle(sample_filepath)
 
-        x = self.__class__.get_x(instance, self.meta, self.x_feature_get_type)
-        edge_index = self.__class__.get_edge_index(instance)
-        y = self.__class__.get_y(instance, self.meta, self.y_feature_get_type)
-
-        data = Data(x=x, edge_index=edge_index, y=y)
+        data = self.__class__.get_data(sample, self.meta, self.feature_get_type)
         if self.pre_filter is not None and not self.pre_filter(data):
             return
 
         if self.pre_transform is not None:
             data = self.pre_transform(data)
-        torch.save(data, os.path.join(self.processed_dir, f'instance-{index}.pth'))
+        torch.save(data, os.path.join(self.processed_dir, f'sample-{index}.pth'))
 
     @classmethod
     def load_meta(cls, meta_filepath: str) -> dict[str, Any]:
         loaded_meta: dict[str, Any] = load_json(meta_filepath)
         meta: dict[str, Any] = dict()
 
+        meta['metric_name'] = loaded_meta['metric_name']
         meta['version'] = loaded_meta['version']
         meta['archive'] = loaded_meta['archive']
         meta['size'] = loaded_meta['size']
         meta['url'] = loaded_meta['url']
 
-        meta['i2o'] = [
-            YoungerDatasetNodeType.UNK,
-            YoungerDatasetNodeType.OUTER,
-            YoungerDatasetNodeType.INPUT,
-            YoungerDatasetNodeType.OUTPUT,
-            YoungerDatasetNodeType.CONSTANT
-        ] + loaded_meta['operators']
+        meta['i2t'] = loaded_meta['all_tasks'] + ['__UNK__']
+        meta['i2n'] = loaded_meta['all_nodes'] + ['__UNK__']
 
-        meta['i2t'] = loaded_meta['tasks']
-        meta['i2d'] = loaded_meta['datasets']
-        meta['i2s'] = loaded_meta['splits']
-        meta['i2m'] = loaded_meta['metrics']
-
-        meta['o2i'] = {operator: index for index, operator in enumerate(meta['i2o'])}
 
         meta['t2i'] = {task: index for index, task in enumerate(meta['i2t'])}
-        meta['d2i'] = {dataset: index for index, dataset in enumerate(meta['i2d'])}
-        meta['s2i'] = {split: index for index, split in enumerate(meta['i2s'])}
-        meta['m2i'] = {metric: index for index, metric in enumerate(meta['i2m'])}
+        meta['n2i'] = {node: index for index, node in enumerate(meta['i2n'])}
 
         return meta
 
     @classmethod
-    def get_edge_index(cls, instance: networkx.DiGraph) -> torch.Tensor:
-        mapping = dict(zip(instance.nodes(), range(instance.number_of_nodes())))
-        edge_index = torch.empty((2, instance.number_of_edges()), dtype=torch.long)
-        for index, (src, dst) in enumerate(instance.edges()):
+    def get_edge_index(cls, sample: networkx.DiGraph) -> torch.Tensor:
+        mapping = dict(zip(sample.nodes(), range(sample.number_of_nodes())))
+        edge_index = torch.empty((2, sample.number_of_edges()), dtype=torch.long)
+        for index, (src, dst) in enumerate(sample.edges()):
             edge_index[0, index] = mapping[src]
             edge_index[1, index] = mapping[dst]
         return edge_index
 
     @classmethod
-    def get_node_feature(cls, node_labels: dict, meta: dict[str, Any], x_feature_get_type: Literal['OnlyOp']) -> list:
-        node_type: str = node_labels['type']
+    def get_node_feature(cls, node_features: dict, meta: dict[str, Any]) -> list:
+        node_identifier: str = Network.standardized_node_identifier(node_features)
         node_feature = list()
-        if x_feature_get_type == 'OnlyOp':
-            if node_type == 'operator':
-                node_feature.append(meta['o2i'].get(str(node_labels['operator']), meta['o2i'][YoungerDatasetNodeType.UNK]))
-            else:
-                node_feature.append(meta['o2i'][getattr(YoungerDatasetNodeType, node_type.upper())])
+        node_feature.append(meta['n2i'].get(node_identifier, meta['n2i']['__UNK__']))
         return node_feature
 
     @classmethod
-    def get_x(cls, instance: networkx.DiGraph, meta: dict[str, Any], x_feature_get_type: Literal['OnlyOp']) -> torch.Tensor:
-        node_indices = list(instance.nodes)
+    def get_x(cls, sample: networkx.DiGraph, meta: dict[str, Any]) -> torch.Tensor:
+        node_indices = list(sample.nodes)
         node_features = list()
         for node_index in node_indices:
-            node_feature = cls.get_node_feature(instance.nodes[node_index], meta, x_feature_get_type)
+            node_feature = cls.get_node_feature(sample.nodes[node_index]['features'], meta)
             node_features.append(node_feature)
-        node_features = torch.tensor(node_features)
+        node_features = torch.tensor(node_features, dtype=torch.long)
         return node_features
 
     @classmethod
-    def get_graph_feature(cls, graph_labels: dict, meta: dict[str, Any], y_feature_get_type: Literal['OnlyMt']) -> list:
-        task: str = graph_labels['task']
-        dataset: str = graph_labels['dataset']
-        metric: str = graph_labels['metric']
-        metric_value: float = graph_labels['metric_value']
+    def get_graph_feature(cls, graph_labels: dict, meta: dict[str, Any], feature_get_type: Literal['none', 'mean', 'rand']) -> list:
 
-        graph_feature = None
-        if y_feature_get_type == 'OnlyMt':
-            if metric is not None and metric_value is not None:
-                graph_feature = [meta['m2i'][metric], float(metric_value)]
-            else:
-                None
+        if feature_get_type == 'none':
+            graph_feature = None
+        else:
+            downloads: int = graph_labels['downloads']
+            likes: int = graph_labels['likes']
+            tasks: str = graph_labels['tasks']
+            metrics: list[float] = graph_labels['metrics']
 
-        if y_feature_get_type == 'TkDsMt':
-            if metric is not None and metric_value is not None:
-                graph_feature = [meta['m2i'][metric], float(metric_value), meta['t2i'][task], meta['d2i'][dataset]]
-            else:
-                None
+            graph_feature = list()
+            task = tasks[numpy.random.randint(len(tasks))] if len(tasks) else None
+            graph_feature.append(meta['t2i'].get(task, meta['n2i']['__UNK__']))
+
+            if feature_get_type == 'mean':
+                graph_feature.append(numpy.mean(metrics))
+
+            if feature_get_type == 'rand':
+                graph_feature.append(metrics[numpy.random.randint(len(metrics))])
 
         return graph_feature
 
     @classmethod
-    def get_y(cls, instance: networkx.DiGraph, meta: dict[str, Any], y_feature_get_type: Literal['OnlyMt']) -> torch.Tensor:
-        graph_feature = cls.get_graph_feature(instance.graph, meta, y_feature_get_type)
+    def get_y(cls, sample: networkx.DiGraph, meta: dict[str, Any], feature_get_type: Literal['none', 'mean', 'rand']) -> torch.Tensor:
+        graph_feature = cls.get_graph_feature(sample.graph, meta, feature_get_type)
         if graph_feature is None:
             graph_feature = None
         else:
-            graph_feature = torch.tensor(graph_feature)
+            graph_feature = torch.tensor(graph_feature, dtype=torch.float32)
         return graph_feature
+
+    @classmethod
+    def get_data(cls, sample, meta: dict[str, Any], feature_get_type: Literal['none', 'mean', 'rand']) -> Data:
+        x = cls.get_x(sample, meta)
+        edge_index = cls.get_edge_index(sample)
+        y = cls.get_y(sample, meta, feature_get_type)
+
+        data = Data(x=x, edge_index=edge_index, y=y)
+        return data

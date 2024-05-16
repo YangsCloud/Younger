@@ -12,6 +12,5 @@
 
 from younger.datasets.utils.detectors.langs import detect_natural_langs, detect_program_langs
 from younger.datasets.utils.detectors.tasks import detect_task
-from younger.datasets.utils.detectors.datasets import detect_dataset
-from younger.datasets.utils.detectors.splits import detect_split
-from younger.datasets.utils.detectors.metrics import detect_metric, normalize_metric_value
+from younger.datasets.utils.detectors.datasets import detect_dataset_name, detect_dataset_split
+from younger.datasets.utils.detectors.metrics import detect_metric_name, normalize_metric_value

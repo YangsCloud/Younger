@@ -15,6 +15,31 @@ import re
 from younger.datasets.utils.detectors import detect_program_langs, detect_natural_langs
 
 
+dataset_splits = dict(
+    train = set([
+        'train', 'training',
+    ]),
+    valid = set([
+        'dev', 'val', 'valid', 'validate', 'validation', 'eval', 'evaluate', 'evaluation',
+    ]),
+    test = set([
+        'test', 'testing',
+    ])
+)
+
+
+def detect_dataset_split(string: str) -> str:
+    dataset_split = ''
+    for word in string.split():
+        if word in dataset_splits['test']:
+            return 'test'
+        elif word in dataset_splits['valid']:
+            return 'valid'
+        elif word in dataset_splits['train']:
+            return 'train'
+    return dataset_split
+
+
 def any_pattern_exists(string: str, patterns: list[str]) -> bool:
     exists = False
     for pattern in patterns:
@@ -24,7 +49,7 @@ def any_pattern_exists(string: str, patterns: list[str]) -> bool:
     return exists
 
 
-def detect_dataset(string: str) -> str:
+def detect_dataset_name(string: str) -> str:
     datasets = list()
     has_n_langs = False
     has_p_langs = False

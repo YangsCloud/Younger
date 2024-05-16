@@ -12,13 +12,13 @@
 
 import re
 
-from typing import Any, Literal
+from typing import Literal
 
 from huggingface_hub import ModelCardData
 
 from younger.commons.logging import logger
 
-from younger.datasets.utils.detectors import detect_task, detect_dataset, detect_split, detect_metric, normalize_metric_value
+from younger.datasets.utils.detectors import detect_task, detect_dataset_name, detect_dataset_split, detect_metric_name, normalize_metric_value
 
 
 def get_detailed_string(strings: list[str]) -> str:
@@ -118,7 +118,7 @@ def parse_dataset(dataset_names: list[str]) -> tuple[str, Literal['train', 'vali
 
         string = re.sub(shot_pattern, '', string)
 
-        detected_dataset_names.append(detect_dataset(string))
+        detected_dataset_names.append(detect_dataset_name(string))
         strings.append(string)
 
     detected_dataset_name = max(detected_dataset_names, key=len)
@@ -158,7 +158,7 @@ def parse_metric(metric_names: list[str]) -> str:
         #     if switch_word.startswith('+'):
         #         switch_words.append(switch_word)
         # print(switch_words)
-        detected_metric_names.append(detect_metric(string))
+        detected_metric_names.append(detect_metric_name(string))
         strings.append(string)
 
     detected_metric_name = max(detected_metric_names, key=len)
@@ -282,9 +282,9 @@ def get_heuristic_annotations(model_id: str, model_card_data: ModelCardData) -> 
             if dataset_name in task_name:
                 dataset_name, task_name = task_name, dataset_name
 
-            split = detect_split(hf_dataset_split)
-            if split == '':
-                split = detect_split(clean_string(detailed_dataset_name))
+            dataset_split = detect_dataset_split(hf_dataset_split)
+            if dataset_split == '':
+                dataset_split = detect_dataset_split(clean_string(detailed_dataset_name))
 
             if isinstance(hf_metric_value, list):
                 logger.warn(f'Skip. Useless Metric Value. Model ID {model_id} {eval_result.metric_value}')
@@ -306,7 +306,7 @@ def get_heuristic_annotations(model_id: str, model_card_data: ModelCardData) -> 
 
             for mnames, mvalue in candidate_hf_metrics:
                 if split == '':
-                    split = detect_split(clean_string(get_detailed_string(mnames)))
+                    split = detect_dataset_split(clean_string(get_detailed_string(mnames)))
 
                 parsed_mname = parse_metric(mnames)
                 # parsed_mname = mname if parsed_mname == '' else parsed_mname
@@ -315,7 +315,7 @@ def get_heuristic_annotations(model_id: str, model_card_data: ModelCardData) -> 
 
                 if split == '':
                     split = 'test'
-                dataset_info = (dataset_name, split)
+                dataset_info = (dataset_name, dataset_split)
 
                 annotations['eval_results'].append(
                     dict(

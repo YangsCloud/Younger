@@ -36,22 +36,6 @@ def retrieve_run(arguments):
     pass
 
 
-def split_run(arguments):
-    update_logger(arguments)
-    statistics_filepath = pathlib.Path(arguments.statistics_filepath)
-    dataset_dirpath = pathlib.Path(arguments.dataset_dirpath)
-    save_dirpath = pathlib.Path(arguments.save_dirpath)
-
-    from younger.datasets.constructors.official import split
-
-    split.main(
-        statistics_filepath, dataset_dirpath, save_dirpath,
-        arguments.version,
-        arguments.train_proportion, arguments.valid_proportion, arguments.test_proportion,
-        arguments.partition_number
-    )
-
-
 def statistics_run(arguments):
     update_logger(arguments)
     dataset_dirpath = pathlib.Path(arguments.dataset_dirpath)
@@ -59,7 +43,39 @@ def statistics_run(arguments):
 
     from younger.datasets.constructors.official import statistics
 
-    statistics.main(dataset_dirpath, save_dirpath, arguments.tasks, arguments.datasets, arguments.splits, arguments.metrics, arguments.worker_number)
+    statistics.main(dataset_dirpath, save_dirpath, arguments.tasks, arguments.dataset_names, arguments.dataset_splits, arguments.metric_names, arguments.worker_number)
+
+
+def filter_run(arguments):
+    update_logger(arguments)
+    dataset_dirpath = pathlib.Path(arguments.dataset_dirpath)
+    save_dirpath = pathlib.Path(arguments.save_dirpath)
+
+    from younger.datasets.constructors.official import filter
+
+    filter.main(
+        dataset_dirpath, save_dirpath,
+        arguments.max_inclusive_version,
+        arguments.worker_number
+    )
+
+
+def split_run(arguments):
+    update_logger(arguments)
+    tasks_filepath = pathlib.Path(arguments.tasks_filepath)
+    dataset_dirpath = pathlib.Path(arguments.dataset_dirpath)
+    save_dirpath = pathlib.Path(arguments.save_dirpath)
+
+    from younger.datasets.constructors.official import split
+
+    split.main(
+        tasks_filepath, dataset_dirpath, save_dirpath,
+        arguments.version,
+        arguments.metric_name,
+        arguments.train_proportion, arguments.valid_proportion, arguments.test_proportion,
+        arguments.partition_number,
+        arguments.worker_number
+    )
 
 
 def convert_huggingface_run(arguments):
@@ -215,12 +231,40 @@ def set_datasets_retrieve_arguments(parser: argparse.ArgumentParser):
     parser.set_defaults(run=retrieve_run)
 
 
+def set_datasets_statistics_arguments(parser: argparse.ArgumentParser):
+    parser.add_argument('--dataset-dirpath', type=str, required=True)
+    parser.add_argument('--save-dirpath', type=str, default='.')
+
+    parser.add_argument('--tasks', type=str, nargs='*', default=[])
+    parser.add_argument('--dataset-names', type=str, nargs='*', default=[])
+    parser.add_argument('--dataset-splits', type=str, nargs='*', default=[])
+    parser.add_argument('--metric-names', type=str, nargs='*', default=[])
+
+    parser.add_argument('--worker-number', type=int, default=4)
+
+    parser.add_argument('--logging-filepath', type=str, default=None)
+    parser.set_defaults(run=statistics_run)
+
+
+def set_datasets_filter_arguments(parser: argparse.ArgumentParser):
+    parser.add_argument('--dataset-dirpath', type=str, required=True)
+    parser.add_argument('--save-dirpath', type=str, default='.')
+
+    parser.add_argument('--max-inclusive-version', type=int, default=18)
+
+    parser.add_argument('--worker-number', type=int, default=4)
+
+    parser.add_argument('--logging-filepath', type=str, default=None)
+    parser.set_defaults(run=filter_run)
+
+
 def set_datasets_split_arguments(parser: argparse.ArgumentParser):
-    parser.add_argument('--statistics-filepath', type=str, required=True)
+    parser.add_argument('--tasks-filepath', type=str, required=True)
     parser.add_argument('--dataset-dirpath', type=str, required=True)
     parser.add_argument('--save-dirpath', type=str, default='.')
 
     parser.add_argument('--version', type=str, required=True)
+    parser.add_argument('--metric-name', type=str, default=None)
 
     parser.add_argument('--train-proportion', type=int, default=80)
     parser.add_argument('--valid-proportion', type=int, default=10)
@@ -228,23 +272,11 @@ def set_datasets_split_arguments(parser: argparse.ArgumentParser):
 
     parser.add_argument('--partition-number', type=int, default=10)
 
-    parser.add_argument('--logging-filepath', type=str, default=None)
-    parser.set_defaults(run=split_run)
-
-
-def set_datasets_statistics_arguments(parser: argparse.ArgumentParser):
-    parser.add_argument('--dataset-dirpath', type=str, required=True)
-    parser.add_argument('--save-dirpath', type=str, default='.')
-
-    parser.add_argument('--tasks', type=str, nargs='*', default=[])
-    parser.add_argument('--datasets', type=str, nargs='*', default=[])
-    parser.add_argument('--splits', type=str, nargs='*', default=[])
-    parser.add_argument('--metrics', type=str, nargs='*', default=[])
-
     parser.add_argument('--worker-number', type=int, default=4)
 
     parser.add_argument('--logging-filepath', type=str, default=None)
-    parser.set_defaults(run=statistics_run)
+
+    parser.set_defaults(run=split_run)
 
 
 def set_datasets_arguments(parser: argparse.ArgumentParser):
@@ -253,11 +285,13 @@ def set_datasets_arguments(parser: argparse.ArgumentParser):
     convert_parser = subparser.add_parser('convert')
     retrieve_parser = subparser.add_parser('retrieve')
     statistics_parser = subparser.add_parser('statistics')
+    filter_parser = subparser.add_parser('filter')
     split_parser = subparser.add_parser('split')
 
     set_datasets_convert_arguments(convert_parser)
     set_datasets_retrieve_arguments(retrieve_parser)
     set_datasets_statistics_arguments(statistics_parser)
+    set_datasets_filter_arguments(filter_parser)
     set_datasets_split_arguments(split_parser)
 
     parser.set_defaults(run=run)

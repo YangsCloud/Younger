@@ -80,10 +80,6 @@ class Network(object):
     def info(self) -> dict:
         return self._info
 
-    @property
-    def hash(self) -> str:
-        return networkx.weisfeiler_lehman_graph_hash(self.__class__.cleanse(self._graph), node_attr='operator', iterations=6, digest_size=16)
-
     def load(self, network_dirpath: pathlib.Path) -> None:
         assert network_dirpath.is_dir(), f'There is no \"Network\" can be loaded from the specified directory \"{network_dirpath.absolute()}\".'
         info_filepath = network_dirpath.joinpath(self._info_filename)
@@ -135,13 +131,21 @@ class Network(object):
             return tobe_saved
 
     @classmethod
+    def standardized_node_identifier(cls, node_features: dict[str, dict]) -> str:
+        return str(sorted([i for i in node_features['operator'].items()] + [i for i in node_features['attributes'].items()], key=lambda x: x[0]))
+
+    @classmethod
+    def hash(cls, graph: networkx.DiGraph, node_attr: str | None = None, edge_attr: str | None = None, iterations: int = 6, digest_size: int = 16) -> str:
+        return networkx.weisfeiler_lehman_graph_hash(graph, edge_attr=edge_attr, node_attr=node_attr, iterations=iterations, digest_size=digest_size)
+
+    @classmethod
     def standardize(cls, graph: networkx.DiGraph) -> networkx.DiGraph:
         graph = cls.cleanse(graph, flatten=True)
         graph = cls.simplify(graph, preserve_node_attributes=['operator', 'attributes'], preserve_edge_attributes=['connection'], flatten=False)
         for node_index in graph.nodes():
-            graph[node_index]['features'] = dict(
-                operator = graph[node_index]['operator'],
-                attributes = graph[node_index]['attributes']
+            graph.nodes[node_index]['features'] = dict(
+                operator = graph.nodes[node_index]['operator'],
+                attributes = graph.nodes[node_index]['attributes']
             )
         return graph
 
@@ -191,8 +195,10 @@ class Network(object):
                     sub_l = len(sub_graphs)
                     if op_attr_dict['attr_type'] == onnx.defs.OpSchema.AttrType.GRAPH:
                         sub_graphs.append(op_attr_dict['value'])
+                        graph.nodes[node_index]['attributes'][op_attr_name]['value'] = sub_l
                     if op_attr_dict['attr_type'] == onnx.defs.OpSchema.AttrType.GRAPHS:
                         sub_graphs.extend(op_attr_dict['value'])
+                        graph.nodes[node_index]['attributes'][op_attr_name]['value'] = [sub_l, len(op_attr_dict['value'])]
                     sub_r = len(sub_graphs)
                     fathers.extend([node_index for _ in range(sub_l, sub_r)])
 

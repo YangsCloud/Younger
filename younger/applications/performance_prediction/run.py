@@ -102,14 +102,12 @@ def exact_check(device_descriptor: torch.device, model: torch.nn.Module, dataloa
             data: Data = data.to(device_descriptor)
             if mode == 'Supervised':
                 y = data.y.reshape(len(data), -1)
-                task = y[:, 2].long()
-                dataset = y[:, 3].long()
-                output, _ = model(data.x, data.edge_index, data.batch, task, dataset)
+                task = y[:, 0].long()
+                output, _ = model(data.x, data.edge_index, data.batch)
 
-                for task_id, dataset_id, output_value, y_value in zip(task, dataset, output, y[:, 1]):
+                for task_id, output_value, y_value in zip(task, output, y[:, 1]):
                     results.append(dict(
                         task = dataloader.dataset.meta['i2t'][task_id],
-                        dataset = dataloader.dataset.meta['i2d'][dataset_id],
                         predict = float(output_value[0]),
                         golden = float(y_value))
                     )
@@ -230,9 +228,8 @@ def exact_train(
             data: Data = data.to(device_descriptor)
             if mode == 'Supervised':
                 y = data.y.reshape(len(data), -1)
-                task = y[:, 2].long()
-                dataset = y[:, 3].long()
-                output, global_pooling_loss = model(data.x, data.edge_index, data.batch, task, dataset)
+                task = y[:, 0].long()
+                output, global_pooling_loss = model(data.x, data.edge_index, data.batch)
                 main_loss = mse_criterian(output.reshape(-1), y[:, 1])
                 loss = main_loss + global_pooling_loss
                 average_digits = torch.tensor([float(loss), float(main_loss), float(global_pooling_loss)]).to(device_descriptor) / update_period
@@ -273,12 +270,10 @@ def train(
     valid_dataset_dirpath: pathlib.Path,
     checkpoint_dirpath: pathlib.Path,
     mode: Literal['Supervised', 'Unsupervised'] = 'Unsupervised',
-    x_feature_get_type: Literal['OnlyOp'] = 'OnlyOp',
-    y_feature_get_type: Literal['OnlyMt', 'TkDsMt'] = 'OnlyMt',
+    feature_get_type: Literal['none', 'mean', 'rand'] = 'mean',
 
     node_dim: int = 512,
     task_dim: int = 512,
-    dataset_dim: int = 512,
     hidden_dim: int = 512,
     readout_dim: int = 256,
     cluster_num: int | None = None,
@@ -331,24 +326,19 @@ def train(
     fix_random_procedure(seed)
     train_dataset = YoungerDataset(
         str(train_dataset_dirpath),
-        x_feature_get_type=x_feature_get_type,
-        y_feature_get_type=y_feature_get_type,
+        feature_get_type=feature_get_type,
         worker_number=worker_number
     )
     valid_dataset = YoungerDataset(
         str(valid_dataset_dirpath),
-        x_feature_get_type=x_feature_get_type,
-        y_feature_get_type=y_feature_get_type,
+        feature_get_type=feature_get_type,
         worker_number=worker_number
     )
 
     meta = train_dataset.meta
 
-    logger.info(f'    -> Node Dict Size: {len(meta["o2i"])}')
-    if mode == 'Supervised':
-        logger.info(f'    -> Task Number: {len(meta["t2i"])}')
-        logger.info(f'    -> Dataset Number: {len(meta["d2i"])}')
-        logger.info(f'    -> Metric Number: {len(meta["m2i"])}')
+    logger.info(f'    -> Tasks Dict Size: {len(meta["t2i"])}')
+    logger.info(f'    -> Nodes Dict Size: {len(meta["n2i"])}')
     logger.info(f'    -> Dataset Split Sizes:')
     logger.info(f'       Train - {len(train_dataset)}')
     logger.info(f'       Valid - {len(valid_dataset)}')
@@ -365,7 +355,6 @@ def train(
         meta=meta,
         node_dim=node_dim,
         task_dim=task_dim,
-        dataset_dim=dataset_dim,
         hidden_dim=hidden_dim,
         readout_dim=readout_dim,
         cluster_num=cluster_num,
@@ -418,14 +407,13 @@ def train(
 def test(
     test_dataset_dirpath: pathlib.Path,
     checkpoint_filepath: pathlib.Path,
-    x_feature_get_type: Literal['OnlyOp'] = 'OnlyOp',
-    y_feature_get_type: Literal['OnlyMt', 'TkDsMt'] = 'OnlyMt',
+
+    feature_get_type: Literal['none', 'mean', 'rand'] = 'mean',
 
     test_batch_size: int = 32,
 
     node_dim: int = 512,
     task_dim: int = 512,
-    dataset_dim: int = 512,
     hidden_dim: int = 512,
     readout_dim: int = 256,
     cluster_num: int | None = None,
@@ -442,15 +430,12 @@ def test(
     logger.info(f'  v Building Younger Datasets (Supervised)...')
     test_dataset = YoungerDataset(
         str(test_dataset_dirpath),
-        x_feature_get_type=x_feature_get_type,
-        y_feature_get_type=y_feature_get_type,
+        feature_get_type=feature_get_type,
         worker_number=worker_number
     )
     meta = test_dataset.meta
-    logger.info(f'    -> Node Dict Size: {len(meta["o2i"])}')
-    logger.info(f'    -> Task Number: {len(meta["t2i"])}')
-    logger.info(f'    -> Dataset Number: {len(meta["d2i"])}')
-    logger.info(f'    -> Metric Number: {len(meta["m2i"])}')
+    logger.info(f'    -> Tasks Dict Size: {len(meta["t2i"])}')
+    logger.info(f'    -> Nodes Dict Size: {len(meta["n2i"])}')
     logger.info(f'    -> Test Dataset Size: {len(test_dataset)}')
     logger.info(f'  ^ Built.')
 
@@ -459,7 +444,6 @@ def test(
         meta=meta,
         node_dim=node_dim,
         task_dim=task_dim,
-        dataset_dim=dataset_dim,
         hidden_dim=hidden_dim,
         readout_dim=readout_dim,
         cluster_num=cluster_num,

@@ -30,40 +30,16 @@ def statistics_graph(graph: networkx.DiGraph) -> dict[str, dict[str, int] | int]
         num_operators = dict(),
         num_node = graph.number_of_nodes(),
         num_edge = graph.number_of_edges(),
-        num_sub = 0,
     )
 
     for node_id in graph.nodes:
-        node_data = graph.nodes[node_id]
-        # For Operator Stats
-        if node_data['type'] == 'operator':
-            operator = str(node_data['operator'])
-            graph_statistics['num_operators'][operator] = graph_statistics['num_operators'].get(operator, 0) + 1
-            for attribute_key, attribute_value in node_data['attributes'].items():
-                if attribute_value['attr_type'] == onnx.defs.OpSchema.AttrType.GRAPHS:
-                    for sub_graph in attribute_value['value']:
-                        sub_graph_statistics = statistics_graph(sub_graph)
-                        for sub_operator, sub_num_operator in sub_graph_statistics['num_operators'].items():
-                            graph_statistics['num_operators'][sub_operator] = graph_statistics['num_operators'].get(sub_operator, 0) + sub_num_operator
-                        graph_statistics['num_node'] = graph_statistics['num_node'] + sub_graph_statistics['num_node']
-                        graph_statistics['num_edge'] = graph_statistics['num_edge'] + sub_graph_statistics['num_edge']
-                        graph_statistics['num_sub']  = graph_statistics['num_sub']  + sub_graph_statistics['num_sub'] + 1
-                elif attribute_value['attr_type'] == onnx.defs.OpSchema.AttrType.GRAPH:
-                    sub_graph = attribute_value['value']
-                    sub_graph_statistics = statistics_graph(sub_graph)
-                    for sub_operator, sub_num_operator in sub_graph_statistics['num_operators'].items():
-                        graph_statistics['num_operators'][sub_operator] = graph_statistics['num_operators'].get(sub_operator, 0) + sub_num_operator
-                    graph_statistics['num_node'] = graph_statistics['num_node'] + sub_graph_statistics['num_node']
-                    graph_statistics['num_edge'] = graph_statistics['num_edge'] + sub_graph_statistics['num_edge']
-                    graph_statistics['num_sub']  = graph_statistics['num_sub']  + sub_graph_statistics['num_sub'] + 1
-        else:
-            graph_statistics['num_node'] = graph_statistics['num_node'] - 1
-            graph_statistics['num_edge'] = graph_statistics['num_edge'] - graph.degree(node_id)
-
+        node_features = graph.nodes[node_id]['features']
+        node_identifier = Network.standardized_node_identifier(node_features)
+        graph_statistics['num_operators'][node_identifier] = graph_statistics['num_operators'].get(node_identifier, 0) + 1
     return graph_statistics
 
-def statistics_instance(parameters: tuple[pathlib.Path, list, list, list, list, list]) -> tuple[dict[str, list], dict[str, int]]:
-    path, combined_filters, has_task_filters, has_dataset_filters, has_split_filters, has_metric_filters = parameters
+def statistics_instance(parameter: tuple[pathlib.Path, list, bool, bool, bool, bool]) -> tuple[dict[str, list], dict[str, int]]:
+    path, combined_filters, has_task_filters, has_dataset_name_filters, has_dataset_split_filters, has_metric_name_filters = parameter
 
     occurrence: dict[str, int] = dict()
     statistics: dict[str, list] = dict()
@@ -74,58 +50,45 @@ def statistics_instance(parameters: tuple[pathlib.Path, list, list, list, list, 
     instance.load(path)
 
     instance_name = path.name
-    graph_stats = statistics_graph(Network.standardize(instance.network.graph))
+    graph_stats = statistics_graph(instance.network.graph)
 
-    if instance.labels['annotations'] and instance.labels['annotations']['eval_results']:
-        for eval_result in instance.labels['annotations']['eval_results']:
-            task = eval_result['task']
-            dataset = eval_result['dataset'][0]
-            split = eval_result['dataset'][1]
-            metric = eval_result['metric'][0]
-            combined_filter_pattern = str((
-                task if has_task_filters else '*',
-                dataset if has_dataset_filters else '*',
-                split if has_split_filters else '*',
-                metric if has_metric_filters else '*',
-            ))
-            metric_value = eval_result['metric'][1]
-            if math.isnan(metric_value):
-                continue
-            if combined_filter_pattern in statistics:
-                occurrence[str((task, dataset, split, metric))] = occurrence.get(str((task, dataset, split, metric)), 0) + 1
-                statistics[combined_filter_pattern].append(dict(
-                    instance_name = instance_name,
-                    graph_stats = graph_stats,
-                    task = task,
-                    dataset = dataset,
-                    split = split,
-                    metric = metric,
-                    metric_value = metric_value
-                ))
-    else:
-        combined_filter_pattern = str(('*', '*', '*', '*'))
+    for task, dataset_name, dataset_split, metric_name, metric_value in instance.labels['evaluations']:
+        combined_filter_pattern = str((
+            task if has_task_filters else '*',
+            dataset_name if has_dataset_name_filters else '*',
+            dataset_split if has_dataset_split_filters else '*',
+            metric_name if has_metric_name_filters else '*',
+        ))
+        if math.isnan(metric_value):
+            continue
         if combined_filter_pattern in statistics:
+            occurrence[str((task, dataset_name, dataset_split, metric_name))] = occurrence.get(str((task, dataset_name, dataset_split, metric_name)), 0) + 1
             statistics[combined_filter_pattern].append(dict(
                 instance_name = instance_name,
                 graph_stats = graph_stats,
+                task = task,
+                dataset_name = dataset_name,
+                dataset_split = dataset_split,
+                metric_name = metric_name,
+                metric_value = metric_value
             ))
     return (statistics, occurrence)
 
 
-def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, tasks: list[str], datasets: list[str], splits: list[str], metrics: list[str], worker_number: int = 4):
+def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, tasks: list[str], dataset_names: list[str], dataset_splits: list[str], metric_names: list[str], worker_number: int = 4):
     tic = time.time()
     has_task_filters = len(tasks) != 0
-    has_dataset_filters = len(datasets) != 0
-    has_split_filters = len(splits) != 0
-    has_metric_filters = len(metrics) != 0
+    has_dataset_name_filters = len(dataset_names) != 0
+    has_dataset_split_filters = len(dataset_splits) != 0
+    has_metric_name_filters = len(metric_names) != 0
 
     task_filters = tasks if has_task_filters else ['*']
-    dataset_filters = datasets if has_dataset_filters else ['*']
-    split_filters = splits if has_split_filters else ['*']
-    metric_filters = metrics if has_metric_filters else ['*']
+    dataset_name_filters = dataset_names if has_dataset_name_filters else ['*']
+    dataset_split_filters = dataset_splits if has_dataset_split_filters else ['*']
+    metric_name_filters = metric_names if has_metric_name_filters else ['*']
 
     combined_filters = list()
-    for combined_filter in itertools.product(*[task_filters, dataset_filters, split_filters, metric_filters]):
+    for combined_filter in itertools.product(*[task_filters, dataset_name_filters, dataset_split_filters, metric_name_filters]):
         combined_filters.append(combined_filter)
 
     occurrence: dict[str, int] = dict()
@@ -134,7 +97,7 @@ def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, tasks: list[
     for combined_filter in combined_filters:
         statistics[str(combined_filter)] = list()
 
-    parameters_iterator = ((path, combined_filters, has_task_filters, has_dataset_filters, has_split_filters, has_metric_filters) for path in dataset_dirpath.iterdir() if path.is_dir())
+    parameters_iterator = ((path, combined_filters, has_task_filters, has_dataset_name_filters, has_dataset_split_filters, has_metric_name_filters) for path in dataset_dirpath.iterdir() if path.is_dir())
     with multiprocessing.Pool(worker_number) as pool:
         for index, (instance_statistics, instance_occurrence) in enumerate(pool.imap_unordered(statistics_instance, parameters_iterator), start=1):
             for filter_type_key, filter_type_value in instance_occurrence.items():
@@ -145,23 +108,17 @@ def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, tasks: list[
 
     for instances_statistics in statistics.values():
         for instance_statistics in instances_statistics:
-            if 'metric' in instance_statistics and 'metric_value' in instance_statistics:
-                metric = instance_statistics['metric']
-                metric_value = instance_statistics['metric_value']
-    
-                minimum, maximum = mum.get(metric, (0, 1))
-                mum[metric] = [min(minimum, metric_value), max(maximum, metric_value)]
-            else:
-                continue
+            metric_name = instance_statistics['metric_name']
+            metric_value = instance_statistics['metric_value']
+
+            minimum, maximum = mum.get(metric_name, (0, 1))
+            mum[metric_name] = [min(minimum, metric_value), max(maximum, metric_value)]
 
     for key in statistics.keys():
         for index, instance_statistics in enumerate(statistics[key]):
-            if 'metric' in instance_statistics and 'metric_value' in instance_statistics:
-                metric = instance_statistics['metric']
-                metric_value = instance_statistics['metric_value']
-                statistics[key][index]['metric_value'] = normalize(metric, metric_value, mum[metric][0], mum[metric][1])
-            else:
-                continue
+            metric_name = instance_statistics['metric_name']
+            metric_value = instance_statistics['metric_value']
+            statistics[key][index]['metric_value'] = normalize(metric_name, metric_value, mum[metric_name][0], mum[metric_name][1])
 
     toc = time.time()
     finished_datetime = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')

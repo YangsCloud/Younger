@@ -20,6 +20,20 @@ from onnx.shape_inference import infer_shapes
 from onnx.inliner import inline_local_functions
 
 
+def get_all_attributes_of_operator(op_type: str, max_inclusive_version: int, domain: str ='') -> dict[str, tuple[int, str]] | None:
+    # All attributes have default value only contain types - {<AttrType.FLOAT: 1>, <AttrType.INT: 2>, <AttrType.STRING: 3>, <AttrType.INTS: 7>, <AttrType.STRINGS: 8>}
+    # Thus, we only stringize/destringize all values with - (str(value)/ast.literal_eval(str(value)))
+    try:
+        attributes = dict()
+        schema = onnx.defs.get_schema(op_type, max_inclusive_version, domain=domain)
+        for attribute_name, attribute_define in schema.attributes.items():
+            attributes[attribute_name] = (attribute_define.type.value, str(onnx.helper.get_attribute_value(attribute_define.default_value)))
+    except:
+        attributes = None
+
+    return attributes
+
+
 def trans_string_string_entry_proto(string_string_entry_proto: onnx.StringStringEntryProto) -> dict:
     key: str = string_string_entry_proto.key
     value: str = string_string_entry_proto.value
@@ -394,7 +408,6 @@ def trans_attribute_proto(attribute_proto: onnx.AttributeProto, trans_graph_prot
         value = value,
         doc_string = doc_string,
         attr_type = attr_type
-
     )
     return attribute_proto_dict
 

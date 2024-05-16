@@ -372,7 +372,7 @@ def detect_special_metric(string: str) -> str:
     return special_metric
 
 
-def detect_metric(string: str) -> str:
+def detect_metric_name(string: str) -> str:
     metric = ''
 
     if 'step' in string:

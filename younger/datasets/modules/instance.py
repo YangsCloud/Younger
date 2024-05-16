@@ -49,7 +49,7 @@ class Instance(object):
         self._unique_filename = 'unique.id'
         self._unique = None
 
-        self.tag(labels)
+        self.setup_labels(labels)
         self.setup(model)
         self.release(version)
 
@@ -136,7 +136,11 @@ class Instance(object):
         self._network.save(network_dirpath)
         return
 
-    def tag(self, labels: dict[str, str]) -> None:
+    def clean_labels(self) -> None:
+        self._labels = dict()
+        return
+
+    def setup_labels(self, labels: dict[str, str]) -> None:
         if self.meta.is_fresh:
             for label_key, label_value in labels.items():
                 self._labels[label_key] = label_value
@@ -195,3 +199,6 @@ class Instance(object):
             if self.meta.is_new:
                 self.meta.set_release(version)
         return
+
+    def setup_network(self, network: Network):
+        self._network = network

@@ -45,12 +45,10 @@ def performance_prediction_train_run(arguments):
         valid_dataset_dirpath,
         checkpoint_dirpath,
         arguments.mode,
-        arguments.x_feature_get_type,
-        arguments.y_feature_get_type,
+        arguments.feature_get_type,
 
         arguments.node_dim,
         arguments.task_dim,
-        arguments.dataset_dim,
         arguments.hidden_dim,
         arguments.readout_dim,
         arguments.cluster_num,
@@ -96,20 +94,42 @@ def performance_prediction_test_run(arguments):
     test(
         test_dataset_dirpath,
         checkpoint_filepath,
-        arguments.x_feature_get_type,
-        arguments.y_feature_get_type,
+        arguments.feature_get_type,
 
         arguments.test_batch_size,
 
         arguments.node_dim,
         arguments.task_dim,
-        arguments.dataset_dim,
         arguments.hidden_dim,
         arguments.readout_dim,
         arguments.cluster_num,
 
         arguments.device,
         arguments.worker_number,
+    )
+
+
+def performance_prediction_deploy_run(arguments):
+    update_logger(arguments)
+    meta_filepath = pathlib.Path(arguments.meta_filepath)
+    checkpoint_filepath = pathlib.Path(arguments.checkpoint_filepath)
+    onnx_models_dirpath = pathlib.Path(arguments.onnx_models_dirpath)
+
+    from younger.applications.performance_prediction.deploy import main
+
+    main(
+        meta_filepath,
+        checkpoint_filepath,
+        onnx_models_dirpath,
+        arguments.max_inclusive_version,
+
+        arguments.node_dim,
+        arguments.task_dim,
+        arguments.hidden_dim,
+        arguments.readout_dim,
+        arguments.cluster_num,
+
+        arguments.device,
     )
 
 
@@ -121,12 +141,10 @@ def set_applications_performance_perdiction_arguments(parser: argparse.ArgumentP
     train_parser.add_argument('--valid-dataset-dirpath', type=str)
     train_parser.add_argument('--checkpoint-dirpath', type=str)
     train_parser.add_argument('--mode', type=str, choices=['Supervised', 'Unsupervised'], default='Unsupervised')
-    train_parser.add_argument('--x-feature-get-type', type=str, choices=['OnlyOp'], default='OnlyOp')
-    train_parser.add_argument('--y-feature-get-type', type=str, choices=['OnlyMt', 'TkDsMt'], default='OnlyMt')
+    train_parser.add_argument('--feature-get-type', type=str, choices=['none', 'mean', 'rand'], default='mean')
 
     train_parser.add_argument('--node-dim', type=int, default=512)
     train_parser.add_argument('--task-dim', type=int, default=512)
-    train_parser.add_argument('--dataset-dim', type=int, default=512)
     train_parser.add_argument('--hidden-dim', type=int, default=512)
     train_parser.add_argument('--readout-dim', type=int, default=256)
     train_parser.add_argument('--cluster-num', type=int, default=16)
@@ -150,6 +168,7 @@ def set_applications_performance_perdiction_arguments(parser: argparse.ArgumentP
     train_parser.add_argument('--weight-decay', type=float, default=1e-1)
     train_parser.add_argument('--shuffle', action='store_true')
 
+    train_parser.add_argument('--device', type=str, choices=['CPU', 'GPU'], default='GPU')
     train_parser.add_argument('--world-size', type=int, default=1)
     train_parser.add_argument('--master-addr', type=str, default='localhost')
     train_parser.add_argument('--master-port', type=str, default='16161')
@@ -157,10 +176,7 @@ def set_applications_performance_perdiction_arguments(parser: argparse.ArgumentP
     train_parser.add_argument('--worker-number', type=int, default=4)
 
     train_parser.add_argument('--seed', type=int, default=1234)
-
     train_parser.add_argument('--make-deterministic', action='store_true')
-
-    train_parser.add_argument('--device', type=str, choices=['CPU', 'GPU'], default='GPU')
 
     train_parser.add_argument('--logging-filepath', type=str, default=None)
     train_parser.set_defaults(run=performance_prediction_train_run)
@@ -168,14 +184,12 @@ def set_applications_performance_perdiction_arguments(parser: argparse.ArgumentP
     test_parser = subparser.add_parser('test')
     test_parser.add_argument('--test-dataset-dirpath', type=str)
     test_parser.add_argument('--checkpoint-filepath', type=str)
-    test_parser.add_argument('--x-feature-get-type', type=str, choices=['OnlyOp'], default='OnlyOp')
-    test_parser.add_argument('--y-feature-get-type', type=str, choices=['OnlyMt', 'TkDsMt'], default='OnlyMt')
+    test_parser.add_argument('--feature-get-type', type=str, choices=['none', 'mean', 'rand'], default='mean')
 
     test_parser.add_argument('--test-batch-size', type=int, default=32)
 
     test_parser.add_argument('--node-dim', type=int, default=512)
     test_parser.add_argument('--task-dim', type=int, default=512)
-    test_parser.add_argument('--dataset-dim', type=int, default=512)
     test_parser.add_argument('--hidden-dim', type=int, default=512)
     test_parser.add_argument('--readout-dim', type=int, default=256)
     test_parser.add_argument('--cluster-num', type=int, default=16)
@@ -185,6 +199,26 @@ def set_applications_performance_perdiction_arguments(parser: argparse.ArgumentP
 
     test_parser.add_argument('--logging-filepath', type=str, default=None)
     test_parser.set_defaults(run=performance_prediction_test_run)
+
+    parser.set_defaults(run=performance_prediction_run)
+
+    deploy_parser = subparser.add_parser('deploy')
+    deploy_parser.add_argument('--meta-filepath', type=str)
+    deploy_parser.add_argument('--checkpoint-filepath', type=str)
+    deploy_parser.add_argument('--onnx-models-dirpath', type=str)
+
+    deploy_parser.add_argument('--max-inclusive-version', type=int, default=21)
+
+    deploy_parser.add_argument('--node-dim', type=int, default=512)
+    deploy_parser.add_argument('--task-dim', type=int, default=512)
+    deploy_parser.add_argument('--hidden-dim', type=int, default=512)
+    deploy_parser.add_argument('--readout-dim', type=int, default=256)
+    deploy_parser.add_argument('--cluster-num', type=int, default=16)
+
+    deploy_parser.add_argument('--device', type=str, choices=['CPU', 'GPU'], default='GPU')
+
+    deploy_parser.add_argument('--logging-filepath', type=str, default=None)
+    deploy_parser.set_defaults(run=performance_prediction_deploy_run)
 
     parser.set_defaults(run=performance_prediction_run)
 

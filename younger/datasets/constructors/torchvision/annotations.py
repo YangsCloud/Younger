@@ -31,13 +31,20 @@ def get_heuristic_annotations(model_id: str, model_metrics: dict[str, dict[str, 
     metric_names = set()
     annotations['eval_results'] = list()
     for variation, variation_metrics in model_metrics.items():
-        for dataset, metrics in variation_metrics.items():
+        for dataset_name, metrics in variation_metrics.items():
             metric_names = metric_names | set(metrics.keys())
             for metric_name, metric_value in metrics.items():
+                # TODO: Keep The Same Format With HuggingFace
+                if metric_name in {'acc@1', 'acc@5', 'miou', 'pixel_acc', 'box_map', 'kp_map'}:
+                    metric_value = metric_value / 100
+                if metric_name == 'acc@1':
+                    metric_name = 'accuracy @1'
+                if metric_name == 'acc@5':
+                    metric_name = 'accuracy @5'
                 annotations['eval_results'].append(
                     dict(
                         task=task,
-                        dataset=dataset,
+                        dataset=(dataset_name, 'test'),
                         metric=(metric_name, metric_value),
                         variation=variation
                     )

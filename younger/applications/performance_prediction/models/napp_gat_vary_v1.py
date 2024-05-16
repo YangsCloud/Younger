@@ -50,7 +50,6 @@ class NAPPGATVaryV1(torch.nn.Module):
         meta: dict,
         node_dim: int = 100,
         task_dim: int = 100,
-        dataset_dim: int = 100,
         hidden_dim: int = 100,
         readout_dim: int = 100,
         cluster_num: int = 16,
@@ -62,9 +61,7 @@ class NAPPGATVaryV1(torch.nn.Module):
         self.mode = mode
 
         # Embedding
-        self.node_embedding_layer = Embedding(len(meta['o2i']), node_dim)
-        self.task_embedding_layer = Embedding(len(meta['t2i']), task_dim)
-        self.dataset_embedding_layer = Embedding(len(meta['d2i']), dataset_dim)
+        self.node_embedding_layer = Embedding(len(meta['n2i']), node_dim)
 
         # v GNN Message Passing Head
         self.mp_head_layer = GATConv(node_dim, hidden_dim, heads=4, concat=False, dropout=0.1)
@@ -111,7 +108,7 @@ class NAPPGATVaryV1(torch.nn.Module):
 
         self.initialize_parameters()
 
-    def forward(self, x: torch.Tensor, edge_index: torch.Tensor, batch: torch.Tensor, task: torch.Tensor, dataset: torch.Tensor):
+    def forward(self, x: torch.Tensor, edge_index: torch.Tensor, batch: torch.Tensor):
         # x
         # total_node_number = sum(node_number_of_graph_{1}, ..., node_number_of_graph_{batch_size})
         # [ total_node_number X num_node_features ] (Current Version: num_node_features=1)
@@ -177,5 +174,3 @@ class NAPPGATVaryV1(torch.nn.Module):
 
     def initialize_parameters(self):
         torch.nn.init.normal_(self.node_embedding_layer.weight, mean=0, std=self.node_embedding_layer.embedding_dim ** -0.5)
-        torch.nn.init.normal_(self.task_embedding_layer.weight, mean=0, std=self.task_embedding_layer.embedding_dim ** -0.5)
-        torch.nn.init.normal_(self.dataset_embedding_layer.weight, mean=0, std=self.dataset_embedding_layer.embedding_dim ** -0.5)
