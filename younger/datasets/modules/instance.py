@@ -12,6 +12,8 @@
 import onnx
 import pathlib
 
+from typing import Any
+
 from younger.commons.io import load_json, save_json
 from younger.commons.version import semantic_release, str_to_sem
 
@@ -58,7 +60,7 @@ class Instance(object):
         return self._meta
 
     @property
-    def labels(self) -> dict[str, str]:
+    def labels(self) -> dict[str, Any]:
         return self._labels
 
     @property

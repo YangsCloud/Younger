@@ -22,10 +22,15 @@ from younger.datasets.utils.translation import get_complete_attributes_of_node, 
 
 
 def update_unique_instance(unique_instance: Instance, purified_instance: Instance):
-    unique_instance.labels['model_sources'].extend([] if purified_instance.labels['model_source'] is None else [purified_instance.labels['model_source']])
-    unique_instance.labels['downloads'].extend([] if purified_instance.labels['download'] is None else [purified_instance.labels['download']])
-    unique_instance.labels['likes'].extend([] if purified_instance.labels['like'] is None else [purified_instance.labels['like']])
-    unique_instance.labels['tags'].extend([] if purified_instance.labels['tag'] is None else purified_instance.labels['tag'])
+    new_model_sources = [] if purified_instance.labels['model_source'] is None else [purified_instance.labels['model_source']]
+    new_downloads = [] if purified_instance.labels['download'] is None else [purified_instance.labels['download']]
+    new_likes = [] if purified_instance.labels['like'] is None else [purified_instance.labels['like']]
+    new_tags = [] if purified_instance.labels['tag'] is None else purified_instance.labels['tag']
+
+    unique_instance.labels['model_sources'] = list(set(unique_instance.labels['model_sources'] + new_model_sources))
+    unique_instance.labels['downloads'] = list(set(unique_instance.labels['downloads'] + new_downloads))
+    unique_instance.labels['likes'] = list(set(unique_instance.labels['likes'] + new_likes))
+    unique_instance.labels['tags'] = list(set(unique_instance.labels['tags'] + new_tags))
 
     if purified_instance.labels['annotations'] and purified_instance.labels['annotations']['eval_results']:
         for eval_result in purified_instance.labels['annotations']['eval_results']:
