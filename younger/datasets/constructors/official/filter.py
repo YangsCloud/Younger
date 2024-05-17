@@ -71,7 +71,7 @@ def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, worker_numbe
 
     unique_instances: dict[str, Instance] = dict()
     with multiprocessing.Pool(worker_number) as pool:
-        with tqdm.tqdm(total=len(parameters), desc="Filtering") as progress_bar:
+        with tqdm.tqdm(total=len(parameters), desc='Filtering') as progress_bar:
             for index, purified_instance in enumerate(pool.imap_unordered(purify_instance, parameters), start=1):
                 if purified_instance is None:
                     continue
@@ -85,7 +85,7 @@ def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, worker_numbe
                 update_unique_instance(unique_instance, purified_instance)
                 unique_instances[graph_hash] = unique_instance
                 progress_bar.update(1)
-                progress_bar.set_postfix({f"Current Unique": f"{len(unique_instances)}"})
+                progress_bar.set_postfix({f'Current Unique': f'{len(unique_instances)}'})
     logger.info(f'Total Unique Instances Filtered: {len(unique_instances)}')
 
     logger.info(f'Saving Unique Instances Into: {save_dirpath}')

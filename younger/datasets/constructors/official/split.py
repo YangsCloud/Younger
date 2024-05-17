@@ -10,9 +10,9 @@
 # LICENSE file in the root directory of this source tree.
 
 
-import ast
 import tqdm
 import numpy
+import random
 import pathlib
 import multiprocessing
 
@@ -41,10 +41,11 @@ def save_split(meta: dict[str, Any], instances: list[Instance], save_dirpath: pa
     meta_filepath = split_dirpath.joinpath('meta.json')
     create_dir(graph_dirpath)
 
-    logger.info(f'Saving \'{split}\' Split META {meta_filepath.absolute()} ... ')
+    logger.info(f'Saving \'{split}\' Split META {meta_filepath.absolute().relative_to(pathlib.Path.cwd())} ... ')
     save_json(meta, meta_filepath, indent=2)
+    logger.info(f'Saved.')
 
-    logger.info(f'Saving \'{split}\' Split {graph_dirpath.absolute()} ... ')
+    logger.info(f'Saving \'{split}\' Split {graph_dirpath.absolute().relative_to(pathlib.Path.cwd())} ... ')
     parameters = [
         (
             graph_dirpath.joinpath(f'sample-{i}.pkl'),
@@ -55,13 +56,39 @@ def save_split(meta: dict[str, Any], instances: list[Instance], save_dirpath: pa
         with tqdm.tqdm(total=len(parameters)) as progress_bar:
             for index, _ in enumerate(pool.imap_unordered(save_graph, parameters), start=1):
                 progress_bar.update(1)
+    logger.info(f'Saved.')
 
-    logger.info(f'Saving \'{split}\' Split Tar {archive_filepath.absolute()} ... ')
+    logger.info(f'Saving \'{split}\' Split Tar {archive_filepath.absolute().relative_to(pathlib.Path.cwd())} ... ')
     tar_archive(
         [graph_dirpath.joinpath(f'sample-{i}.pkl') for i, _ in enumerate(instances)],
         archive_filepath,
         compress=True
     )
+    logger.info(f'Saved.')
+
+
+def check_instance(instance: Instance) -> tuple[set[str], set[str]]:
+    instance_tasks: set[str] = set(instance.labels['tasks'])
+    instance_nodes: set[str] = set()
+    for node_index in instance.network.graph.nodes():
+        node_features = instance.network.graph.nodes[node_index]['features']
+        node_identifier = Network.standardized_node_identifier(node_features)
+        instance_nodes.add(node_identifier)
+    return instance_tasks, instance_nodes
+
+
+def extract_dict(split: list[Instance], worker_number: int) -> tuple[set[str], set[str]]:
+    all_tasks = set()
+    all_nodes = set()
+    with multiprocessing.Pool(worker_number) as pool:
+        with tqdm.tqdm(total=len(split), desc='Extracting') as progress_bar:
+            for index, result in enumerate(pool.imap_unordered(check_instance, split), start=1):
+                (instance_tasks, instance_nodes) = result
+                all_tasks.update(instance_tasks)
+                all_nodes.update(instance_nodes)
+                progress_bar.update(1)
+                progress_bar.set_postfix({f'Current Size [Task/Node]': f'{len(all_tasks)}/{len(all_nodes)}'})
+    return all_tasks, all_nodes
 
 
 def sample_by_partition(examples: list, partition_number: int, train_ratio: float, valid_ratio: float, test_ratio: float) -> tuple[list[int], list[int], list[int]]:
@@ -71,6 +98,11 @@ def sample_by_partition(examples: list, partition_number: int, train_ratio: floa
 
     partition_size = len(sorted_indices) // partition_number
     remainder_size = len(sorted_indices) %  partition_number
+
+    ratios = [train_ratio, valid_ratio, test_ratio]
+    splits = ['Train', 'Valid', 'Test']
+    if any(partition_size * ratio < 1 for ratio in ratios):
+        logger.warn(f'The number of partition is too large - {partition_number}. Please lower it or the split {splits[numpy.argmin(ratios)]} may be 0.')
 
     train_indices = list()
     valid_indices = list()
@@ -89,7 +121,7 @@ def sample_by_partition(examples: list, partition_number: int, train_ratio: floa
     return train_indices, valid_indices, test_indices
 
 
-def process_instance(parameter: tuple[pathlib.Path, set[str], str]) -> tuple[Instance, list[int], set[str], set[str]] | None:
+def select_instance(parameter: tuple[pathlib.Path, set[str], str]) -> tuple[Instance, tuple[int, int]] | None:
     path, tasks, metric_name = parameter
     instance = Instance()
     instance.load(path)
@@ -110,20 +142,9 @@ def process_instance(parameter: tuple[pathlib.Path, set[str], str]) -> tuple[Ins
     instance_metrics = eval_metrics.get(metric_name, list())
     instance.setup_labels(dict(downloads=instance_downloads, likes=instance_likes, tasks=instance_tasks, metrics=instance_metrics))
 
-    instance_size = instance.network.graph.number_of_nodes()
-
+    instance_size = (instance.network.graph.number_of_nodes(), instance.network.graph.number_of_edges())
     
     return instance, instance_size
-
-
-def generate_dict(instance: Instance) -> tuple[set[str], set[str]]:
-    instance_tasks: set[str] = set(instance.labels['tasks'])
-    instance_nodes: set[str] = set()
-    for node_index in instance.network.graph.nodes():
-        node_features = instance.network.graph.nodes[node_index]['features']
-        node_identifier = Network.standardized_node_identifier(node_features)
-        instance_nodes.add(node_identifier)
-    return instance_tasks, instance_nodes
 
 
 def main(
@@ -133,6 +154,7 @@ def main(
     train_proportion: int = 80, valid_proportion: int = 10, test_proportion: int = 10,
     partition_number: int = 10,
     worker_number: int = 4,
+    seed: int = 16861,
 ):
     # 0. Each graph of the dataset MUST be standardized graph
     # 1. Tasks File should be a *.json file, which contains an list of tasks (list[str]) (It can be an empty list)
@@ -140,86 +162,110 @@ def main(
     # For example:
     # WER maybe larger than 1 and Word Accuracy maybe smaller than 0 in ASR research area.
 
-    assert train_proportion + valid_proportion + test_proportion == 100
+    random.seed(seed)
+    numpy.random.seed(seed)
 
+    assert train_proportion + valid_proportion + test_proportion == 100
     total_proportion = train_proportion + valid_proportion + test_proportion
     train_ratio = train_proportion / total_proportion
     valid_ratio = valid_proportion / total_proportion
     test_ratio = test_proportion / total_proportion
+    logger.info(f'Split Ratio - Train/Valid/Test = {train_ratio:.2f} / {valid_ratio:.2f} / {test_ratio:.2f}')
 
     tasks: set[str] = set(load_json(tasks_filepath))
+    logger.info(f'Total Tasks = {len(tasks)}')
 
-
-    # Instance.labels - {tasks: [task_1, task_2]; metric_values: [value_1, value_2]; metric_name: metric_name}
-    logger.info(f'Checking Valid Instances ...')
+    # Instance.labels - {tasks: [task_1, task_2]; metric_values: [value_1, value_2]}
+    logger.info(f'Checking Existing Instances ...')
     instances = list()
     parameters = list()
     for path in dataset_dirpath.iterdir():
         parameters.append((path, tasks, metric_name))
     logger.info(f'Total Instances: {len(parameters)}')
 
+    logger.info(f'Selecting Instances (Metric Name = {metric_name}) ...')
     all_size = list()
     with multiprocessing.Pool(worker_number) as pool:
-        with tqdm.tqdm(total=len(parameters)) as progress_bar:
-            for index, result in enumerate(pool.imap_unordered(process_instance, parameters), start=1):
+        with tqdm.tqdm(total=len(parameters), desc='Selecting') as progress_bar:
+            for index, result in enumerate(pool.imap_unordered(select_instance, parameters), start=1):
                 if result:
                     (instance, instance_size) = result
                     instances.append(instance)
                     all_size.append(instance_size)
                 progress_bar.update(1)
+                progress_bar.set_postfix({f'Current Selected': f'{len(instances)}'})
 
-    logger.info(f'Total Valid Instances: {len(instances)}')
+    logger.info(f'Total Selected Instances: {len(instances)}')
+
+    node_nums = [node_num for node_num, edge_num in all_size]
+    edge_nums = [edge_num for node_num, edge_num in all_size]
+    logger.info(f'Node Num - Max/Min = {max(node_nums)} / {min(node_nums)}')
+    logger.info(f'Edge Num - Max/Min = {max(edge_nums)} / {min(edge_nums)}')
 
     train_indices, valid_indices, test_indices = sample_by_partition(all_size, partition_number, train_ratio, valid_ratio, test_ratio)
     train_split = [instances[train_index] for train_index in train_indices]
     valid_split = [instances[valid_index] for valid_index in valid_indices]
     test_split = [instances[test_index] for test_index in test_indices]
-
     logger.info(f'Split Finished - Train: {len(train_split)}; Valid: {len(valid_split)}; Test: {len(test_split)};')
 
-    all_tasks = set()
-    all_nodes = set()
-    with multiprocessing.Pool(worker_number) as pool:
-        with tqdm.tqdm(total=len(train_split)) as progress_bar:
-            for index, result in enumerate(pool.imap_unordered(generate_dict, train_split), start=1):
-                (instance_tasks, instance_nodes) = result
-                all_tasks.update(instance_tasks)
-                all_nodes.update(instance_nodes)
-                progress_bar.update(1)
-    logger.info(f'Details - Tasks: {len(all_tasks)}; Nodes: {len(all_nodes)};')
+    logger.info(f'Extract Dictionaries From Train Split: Task_Dict & Node_Dict')
+    train_task_dict, train_node_dict = extract_dict(train_split, worker_number)
+    logger.info(f'Extracted - Task_Dict: {len(train_task_dict)}; Node_Dict: {len(train_node_dict)};')
+
+    logger.info(f'Checking Unknown Tasks & Nodes In Valid & Test Splits.')
+    logger.info(f'Valid Split:')
+    valid_task_dict, valid_node_dict = extract_dict(valid_split, worker_number)
+    num_valid_unknown_tasks, num_valid_unknown_nodes = len(valid_task_dict - train_task_dict), len(valid_node_dict - train_node_dict)
+    logger.info(f'Test Split:')
+    test_task_dict, test_node_dict = extract_dict(test_split, worker_number)
+    num_test_unknown_tasks, num_test_unknown_nodes = len(test_task_dict - train_task_dict), len(test_node_dict - train_node_dict)
+    logger.info(f'Unknown [Tasks & Nodes]:')
+    logger.info(f' - Valid = [{num_valid_unknown_tasks} & {num_valid_unknown_nodes}]')
+    logger.info(f' - Test = [{num_test_unknown_tasks} & {num_test_unknown_nodes}]')
+    logger.info(f' - Valid Ratio = [{num_valid_unknown_tasks/len(valid_task_dict)*100:.2f}% & {num_valid_unknown_nodes/len(valid_node_dict)*100:.2f}%]')
+    logger.info(f' - Test Ratio = [{num_test_unknown_tasks/len(test_task_dict)*100:.2f}% & {num_test_unknown_nodes/len(test_node_dict)*100:.2f}%]')
 
     meta = dict(
         metric_name = metric_name,
-        all_tasks = list(all_tasks),
-        all_nodes = list(all_nodes),
+        all_tasks = list(train_task_dict),
+        all_nodes = list(train_node_dict),
     )
 
-    train_split_meta = dict(
-        split = f'train',
-        archive = f'train.tar.gz',
-        version = f'{version}',
-        size = len(train_split),
-        url = "",
-    )
-    train_split_meta.update(meta)
-    save_split(train_split_meta, train_split, save_dirpath, worker_number)
+    if len(train_split):
+        train_split_meta = dict(
+            split = f'train',
+            archive = f'train.tar.gz',
+            version = f'{version}',
+            size = len(train_split),
+            url = "",
+        )
+        train_split_meta.update(meta)
+        save_split(train_split_meta, train_split, save_dirpath, worker_number)
+    else:
+        logger.info(f'No Instances in Train Split')
 
-    valid_split_meta = dict(
-        split = f'valid',
-        archive = f'valid.tar.gz',
-        version = f'{version}',
-        size = len(valid_split),
-        url = "",
-    )
-    valid_split_meta.update(meta)
-    save_split(valid_split_meta, valid_split, save_dirpath, worker_number)
+    if len(valid_split):
+        valid_split_meta = dict(
+            split = f'valid',
+            archive = f'valid.tar.gz',
+            version = f'{version}',
+            size = len(valid_split),
+            url = "",
+        )
+        valid_split_meta.update(meta)
+        save_split(valid_split_meta, valid_split, save_dirpath, worker_number)
+    else:
+        logger.info(f'No Instances in Train Split')
 
-    test_split_meta = dict(
-        split = f'test',
-        archive = f'test.tar.gz',
-        version = f'{version}',
-        size = len(test_split),
-        url = "",
-    )
-    test_split_meta.update(meta)
-    save_split(test_split_meta, test_split, save_dirpath, worker_number)
+    if len(valid_split):
+        test_split_meta = dict(
+            split = f'test',
+            archive = f'test.tar.gz',
+            version = f'{version}',
+            size = len(test_split),
+            url = "",
+        )
+        test_split_meta.update(meta)
+        save_split(test_split_meta, test_split, save_dirpath, worker_number)
+    else:
+        logger.info(f'No Instances in Train Split')

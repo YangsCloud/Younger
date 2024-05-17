@@ -36,16 +36,6 @@ def retrieve_run(arguments):
     pass
 
 
-def statistics_run(arguments):
-    update_logger(arguments)
-    dataset_dirpath = pathlib.Path(arguments.dataset_dirpath)
-    save_dirpath = pathlib.Path(arguments.save_dirpath)
-
-    from younger.datasets.constructors.official import statistics
-
-    statistics.main(dataset_dirpath, save_dirpath, arguments.tasks, arguments.dataset_names, arguments.dataset_splits, arguments.metric_names, arguments.worker_number)
-
-
 def filter_run(arguments):
     update_logger(arguments)
     dataset_dirpath = pathlib.Path(arguments.dataset_dirpath)
@@ -74,8 +64,19 @@ def split_run(arguments):
         arguments.metric_name,
         arguments.train_proportion, arguments.valid_proportion, arguments.test_proportion,
         arguments.partition_number,
-        arguments.worker_number
+        arguments.worker_number,
+        arguments.seed
     )
+
+
+def statistics_run(arguments):
+    update_logger(arguments)
+    dataset_dirpath = pathlib.Path(arguments.dataset_dirpath)
+    save_dirpath = pathlib.Path(arguments.save_dirpath)
+
+    from younger.datasets.constructors.official import statistics
+
+    statistics.main(dataset_dirpath, save_dirpath, arguments.tasks, arguments.dataset_names, arguments.dataset_splits, arguments.metric_names, arguments.worker_number)
 
 
 def convert_huggingface_run(arguments):
@@ -258,6 +259,8 @@ def set_datasets_split_arguments(parser: argparse.ArgumentParser):
     parser.add_argument('--partition-number', type=int, default=10)
 
     parser.add_argument('--worker-number', type=int, default=4)
+
+    parser.add_argument('--seed', type=int, default=16861)
 
     parser.add_argument('--logging-filepath', type=str, default=None)
 
