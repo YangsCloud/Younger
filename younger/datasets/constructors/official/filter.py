@@ -18,7 +18,7 @@ import multiprocessing
 from younger.commons.logging import logger
 
 from younger.datasets.modules import Instance, Network
-from younger.datasets.utils.translation import get_all_attributes_of_operator
+from younger.datasets.utils.translation import get_complete_attributes_of_node, get_onnx_opset_version
 
 
 def update_unique_instance(unique_instance: Instance, purified_instance: Instance):
@@ -37,38 +37,16 @@ def update_unique_instance(unique_instance: Instance, purified_instance: Instanc
             unique_instance.labels['evaluations'].append([task, dataset_name, dataset_split, metric_name, metric_value])
 
 
-def complete_attributes_of_node(node_features: dict[str, dict[str, str | dict]], max_inclusive_version: int) -> dict[str, dict[str, str | tuple[int, str]]]:
-    operator: dict[str, str] = node_features['operator']
-    attributes: dict[str, dict] = node_features['attributes']
-    all_attributes = get_all_attributes_of_operator(operator['op_type'], max_inclusive_version, domain=operator['domain'])
-    if all_attributes is None:
-        all_attributes = dict()
-        for attribute_name, attribute_proto_dict in attributes.items():
-            all_attributes[attribute_name] = (attribute_proto_dict['attr_type'].value, str(attribute_proto_dict['value']))
-    else:
-        for attribute_name, attribute_proto_dict in attributes.items():
-            if attribute_name not in all_attributes:
-                continue
-
-            all_attributes[attribute_name] = (all_attributes[attribute_name][0], str(attribute_proto_dict['value']))
-
-    return dict(
-        operator = operator,
-        attributes = all_attributes
-    )
-
-
 def purify_instance(parameter: tuple[str, int]) -> Instance:
     path, max_inclusive_version = parameter
     instance = Instance()
-    try:
-        instance.load(path)
-    except:
-        return None
+    instance.load(path)
 
     standardized_graph = Network.standardize(instance.network.graph)
     for node_index in standardized_graph.nodes():
-        standardized_graph.nodes[node_index]['features'] = complete_attributes_of_node(standardized_graph.nodes[node_index]['features'], max_inclusive_version)
+        operator = standardized_graph.nodes[node_index]['features']['operator']
+        attributes = standardized_graph.nodes[node_index]['features']['attributes']
+        standardized_graph.nodes[node_index]['features']['attributes'] = get_complete_attributes_of_node(attributes, operator['op_type'], operator['domain'], max_inclusive_version)
 
     standardized_graph.graph.clear()
 
@@ -76,7 +54,13 @@ def purify_instance(parameter: tuple[str, int]) -> Instance:
     return instance
 
 
-def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, max_inclusive_version: int, worker_number: int = 4):
+def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, worker_number: int = 4, max_inclusive_version: int | None = None):
+    if max_inclusive_version:
+        logger.info(f'Using ONNX Max Inclusive Version: {max_inclusive_version}')
+    else:
+        max_inclusive_version = get_onnx_opset_version()
+        logger.info(f'Not Specified ONNX Max Inclusive Version. Using Latest Version: {max_inclusive_version}')
+
     logger.info(f'Scanning Dataset Directory Path: {dataset_dirpath}')
     parameters = list()
     for path in dataset_dirpath.iterdir():
@@ -87,7 +71,7 @@ def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, max_inclusiv
 
     unique_instances: dict[str, Instance] = dict()
     with multiprocessing.Pool(worker_number) as pool:
-        with tqdm.tqdm(total=len(parameters)) as progress_bar:
+        with tqdm.tqdm(total=len(parameters), desc="Filtering") as progress_bar:
             for index, purified_instance in enumerate(pool.imap_unordered(purify_instance, parameters), start=1):
                 if purified_instance is None:
                     continue
@@ -98,14 +82,10 @@ def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, max_inclusiv
                     unique_instance = purified_instance.copy()
                     unique_instance.clean_labels()
                     unique_instance.setup_labels(dict(model_sources=[], downloads=[], likes=[], tags=[], evaluations=[]))
-                try:
-                    update_unique_instance(unique_instance, purified_instance)
-                except:
-                    print(purified_instance.labels)
-                    continue
+                update_unique_instance(unique_instance, purified_instance)
                 unique_instances[graph_hash] = unique_instance
                 progress_bar.update(1)
-
+                progress_bar.set_postfix({f"Current Unique": f"{len(unique_instances)}"})
     logger.info(f'Total Unique Instances Filtered: {len(unique_instances)}')
 
     logger.info(f'Saving Unique Instances Into: {save_dirpath}')

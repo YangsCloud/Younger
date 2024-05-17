@@ -20,6 +20,28 @@ from onnx.shape_inference import infer_shapes
 from onnx.inliner import inline_local_functions
 
 
+def get_onnx_opset_version() -> int:
+    return onnx.defs.onnx_opset_version()
+
+
+def get_complete_attributes_of_node(attributes: dict[str, dict], op_type: str, domain: str, max_inclusive_version: int) -> dict[str, tuple[int, str]]:
+    all_attributes = get_all_attributes_of_operator(op_type, max_inclusive_version, domain=domain)
+    if all_attributes is None:
+        # It is not an ONNX Official Operator
+        # Just Copy
+        all_attributes = dict()
+        for attribute_name, attribute_proto_dict in attributes.items():
+            all_attributes[attribute_name] = (attribute_proto_dict['attr_type'], str(attribute_proto_dict['value']))
+    else:
+        for attribute_name, attribute_proto_dict in attributes.items():
+            if attribute_name not in all_attributes:
+                continue
+
+            all_attributes[attribute_name] = (all_attributes[attribute_name][0], str(attribute_proto_dict['value']))
+
+    return all_attributes
+
+
 def get_all_attributes_of_operator(op_type: str, max_inclusive_version: int, domain: str ='') -> dict[str, tuple[int, str]] | None:
     # All attributes have default value only contain types - {<AttrType.FLOAT: 1>, <AttrType.INT: 2>, <AttrType.STRING: 3>, <AttrType.INTS: 7>, <AttrType.STRINGS: 8>}
     # Thus, we only stringize/destringize all values with - (str(value)/ast.literal_eval(str(value)))

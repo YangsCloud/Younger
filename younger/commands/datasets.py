@@ -55,8 +55,8 @@ def filter_run(arguments):
 
     filter.main(
         dataset_dirpath, save_dirpath,
+        arguments.worker_number,
         arguments.max_inclusive_version,
-        arguments.worker_number
     )
 
 
@@ -231,26 +231,11 @@ def set_datasets_retrieve_arguments(parser: argparse.ArgumentParser):
     parser.set_defaults(run=retrieve_run)
 
 
-def set_datasets_statistics_arguments(parser: argparse.ArgumentParser):
-    parser.add_argument('--dataset-dirpath', type=str, required=True)
-    parser.add_argument('--save-dirpath', type=str, default='.')
-
-    parser.add_argument('--tasks', type=str, nargs='*', default=[])
-    parser.add_argument('--dataset-names', type=str, nargs='*', default=[])
-    parser.add_argument('--dataset-splits', type=str, nargs='*', default=[])
-    parser.add_argument('--metric-names', type=str, nargs='*', default=[])
-
-    parser.add_argument('--worker-number', type=int, default=4)
-
-    parser.add_argument('--logging-filepath', type=str, default=None)
-    parser.set_defaults(run=statistics_run)
-
-
 def set_datasets_filter_arguments(parser: argparse.ArgumentParser):
     parser.add_argument('--dataset-dirpath', type=str, required=True)
     parser.add_argument('--save-dirpath', type=str, default='.')
 
-    parser.add_argument('--max-inclusive-version', type=int, default=18)
+    parser.add_argument('--max-inclusive-version', type=int, default=None)
 
     parser.add_argument('--worker-number', type=int, default=4)
 
@@ -279,19 +264,34 @@ def set_datasets_split_arguments(parser: argparse.ArgumentParser):
     parser.set_defaults(run=split_run)
 
 
+def set_datasets_statistics_arguments(parser: argparse.ArgumentParser):
+    parser.add_argument('--dataset-dirpath', type=str, required=True)
+    parser.add_argument('--save-dirpath', type=str, default='.')
+
+    parser.add_argument('--tasks', type=str, nargs='*', default=[])
+    parser.add_argument('--dataset-names', type=str, nargs='*', default=[])
+    parser.add_argument('--dataset-splits', type=str, nargs='*', default=[])
+    parser.add_argument('--metric-names', type=str, nargs='*', default=[])
+
+    parser.add_argument('--worker-number', type=int, default=4)
+
+    parser.add_argument('--logging-filepath', type=str, default=None)
+    parser.set_defaults(run=statistics_run)
+
+
 def set_datasets_arguments(parser: argparse.ArgumentParser):
     subparser = parser.add_subparsers()
 
     convert_parser = subparser.add_parser('convert')
     retrieve_parser = subparser.add_parser('retrieve')
-    statistics_parser = subparser.add_parser('statistics')
     filter_parser = subparser.add_parser('filter')
     split_parser = subparser.add_parser('split')
+    statistics_parser = subparser.add_parser('statistics')
 
     set_datasets_convert_arguments(convert_parser)
     set_datasets_retrieve_arguments(retrieve_parser)
-    set_datasets_statistics_arguments(statistics_parser)
     set_datasets_filter_arguments(filter_parser)
     set_datasets_split_arguments(split_parser)
+    set_datasets_statistics_arguments(statistics_parser)
 
     parser.set_defaults(run=run)

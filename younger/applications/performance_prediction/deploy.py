@@ -21,7 +21,7 @@ from torch_geometric.data import Batch, Data
 from younger.commons.logging import logger
 
 from younger.datasets.modules import Instance, Network
-from younger.datasets.constructors.official.filter import complete_attributes_of_node
+from younger.datasets.utils.translation import get_complete_attributes_of_node
 
 from younger.applications.utils.neural_network import get_model_parameters_number, get_device_descriptor, load_checkpoint
 from younger.applications.performance_prediction.models import NAPPGATVaryV1
@@ -32,7 +32,7 @@ def main(
     meta_filepath: pathlib.Path,
     checkpoint_filepath: pathlib.Path,
     onnx_models_dirpath: pathlib.Path,
-    max_inclusive_version: int,
+    max_inclusive_version: int | None = None,
 
     node_dim: int = 512,
     task_dim: int = 512,
@@ -95,7 +95,9 @@ def main(
         instance = Instance(onnx_model_filepath)
         standardized_graph = Network.standardize(instance.network.graph)
         for node_index in standardized_graph.nodes():
-            standardized_graph[node_index]['features'] = complete_attributes_of_node(standardized_graph[node_index]['features'], max_inclusive_version)
+            operator = standardized_graph.nodes[node_index]['features']['operator']
+            attributes = standardized_graph.nodes[node_index]['features']['attributes']
+            standardized_graph.nodes[node_index]['features']['attributes'] = get_complete_attributes_of_node(attributes, operator['op_type'], operator['domain'], max_inclusive_version)
         standardized_graph.graph.clear()
         data = YoungerDataset.get_data(standardized_graph, meta, feature_get_type='none')
         datas.append(data)
