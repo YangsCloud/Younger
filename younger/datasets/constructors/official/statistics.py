@@ -10,8 +10,8 @@
 # LICENSE file in the root directory of this source tree.
 
 import math
+import tqdm
 import time
-import onnx
 import pathlib
 import datetime
 import networkx
@@ -97,14 +97,15 @@ def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, tasks: list[
     for combined_filter in combined_filters:
         statistics[str(combined_filter)] = list()
 
-    parameters_iterator = ((path, combined_filters, has_task_filters, has_dataset_name_filters, has_dataset_split_filters, has_metric_name_filters) for path in dataset_dirpath.iterdir() if path.is_dir())
+    parameters = [(path, combined_filters, has_task_filters, has_dataset_name_filters, has_dataset_split_filters, has_metric_name_filters) for path in dataset_dirpath.iterdir() if path.is_dir()]
     with multiprocessing.Pool(worker_number) as pool:
-        for index, (instance_statistics, instance_occurrence) in enumerate(pool.imap_unordered(statistics_instance, parameters_iterator), start=1):
-            for filter_type_key, filter_type_value in instance_occurrence.items():
-                occurrence[filter_type_key] = occurrence.get(filter_type_key, 0) + filter_type_value
-            for instance_statistics_key, instance_statistics_value in instance_statistics.items():
-                statistics[instance_statistics_key].extend(instance_statistics_value)
-            logger.info(f'Processed Total {index} instances')
+        with tqdm.tqdm(total=len(parameters), desc='Calculating Statistics') as progress_bar:
+            for index, (instance_statistics, instance_occurrence) in enumerate(pool.imap_unordered(statistics_instance, parameters), start=1):
+                for filter_type_key, filter_type_value in instance_occurrence.items():
+                    occurrence[filter_type_key] = occurrence.get(filter_type_key, 0) + filter_type_value
+                for instance_statistics_key, instance_statistics_value in instance_statistics.items():
+                    statistics[instance_statistics_key].extend(instance_statistics_value)
+                progress_bar.update(1)
 
     for instances_statistics in statistics.values():
         for instance_statistics in instances_statistics:
