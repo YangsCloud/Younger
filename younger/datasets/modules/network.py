@@ -10,6 +10,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import ast
 import onnx
 import pathlib
 import networkx
@@ -131,8 +132,30 @@ class Network(object):
             return tobe_saved
 
     @classmethod
-    def standardized_node_identifier(cls, node_features: dict[str, dict]) -> str:
-        return str(sorted([i for i in node_features['operator'].items()] + [i for i in node_features['attributes'].items()], key=lambda x: x[0]))
+    def get_node_identifier_from_features(cls, node_features: dict[str, dict]) -> str:
+        operator_id = str([['op_type', node_features['operator']['op_type']], ['domain', node_features['operator']['domain']]])
+        attributes_id = str(sorted([(attr_name, attr_type, attr_value) for attr_name, (attr_type, attr_value) in node_features['attributes'].items()]))
+        return operator_id + '-o-a-' + attributes_id
+
+    @classmethod
+    def get_node_features_from_identifier(cls, node_identifier: str) -> dict[str, dict]:
+        sub_ids = node_identifier.split('-o-a-')
+        assert len(sub_ids) == 2
+        operator_id, attributes_id = sub_ids
+
+        node_features: dict[str, dict] = dict()
+
+        node_features['operator'] = dict()
+        op_data = ast.literal_eval(str(operator_id))
+        node_features['operator']['op_type'] = op_data[0][1]
+        node_features['operator']['domain'] = op_data[1][1]
+
+        node_features['attributes'] = dict()
+        at_data = ast.literal_eval(str(attributes_id))
+        for attr_name, attr_type, attr_value in at_data:
+            node_features['attributes'][attr_name] = (attr_type, attr_value)
+
+        return node_features
 
     @classmethod
     def hash(cls, graph: networkx.DiGraph, node_attr: str | None = None, edge_attr: str | None = None, iterations: int = 6, digest_size: int = 16) -> str:

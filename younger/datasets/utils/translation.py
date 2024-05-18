@@ -20,6 +20,15 @@ from onnx.shape_inference import infer_shapes
 from onnx.inliner import inline_local_functions
 
 
+def get_operator_origin(op_type: str, domain: str) -> str:
+    try:
+        onnx.defs.get_schema(op_type, domain=domain)
+        origin = 'onnx'
+    except:
+        origin = domain or 'unknown'
+    return origin
+
+
 def get_onnx_opset_version() -> int:
     return onnx.defs.onnx_opset_version()
 
@@ -488,7 +497,7 @@ def trans_node_proto(node_proto: onnx.NodeProto, opset_import: dict[str, int], t
         schema = None
     except Exception as exception:
         print(f'Caught an exception: {exception}')
-        sys.exit(exception)
+        raise exception
 
     # The option of the schema inputs can be: 'Single,' 'Optional,' or 'Variadic.'
     # 'Optional':

@@ -51,7 +51,7 @@ def main():
 
     #try:
     arguments.run(arguments)
-    #except Exception as error:
+    #except Exception as exception:
     #    argument_parser.print_help()
 
 

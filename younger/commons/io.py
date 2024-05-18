@@ -25,9 +25,9 @@ from younger.commons.logging import logger
 def create_dir(dirpath: pathlib.Path) -> None:
     try:
         dirpath.mkdir(parents=True, exist_ok=True)
-    except Exception as e:
-        logger.error(f'An Error occurred while creating the directory: {str(e)}')
-        sys.exit(1)
+    except Exception as exception:
+        logger.error(f'An Error occurred while creating the directory: {str(exception)}')
+        raise exception
 
     return
 
@@ -73,9 +73,9 @@ def load_json(filepath: pathlib.Path) -> object:
     try:
         with open(filepath, 'r') as file:
             serializable_object = json.load(file)
-    except Exception as e:
-        logger.error(f'An Error occurred while reading serializable object from the \'json\' file: {str(e)}')
-        sys.exit(1)
+    except Exception as exception:
+        logger.error(f'An Error occurred while reading serializable object from the \'json\' file: {str(exception)}')
+        raise exception
 
     return serializable_object
 
@@ -85,9 +85,9 @@ def save_json(serializable_object: object, filepath: pathlib.Path, indent: int |
         create_dir(filepath.parent)
         with open(filepath, 'w') as file:
             json.dump(serializable_object, file, indent=indent)
-    except Exception as e:
-        logger.error(f'An Error occurred while writing serializable object into the \'json\' file: {str(e)}')
-        sys.exit(1)
+    except Exception as exception:
+        logger.error(f'An Error occurred while writing serializable object into the \'json\' file: {str(exception)}')
+        raise exception
 
     return
 
@@ -99,9 +99,9 @@ def load_pickle(filepath: pathlib.Path) -> object:
 
         assert hash_bytes(safety_data['main']) == safety_data['checksum']
         serializable_object = pickle.loads(safety_data['main'])
-    except Exception as e:
-        logger.error(f'An Error occurred while reading serializable object from the \'pickle\' file: {str(e)}')
-        sys.exit(1)
+    except Exception as exception:
+        logger.error(f'An Error occurred while reading serializable object from the \'pickle\' file: {str(exception)}')
+        raise exception
 
     return serializable_object
 
@@ -116,9 +116,9 @@ def save_pickle(serializable_object: object, filepath: pathlib.Path) -> None:
         )
         with open(filepath, 'wb') as file:
             pickle.dump(safety_data, file)
-    except Exception as e:
-        logger.error(f'An Error occurred while writing serializable object into the \'pickle\' file: {str(e)}')
-        sys.exit(1)
+    except Exception as exception:
+        logger.error(f'An Error occurred while writing serializable object into the \'pickle\' file: {str(exception)}')
+        raise exception
 
     return
 

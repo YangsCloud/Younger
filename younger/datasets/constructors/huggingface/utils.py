@@ -110,11 +110,11 @@ def get_huggingface_model_readmes(model_ids: list[str], ignore_errors: bool = Fa
     for model_id in model_ids:
         try:
             yield get_huggingface_model_readme(model_id, hf_file_system)
-        except Exception as error:
+        except Exception as exception:
             if ignore_errors:
                 continue
             else:
-                raise error
+                raise exception
 
 
 def get_huggingface_model_info(model_id: str, token: str | None = None) -> dict[str, Any]:
@@ -136,9 +136,9 @@ def get_huggingface_model_readme(model_id: str, hf_file_system: HfFileSystem) ->
         except UnicodeDecodeError as error:
             logger.error(f"REPO: {model_id}. Encoding Error - The Encoding [UTF-8] are Invalid. - Error: {error}")
             raise error
-        except Exception as error:
-            logger.error(f"REPO: {model_id}. Encounter An Error {error}.")
-            raise error
+        except Exception as exception:
+            logger.error(f"REPO: {model_id}. Encounter An Error {exception}.")
+            raise exception
     else:
         logger.info(f"REPO: {model_id}. No README.md, skip.")
         raise FileNotFoundError
@@ -173,9 +173,9 @@ def get_huggingface_model_card_data_from_readme(readme: str) -> ModelCardData:
     except ValueError as error:
         logger.error(f' !!! YAML ValueError !!! Format of YAML at the Begin of README File Maybe Wrong. Error: {error}')
         raise error
-    except Exception as error:
-        logger.error(f' !!! Unknow ModelCard Parse Error !!! Format of YAML at the Begin of README File Maybe Wrong. Error: {error}')
-        raise error
+    except Exception as exception:
+        logger.error(f' !!! Unknow ModelCard Parse Error !!! Format of YAML at the Begin of README File Maybe Wrong. Error: {exception}')
+        raise exception
 
 
 def check_huggingface_model_eval_results(model_id: str, hf_file_system: HfFileSystem) -> bool:
@@ -185,7 +185,7 @@ def check_huggingface_model_eval_results(model_id: str, hf_file_system: HfFileSy
             flag = True
         else:
             flag = False
-    except Exception as error:
+    except Exception as exception:
         flag = False
 
     return flag

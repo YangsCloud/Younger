@@ -110,9 +110,9 @@ def main(
             logger.info(f'     | From: {onnx_model_filepath}')
             logger.info(f'     └ Save: {instance_save_dirpath}')
             flag = 'success'
-        except Exception as error:
+        except Exception as exception:
             logger.info(f'     ┌ No.0 Error')
-            logger.error(f'    └ [ONNX -> NetworkX Error] OR [Instance Saving Error] - {error}')
+            logger.error(f'    └ [ONNX -> NetworkX Error] OR [Instance Saving Error] - {exception}')
             flag = 'fail'
         logger.info(f'   ^ Converted.')
         save_status(status_filepath, dict(model_name=model_id, flag=flag))

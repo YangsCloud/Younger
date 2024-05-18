@@ -62,6 +62,8 @@ def split_run(arguments):
         tasks_filepath, dataset_dirpath, save_dirpath,
         arguments.version,
         arguments.metric_name,
+        arguments.node_size_lbound, arguments.node_size_ubound,
+        arguments.edge_size_lbound, arguments.edge_size_ubound,
         arguments.train_proportion, arguments.valid_proportion, arguments.test_proportion,
         arguments.partition_number,
         arguments.worker_number,
@@ -251,6 +253,11 @@ def set_datasets_split_arguments(parser: argparse.ArgumentParser):
 
     parser.add_argument('--version', type=str, required=True)
     parser.add_argument('--metric-name', type=str, default=None)
+
+    parser.add_argument('--node-size-lbound', type=int, default=None)
+    parser.add_argument('--node-size-ubound', type=int, default=None)
+    parser.add_argument('--edge-size-lbound', type=int, default=None)
+    parser.add_argument('--edge-size-ubound', type=int, default=None)
 
     parser.add_argument('--train-proportion', type=int, default=80)
     parser.add_argument('--valid-proportion', type=int, default=10)

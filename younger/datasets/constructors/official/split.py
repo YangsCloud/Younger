@@ -12,7 +12,6 @@
 
 import tqdm
 import numpy
-import random
 import pathlib
 import multiprocessing
 
@@ -22,6 +21,7 @@ from younger.commons.io import load_json, save_json, save_pickle, create_dir, ta
 from younger.commons.logging import logger
 
 from younger.datasets.modules import Instance, Network
+from younger.datasets.utils.translation import get_operator_origin
 
 
 def save_graph(parameter: tuple[pathlib.Path, pathlib.Path, dict[str, Any]]):
@@ -53,7 +53,7 @@ def save_split(meta: dict[str, Any], instances: list[Instance], save_dirpath: pa
         ) for i, instance in enumerate(instances)
     ]
     with multiprocessing.Pool(worker_number) as pool:
-        with tqdm.tqdm(total=len(parameters)) as progress_bar:
+        with tqdm.tqdm(total=len(parameters), desc='Saving') as progress_bar:
             for index, _ in enumerate(pool.imap_unordered(save_graph, parameters), start=1):
                 progress_bar.update(1)
     logger.info(f'Saved.')
@@ -67,34 +67,52 @@ def save_split(meta: dict[str, Any], instances: list[Instance], save_dirpath: pa
     logger.info(f'Saved.')
 
 
-def check_instance(instance: Instance) -> tuple[set[str], set[str]]:
-    instance_tasks: set[str] = set(instance.labels['tasks'])
-    instance_nodes: set[str] = set()
+def update_dict_count(origin_dict: dict[str, int], other_dict: dict[str, int]) -> dict[str, int]:
+    for key, value in other_dict.items():
+        count = origin_dict.get(key, 0)
+        origin_dict[key] = count + value
+    
+    return origin_dict
+
+
+def check_instance(instance: Instance) -> tuple[dict[str, int], dict[str, int]]:
+    instance_tasks: dict[str, int] = {task: 1 for task in instance.labels['tasks']}
+    instance_nodes: dict[str, dict[str, int]] = dict()
+    instance_nodes['onnx'] = dict()
+    instance_nodes['others'] = dict()
     for node_index in instance.network.graph.nodes():
         node_features = instance.network.graph.nodes[node_index]['features']
-        node_identifier = Network.standardized_node_identifier(node_features)
-        instance_nodes.add(node_identifier)
+        node_identifier = Network.get_node_identifier_from_features(node_features)
+        node_origin = get_operator_origin(node_features['operator']['op_type'], domain=node_features['operator']['domain'])
+        if node_origin != 'onnx':
+            node_origin = 'others'
+
+        node_count = instance_nodes[node_origin].get(node_identifier, 0)
+        instance_nodes[node_origin][node_identifier] = node_count + 1
     return instance_tasks, instance_nodes
 
 
-def extract_dict(split: list[Instance], worker_number: int) -> tuple[set[str], set[str]]:
-    all_tasks = set()
-    all_nodes = set()
+def extract_dict(split: list[Instance], worker_number: int) -> tuple[dict[str, int], dict[str, int]]:
+    all_tasks: dict[str, int] = dict()
+    all_nodes: dict[str, dict[str, int]] = dict()
+    all_nodes['onnx'] = dict()
+    all_nodes['others'] = dict()
     with multiprocessing.Pool(worker_number) as pool:
         with tqdm.tqdm(total=len(split), desc='Extracting') as progress_bar:
             for index, result in enumerate(pool.imap_unordered(check_instance, split), start=1):
                 (instance_tasks, instance_nodes) = result
-                all_tasks.update(instance_tasks)
-                all_nodes.update(instance_nodes)
+                all_tasks = update_dict_count(all_tasks, instance_tasks)
+                all_nodes['onnx'] = update_dict_count(all_nodes['onnx'], instance_nodes['onnx'])
+                all_nodes['others'] = update_dict_count(all_nodes['others'], instance_nodes['others'])
                 progress_bar.update(1)
-                progress_bar.set_postfix({f'Current Size [Task/Node]': f'{len(all_tasks)}/{len(all_nodes)}'})
+                progress_bar.set_postfix({f'Current Size [Task / (ONNX Node - Others Node)]': f'{len(all_tasks)} / ({len(all_nodes["onnx"])} - {len(all_nodes["others"])})'})
     return all_tasks, all_nodes
 
 
 def sample_by_partition(examples: list, partition_number: int, train_ratio: float, valid_ratio: float, test_ratio: float) -> tuple[list[int], list[int], list[int]]:
     assert train_ratio + valid_ratio + test_ratio == 1
     # examples should be a sortable list
-    sorted_indices = sorted(range(len(examples)), key=lambda x: examples[x])
+    sorted_indices = sorted(range(len(examples)), key=lambda index: examples[index])
 
     partition_size = len(sorted_indices) // partition_number
     remainder_size = len(sorted_indices) %  partition_number
@@ -118,16 +136,18 @@ def sample_by_partition(examples: list, partition_number: int, train_ratio: floa
         valid_indices.extend(indices[test_num:])
         train_indices.extend(numpy.setdiff1d(partition, indices))
 
-    return train_indices, valid_indices, test_indices
+    return sorted(train_indices), sorted(valid_indices), sorted(test_indices)
 
 
 def select_instance(parameter: tuple[pathlib.Path, set[str], str]) -> tuple[Instance, tuple[int, int]] | None:
-    path, tasks, metric_name = parameter
+    path, tasks, metric_name, node_size_lbound, node_size_ubound, edge_size_lbound, edge_size_ubound = parameter
+
     instance = Instance()
     instance.load(path)
     instance_downloads = instance.labels['downloads']
     instance_likes = instance.labels['likes']
-    instance_tasks = set(instance.labels['tags']) if instance.labels['tags'] else set()
+    instance_tasks = set(instance.labels['tags'])
+
     eval_metrics: dict[str, list[float]] = dict()
     for eval_task, eval_dataset_name, eval_dataset_split, eval_metric_name, eval_metric_value in instance.labels['evaluations']:
         instance_tasks.add(eval_task)
@@ -135,15 +155,28 @@ def select_instance(parameter: tuple[pathlib.Path, set[str], str]) -> tuple[Inst
         eval_metric_values.append(float(eval_metric_value))
         eval_metrics[eval_metric_name] = eval_metric_values
 
+    instance_hash = instance.labels['hash']
+
     instance.clean_labels()
+
+    # Check Metric Name
     if metric_name and metric_name not in eval_metrics:
         return None
+
+    # Check Metric Name
+    instance_size = (instance.network.graph.number_of_nodes(), instance.network.graph.number_of_edges())
+    node_size_lbound = instance_size[0] if node_size_lbound is None else node_size_lbound
+    node_size_ubound = instance_size[0] if node_size_ubound is None else node_size_ubound
+
+    edge_size_lbound = instance_size[1] if edge_size_lbound is None else edge_size_lbound
+    edge_size_ubound = instance_size[1] if edge_size_ubound is None else edge_size_ubound
+    if instance_size[0] < node_size_lbound or node_size_ubound < instance_size[0] or instance_size[1] < edge_size_lbound or edge_size_ubound < instance_size[1]:
+        return None
+
     instance_tasks = list(instance_tasks & tasks)
     instance_metrics = eval_metrics.get(metric_name, list())
-    instance.setup_labels(dict(downloads=instance_downloads, likes=instance_likes, tasks=instance_tasks, metrics=instance_metrics))
+    instance.setup_labels(dict(downloads=instance_downloads, likes=instance_likes, tasks=instance_tasks, metrics=instance_metrics, hash=instance_hash))
 
-    instance_size = (instance.network.graph.number_of_nodes(), instance.network.graph.number_of_edges())
-    
     return instance, instance_size
 
 
@@ -151,6 +184,8 @@ def main(
     tasks_filepath: pathlib.Path, dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path,
     version: str,
     metric_name: str | None = None,
+    node_size_lbound: int | None = None, node_size_ubound: int | None = None,
+    edge_size_lbound: int | None = None, edge_size_ubound: int | None = None,
     train_proportion: int = 80, valid_proportion: int = 10, test_proportion: int = 10,
     partition_number: int = 10,
     worker_number: int = 4,
@@ -162,7 +197,6 @@ def main(
     # For example:
     # WER maybe larger than 1 and Word Accuracy maybe smaller than 0 in ASR research area.
 
-    random.seed(seed)
     numpy.random.seed(seed)
 
     assert train_proportion + valid_proportion + test_proportion == 100
@@ -177,13 +211,14 @@ def main(
 
     # Instance.labels - {tasks: [task_1, task_2]; metric_values: [value_1, value_2]}
     logger.info(f'Checking Existing Instances ...')
-    instances = list()
+    paths = sorted([path for path in dataset_dirpath.iterdir()])
     parameters = list()
-    for path in dataset_dirpath.iterdir():
-        parameters.append((path, tasks, metric_name))
+    for path in paths:
+        parameters.append((path, tasks, metric_name, node_size_lbound, node_size_ubound, edge_size_lbound, edge_size_ubound))
     logger.info(f'Total Instances: {len(parameters)}')
 
-    logger.info(f'Selecting Instances (Metric Name = {metric_name}) ...')
+    logger.info(f'Selecting Instances (Metric Name = {metric_name}; Node/Edge Size Bound = ({node_size_lbound}, {node_size_ubound})/({edge_size_lbound}, {edge_size_ubound}) ...')
+    instances = list()
     all_size = list()
     with multiprocessing.Pool(worker_number) as pool:
         with tqdm.tqdm(total=len(parameters), desc='Selecting') as progress_bar:
@@ -194,7 +229,9 @@ def main(
                     all_size.append(instance_size)
                 progress_bar.update(1)
                 progress_bar.set_postfix({f'Current Selected': f'{len(instances)}'})
-
+    sorted_indices = sorted(range(len(instances)), key=lambda index: instances[index].labels['hash'])
+    instances = [instances[index] for index in sorted_indices]
+    all_size = [all_size[index] for index in sorted_indices]
     logger.info(f'Total Selected Instances: {len(instances)}')
 
     node_nums = [node_num for node_num, edge_num in all_size]
@@ -207,28 +244,65 @@ def main(
     valid_split = [instances[valid_index] for valid_index in valid_indices]
     test_split = [instances[test_index] for test_index in test_indices]
     logger.info(f'Split Finished - Train: {len(train_split)}; Valid: {len(valid_split)}; Test: {len(test_split)};')
+    logger.info(f' - First 10 Train Index: {train_indices[:10]}')
+    logger.info(f' - First 10 Valid Index: {valid_indices[:10]}')
+    logger.info(f' - First 10 Test  Index: {test_indices[:10]}')
 
     logger.info(f'Extract Dictionaries From Train Split: Task_Dict & Node_Dict')
     train_task_dict, train_node_dict = extract_dict(train_split, worker_number)
-    logger.info(f'Extracted - Task_Dict: {len(train_task_dict)}; Node_Dict: {len(train_node_dict)};')
+
+    train_task_dict_keys = set(train_task_dict.keys())
+    train_node_dict_keys = set(train_node_dict['onnx'].keys()) | set(train_node_dict['others'].keys())
+    logger.info(f'Extracted - Task_Dict: {len(train_task_dict_keys)}; (ONNX Node_Dict/Others Node_Dict): ({len(train_node_dict["onnx"])}/{len(train_node_dict["others"])});')
 
     logger.info(f'Checking Unknown Tasks & Nodes In Valid & Test Splits.')
+
     logger.info(f'Valid Split:')
     valid_task_dict, valid_node_dict = extract_dict(valid_split, worker_number)
-    num_valid_unknown_tasks, num_valid_unknown_nodes = len(valid_task_dict - train_task_dict), len(valid_node_dict - train_node_dict)
+
+    valid_task_dict_keys = set(valid_task_dict.keys())
+    valid_node_dict_keys = set(valid_node_dict['onnx'].keys()) | set(valid_node_dict['others'].keys())
+
+    num_valid_unknown_tasks = len(valid_task_dict_keys - train_task_dict_keys)
+    num_valid_unknown_nodes = len(valid_node_dict_keys - train_node_dict_keys)
+
+    num_onnx_valid_unknown_nodes = len(set(valid_node_dict['onnx'].keys()) - set(train_node_dict['onnx'].keys()))
+    num_others_valid_unknown_nodes = len(set(valid_node_dict['others'].keys()) - set(train_node_dict['others'].keys()))
+
+    percent_tasks_valid = num_valid_unknown_tasks / len(valid_task_dict_keys) * 100
+    percent_nodes_valid = num_valid_unknown_nodes / len(valid_node_dict_keys) * 100
+    percent_onnx_nodes_valid = num_onnx_valid_unknown_nodes / len(valid_node_dict_keys) * 100
+    percent_others_nodes_valid = num_others_valid_unknown_nodes / len(valid_node_dict_keys) * 100
+
+    logger.info(f'Valid Unknown [Tasks & Nodes (ONNX/Others)]:')
+    logger.info(f' - Valid = [{num_valid_unknown_tasks} & {num_valid_unknown_nodes} ({num_onnx_valid_unknown_nodes}/{num_others_valid_unknown_nodes})]')
+    logger.info(f' - Valid Ratio = [{percent_tasks_valid:.2f}% & {percent_nodes_valid:.2f}% ({percent_onnx_nodes_valid:.2f}%/{percent_others_nodes_valid:.2f}%)]')
+
     logger.info(f'Test Split:')
     test_task_dict, test_node_dict = extract_dict(test_split, worker_number)
-    num_test_unknown_tasks, num_test_unknown_nodes = len(test_task_dict - train_task_dict), len(test_node_dict - train_node_dict)
-    logger.info(f'Unknown [Tasks & Nodes]:')
-    logger.info(f' - Valid = [{num_valid_unknown_tasks} & {num_valid_unknown_nodes}]')
-    logger.info(f' - Test = [{num_test_unknown_tasks} & {num_test_unknown_nodes}]')
-    logger.info(f' - Valid Ratio = [{num_valid_unknown_tasks/len(valid_task_dict)*100:.2f}% & {num_valid_unknown_nodes/len(valid_node_dict)*100:.2f}%]')
-    logger.info(f' - Test Ratio = [{num_test_unknown_tasks/len(test_task_dict)*100:.2f}% & {num_test_unknown_nodes/len(test_node_dict)*100:.2f}%]')
+
+    test_task_dict_keys = set(test_task_dict.keys())
+    test_node_dict_keys = set(test_node_dict['onnx'].keys()) | set(test_node_dict['others'].keys())
+
+    num_test_unknown_tasks = len(test_task_dict_keys - train_task_dict_keys)
+    num_test_unknown_nodes = len(test_node_dict_keys - train_node_dict_keys)
+
+    num_onnx_test_unknown_nodes = len(set(test_node_dict['onnx'].keys()) - set(train_node_dict['onnx'].keys()))
+    num_others_test_unknown_nodes = len(set(test_node_dict['others'].keys()) - set(train_node_dict['others'].keys()))
+
+    percent_tasks_test = num_test_unknown_tasks / len(test_task_dict_keys) * 100
+    percent_nodes_test = num_test_unknown_nodes / len(test_node_dict_keys) * 100
+    percent_onnx_nodes_test = num_onnx_test_unknown_nodes / len(test_node_dict_keys) * 100
+    percent_others_nodes_test = num_others_test_unknown_nodes / len(test_node_dict_keys) * 100
+
+    logger.info(f'Test Unknown [Tasks & Nodes (ONNX/Others)]:')
+    logger.info(f' - Test = [{num_test_unknown_tasks} & {num_test_unknown_nodes} ({num_onnx_test_unknown_nodes}/{num_others_test_unknown_nodes})]')
+    logger.info(f' - Test Ratio = [{percent_tasks_test:.2f}% & {percent_nodes_test:.2f}% ({percent_onnx_nodes_test:.2f}%/{percent_others_nodes_test:.2f}%)]')
 
     meta = dict(
         metric_name = metric_name,
-        all_tasks = list(train_task_dict),
-        all_nodes = list(train_node_dict),
+        all_tasks = train_task_dict,
+        all_nodes = train_node_dict,
     )
 
     if len(train_split):
@@ -255,7 +329,7 @@ def main(
         valid_split_meta.update(meta)
         save_split(valid_split_meta, valid_split, save_dirpath, worker_number)
     else:
-        logger.info(f'No Instances in Train Split')
+        logger.info(f'No Instances in Valid Split')
 
     if len(valid_split):
         test_split_meta = dict(
@@ -268,4 +342,4 @@ def main(
         test_split_meta.update(meta)
         save_split(test_split_meta, test_split, save_dirpath, worker_number)
     else:
-        logger.info(f'No Instances in Train Split')
+        logger.info(f'No Instances in Test Split')

@@ -50,8 +50,8 @@ def check_model(model_handler: onnx.ModelProto | pathlib.Path) -> bool:
     except onnx.checker.ValidationError as check_error:
         logger.warn(f'The ONNX Model is invalid: {check_error}')
         check_result = False
-    except Exception as error:
-        logger.error(f'An error occurred while checking the ONNX model: {error}')
+    except Exception as exception:
+        logger.error(f'An error occurred while checking the ONNX model: {exception}')
         sys.exit(1)
     return check_result
 

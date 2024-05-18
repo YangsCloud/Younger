@@ -294,8 +294,8 @@ def main(
             readme = get_huggingface_model_readme(model_id, hf_file_system)
             card_data = get_huggingface_model_card_data_from_readme(readme)
             annotations = get_heuristic_annotations(model_id, card_data)
-        except Exception as error:
-            logger.warn(f'   -> No Heuristic Annotations: {error}')
+        except Exception as exception:
+            logger.warn(f'   -> No Heuristic Annotations: {exception}')
 
         logger.info(f'   v Converting ONNX Model into NetworkX ...')
         for convert_index, onnx_model_filepath in enumerate(onnx_model_filepaths, start=1):
@@ -319,9 +319,9 @@ def main(
                 logger.info(f'     | From: {onnx_model_filepath}')
                 logger.info(f'     └ Save: {instance_save_dirpath}')
                 flag = 'success'
-            except Exception as error:
+            except Exception as exception:
                 logger.info(f'     ┌ No.{convert_index} Error')
-                logger.error(f'    └ [ONNX -> NetworkX Error] OR [Instance Saving Error] - {error}')
+                logger.error(f'    └ [ONNX -> NetworkX Error] OR [Instance Saving Error] - {exception}')
                 flag = 'fail'
         logger.info(f'   ^ Converted.')
         save_status(status_filepath, dict(model_name=model_id, flag=flag))

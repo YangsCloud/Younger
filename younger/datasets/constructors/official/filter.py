@@ -86,7 +86,7 @@ def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, worker_numbe
                 else:
                     unique_instance = purified_instance.copy()
                     unique_instance.clean_labels()
-                    unique_instance.setup_labels(dict(model_sources=[], downloads=[], likes=[], tags=[], evaluations=[]))
+                    unique_instance.setup_labels(dict(model_sources=[], downloads=[], likes=[], tags=[], evaluations=[], hash=graph_hash))
                 update_unique_instance(unique_instance, purified_instance)
                 unique_instances[graph_hash] = unique_instance
                 progress_bar.update(1)
@@ -94,7 +94,9 @@ def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, worker_numbe
     logger.info(f'Total Unique Instances Filtered: {len(unique_instances)}')
 
     logger.info(f'Saving Unique Instances Into: {save_dirpath}')
-    for graph_hash, unique_instance in unique_instances.items():
-        instance_save_dirpath = save_dirpath.joinpath(graph_hash)
-        unique_instance.save(instance_save_dirpath)
+    with tqdm.tqdm(total=len(unique_instances), desc='Saving') as progress_bar:
+        for graph_hash, unique_instance in unique_instances.items():
+            instance_save_dirpath = save_dirpath.joinpath(graph_hash)
+            unique_instance.save(instance_save_dirpath)
+            progress_bar.update(1)
     logger.info(f'Finished')

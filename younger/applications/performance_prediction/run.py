@@ -272,6 +272,9 @@ def train(
     mode: Literal['Supervised', 'Unsupervised'] = 'Unsupervised',
     feature_get_type: Literal['none', 'mean', 'rand'] = 'mean',
 
+    node_dict_size: int | None = None,
+    task_dict_size: int | None = None,
+
     node_dim: int = 512,
     task_dim: int = 512,
     hidden_dim: int = 512,

@@ -17,7 +17,7 @@ def check_semantic(version: str) -> bool:
     try:
         semantic_release.Version.parse(version)
         result = True
-    except Exception as error:
+    except Exception as exception:
         result = False
     return result
 

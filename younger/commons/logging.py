@@ -45,8 +45,8 @@ def naive_log(message: str, silence: bool = False):
 def get_logger(name: str) -> logging.Logger:
     try:
         logger = logger_dict[name]
-    except Exception as error:
-        naive_log(f'Logger: \'{name}\' Does Not Exist. Now Using Default Logger [Only Show On Console]. Warn: {error}')
+    except Exception as exception:
+        naive_log(f'Logger: \'{name}\' Does Not Exist. Now Using Default Logger [Only Show On Console]. Warn: {exception}')
         logger = set_logger(name, mode='console')
 
     return logger

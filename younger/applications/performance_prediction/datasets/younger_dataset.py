@@ -37,6 +37,8 @@ class YoungerDataset(Dataset):
         log: bool = True,
         force_reload: bool = False,
 
+        task_dict_size: int | None = None,
+        node_dict_size: int | None = None,
         feature_get_type: Literal['none', 'mean', 'rand'] = 'mean',
         worker_number: int = 4,
     ):
@@ -44,7 +46,10 @@ class YoungerDataset(Dataset):
 
         meta_filepath = os.path.join(root, 'meta.json')
         assert os.path.isfile(meta_filepath), f'Please Download The \'meta.json\' File Of A Specific Version Of The Younger Dataset From Official Website.'
+
         self.meta = self.__class__.load_meta(meta_filepath)
+        self.x_dict = self.__class__.get_x_dict(self.meta, task_dict_size)
+        self.y_dict = self.__class__.get_y_dict(self.meta, node_dict_size)
 
         self.feature_get_type = feature_get_type
 
@@ -107,19 +112,42 @@ class YoungerDataset(Dataset):
         meta: dict[str, Any] = dict()
 
         meta['metric_name'] = loaded_meta['metric_name']
-        meta['version'] = loaded_meta['version']
+        meta['all_tasks'] = loaded_meta['all_tasks']
+        meta['all_ndoes'] = loaded_meta['all_nodes']
+
+        meta['split'] = loaded_meta['split']
         meta['archive'] = loaded_meta['archive']
+        meta['version'] = loaded_meta['version']
         meta['size'] = loaded_meta['size']
         meta['url'] = loaded_meta['url']
 
-        meta['i2t'] = loaded_meta['all_tasks'] + ['__UNK__']
-        meta['i2n'] = loaded_meta['all_nodes'] + ['__UNK__']
-
-
-        meta['t2i'] = {task: index for index, task in enumerate(meta['i2t'])}
-        meta['n2i'] = {node: index for index, node in enumerate(meta['i2n'])}
-
         return meta
+
+    @classmethod
+    def get_x_dict(meta: dict[str, Any], node_dict_size: int | None = None) -> dict[str, list[str] | dict[str, int]]:
+        all_nodes = [(node_id, node_count) for node_id, node_count in meta['all_nodes']['onnx'].items()] + [(node_id, node_count) for node_id, node_count in meta['all_nodes']['others'].items()]
+        all_nodes = sorted(all_nodes, key=lambda x: x[1])
+
+        node_dict_size = len(all_nodes) if node_dict_size is None else node_dict_size
+
+        x_dict = dict()
+        x_dict['i2n'] = ['__UNK__'] + [node_id for node_id, node_count in all_nodes[:node_dict_size]]
+
+        x_dict['n2i'] = {node_id: index for index, node_id in enumerate(x_dict['i2n'])}
+        return x_dict
+
+    @classmethod
+    def get_y_dict(meta: dict[str, Any], task_dict_size: int | None = None) -> dict[str, list[str] | dict[str, int]]:
+        all_tasks = [(task_id, task_count) for task_id, task_count in meta['all_tasks'].items()]
+        all_tasks = sorted(all_tasks, key=lambda x: x[1])
+
+        task_dict_size = len(all_tasks) if task_dict_size is None else task_dict_size
+
+        y_dict = dict()
+        y_dict['i2t'] = ['__UNK__'] + [task_id for task_id, task_count in all_tasks[:task_dict_size]]
+
+        y_dict['t2i'] = {task_id: index for index, task_id in enumerate(y_dict['i2t'])}
+        return y_dict
 
     @classmethod
     def get_edge_index(cls, sample: networkx.DiGraph) -> torch.Tensor:
@@ -131,24 +159,24 @@ class YoungerDataset(Dataset):
         return edge_index
 
     @classmethod
-    def get_node_feature(cls, node_features: dict, meta: dict[str, Any]) -> list:
-        node_identifier: str = Network.standardized_node_identifier(node_features)
+    def get_node_feature(cls, node_features: dict, x_dict: dict[str, Any]) -> list:
+        node_identifier: str = Network.get_node_identifier_from_features(node_features)
         node_feature = list()
-        node_feature.append(meta['n2i'].get(node_identifier, meta['n2i']['__UNK__']))
+        node_feature.append(x_dict['n2i'].get(node_identifier, x_dict['n2i']['__UNK__']))
         return node_feature
 
     @classmethod
-    def get_x(cls, sample: networkx.DiGraph, meta: dict[str, Any]) -> torch.Tensor:
+    def get_x(cls, sample: networkx.DiGraph, x_dict: dict[str, Any]) -> torch.Tensor:
         node_indices = list(sample.nodes)
         node_features = list()
         for node_index in node_indices:
-            node_feature = cls.get_node_feature(sample.nodes[node_index]['features'], meta)
+            node_feature = cls.get_node_feature(sample.nodes[node_index]['features'], x_dict)
             node_features.append(node_feature)
         node_features = torch.tensor(node_features, dtype=torch.long)
         return node_features
 
     @classmethod
-    def get_graph_feature(cls, graph_labels: dict, meta: dict[str, Any], feature_get_type: Literal['none', 'mean', 'rand']) -> list:
+    def get_graph_feature(cls, graph_labels: dict, y_dict: dict[str, list[str] | dict[str, int]], feature_get_type: Literal['none', 'mean', 'rand']) -> list:
 
         if feature_get_type == 'none':
             graph_feature = None
@@ -160,7 +188,7 @@ class YoungerDataset(Dataset):
 
             graph_feature = list()
             task = tasks[numpy.random.randint(len(tasks))] if len(tasks) else None
-            graph_feature.append(meta['t2i'].get(task, meta['n2i']['__UNK__']))
+            graph_feature.append(y_dict['t2i'].get(task, y_dict['t2i']['__UNK__']))
 
             if feature_get_type == 'mean':
                 graph_feature.append(numpy.mean(metrics))
@@ -171,8 +199,8 @@ class YoungerDataset(Dataset):
         return graph_feature
 
     @classmethod
-    def get_y(cls, sample: networkx.DiGraph, meta: dict[str, Any], feature_get_type: Literal['none', 'mean', 'rand']) -> torch.Tensor:
-        graph_feature = cls.get_graph_feature(sample.graph, meta, feature_get_type)
+    def get_y(cls, sample: networkx.DiGraph, y_dict: dict[str, Any], feature_get_type: Literal['none', 'mean', 'rand']) -> torch.Tensor:
+        graph_feature = cls.get_graph_feature(sample.graph, y_dict, feature_get_type)
         if graph_feature is None:
             graph_feature = None
         else:
@@ -180,10 +208,15 @@ class YoungerDataset(Dataset):
         return graph_feature
 
     @classmethod
-    def get_data(cls, sample, meta: dict[str, Any], feature_get_type: Literal['none', 'mean', 'rand']) -> Data:
-        x = cls.get_x(sample, meta)
+    def get_data(
+        cls,
+        sample,
+        x_dict: dict[str, Any], y_dict: dict[str, Any],
+        feature_get_type: Literal['none', 'mean', 'rand']
+    ) -> Data:
+        x = cls.get_x(sample, x_dict)
         edge_index = cls.get_edge_index(sample)
-        y = cls.get_y(sample, meta, feature_get_type)
+        y = cls.get_y(sample, y_dict, feature_get_type)
 
         data = Data(x=x, edge_index=edge_index, y=y)
         return data
