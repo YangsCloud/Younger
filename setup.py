@@ -61,11 +61,17 @@ REQUIRED = [
 
 # Optional
 DATASET_ONNX_EXTRAS = set(['onnx'])
+
 DATASET_TORCHVISION_EXTRAS = set(['onnx', 'torch', 'torchvision'])
+
 DATASET_HUGGINGFACE_OPTIMUM_EXTRAS = set(['onnx', 'isocodes', 'huggingface-hub', 'optimum[exporters]'])
 DATASET_HUGGINGFACE_ONNX_EXTRAS = set(['onnx', 'isocodes', 'huggingface-hub'])
 DATASET_HUGGINGFACE_KERAS_EXTRAS = set(['onnx', 'isocodes', 'huggingface-hub', 'tensorflow>=2.9,<=2.15', 'tf2onnx'])
 DATASET_HUGGINGFACE_TFLITE_EXTRAS = set(['onnx', 'isocodes', 'huggingface-hub', 'tensorflow>=2.9,<=2.15', 'tf2onnx'])
+
+DATASET_OFFICIAL_EXTRAS = set(['onnx'])
+
+# Optional 2
 BENCHMARK_EXTRAS = set([])
 APPLICATION_EXTRAS = set(['pytorch-geometric'])
 
@@ -76,6 +82,7 @@ EXTRAS = {
     'dataset-huggingface-onnx': DATASET_HUGGINGFACE_ONNX_EXTRAS,
     'dataset-huggingface-keras': DATASET_HUGGINGFACE_KERAS_EXTRAS,
     'dataset-huggingface-tflite': DATASET_HUGGINGFACE_TFLITE_EXTRAS,
+    'dataset-official': DATASET_OFFICIAL_EXTRAS,
     'benchmark': BENCHMARK_EXTRAS,
     'application': APPLICATION_EXTRAS,
 }
