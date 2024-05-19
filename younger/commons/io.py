@@ -10,7 +10,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
-import sys
 import json
 import pickle
 import psutil
@@ -22,7 +21,30 @@ from younger.commons.hash import hash_bytes
 from younger.commons.logging import logger
 
 
-def create_dir(dirpath: pathlib.Path) -> None:
+def get_system_depend_path(path: pathlib.Path | str) -> pathlib.Path:
+    assert isinstance(path, pathlib.Path) or isinstance(path, str), f'Only Support \'pathlib.Path\' or \'str\'.'
+    if isinstance(path, pathlib.Path):
+        path = path
+    if isinstance(path, str):
+        path = pathlib.Path(path)
+    return path
+
+
+def get_system_depend_paths(paths: list[pathlib.Path | str]) -> list[pathlib.Path]:
+    assert isinstance(paths, list), f'Only Accept A List of Paths'
+    assert all(isinstance(path, pathlib.Path) or isinstance(path, str) for path in paths), f'Only Support \'pathlib.Path\' or \'str\'.'
+    system_depend_paths: list[pathlib.Path] = list()
+    for path in paths:
+        if isinstance(path, pathlib.Path):
+            system_depend_paths.append(path)
+
+        if isinstance(path, str):
+            system_depend_paths.append(pathlib.Path(path))
+    return paths
+
+
+def create_dir(dirpath: pathlib.Path | str) -> None:
+    dirpath = get_system_depend_path(dirpath)
     try:
         dirpath.mkdir(parents=True, exist_ok=True)
     except Exception as exception:
@@ -32,7 +54,8 @@ def create_dir(dirpath: pathlib.Path) -> None:
     return
 
 
-def delete_dir(dirpath: pathlib.Path, only_clean: bool = False):
+def delete_dir(dirpath: pathlib.Path | str, only_clean: bool = False):
+    dirpath = get_system_depend_paths(dirpath)
     for filepath in dirpath.iterdir():
         if filepath.is_dir():
             shutil.rmtree(filepath)
@@ -43,7 +66,9 @@ def delete_dir(dirpath: pathlib.Path, only_clean: bool = False):
         os.rmdir(dirpath)
 
 
-def tar_archive(ri: pathlib.Path | list[pathlib.Path], archive_filepath: pathlib.Path, compress: bool = True):
+def tar_archive(ri: pathlib.Path | str | list[pathlib.Path | str], archive_filepath: pathlib.Path, compress: bool = True):
+    ri = get_system_depend_paths(ri) if isinstance(ri, list) else get_system_depend_path(ri)
+    archive_filepath = get_system_depend_path(archive_filepath)
     # ri - read in
     if compress:
         mode = 'w:gz'
@@ -58,7 +83,9 @@ def tar_archive(ri: pathlib.Path | list[pathlib.Path], archive_filepath: pathlib
             tar.add(ri, arcname=os.path.basename(ri))
 
 
-def tar_extract(archive_filepath: pathlib.Path, wo: pathlib.Path, compress: bool = True):
+def tar_extract(archive_filepath: pathlib.Path | str, wo: pathlib.Path | str, compress: bool = True):
+    archive_filepath = get_system_depend_path(archive_filepath)
+    wo = get_system_depend_path(wo)
     # wo - write out
     if compress:
         mode = 'r:gz'
@@ -69,7 +96,8 @@ def tar_extract(archive_filepath: pathlib.Path, wo: pathlib.Path, compress: bool
         tar.extractall(wo)
 
 
-def load_json(filepath: pathlib.Path) -> object:
+def load_json(filepath: pathlib.Path | str) -> object:
+    filepath = get_system_depend_path(filepath)
     try:
         with open(filepath, 'r') as file:
             serializable_object = json.load(file)
@@ -80,7 +108,8 @@ def load_json(filepath: pathlib.Path) -> object:
     return serializable_object
 
 
-def save_json(serializable_object: object, filepath: pathlib.Path, indent: int | str | None = None) -> None:
+def save_json(serializable_object: object, filepath: pathlib.Path | str, indent: int | str | None = None) -> None:
+    filepath = get_system_depend_path(filepath)
     try:
         create_dir(filepath.parent)
         with open(filepath, 'w') as file:
@@ -92,7 +121,8 @@ def save_json(serializable_object: object, filepath: pathlib.Path, indent: int |
     return
 
 
-def load_pickle(filepath: pathlib.Path) -> object:
+def load_pickle(filepath: pathlib.Path | str) -> object:
+    filepath = get_system_depend_path(filepath)
     try:
         with open(filepath, 'rb') as file:
             safety_data = pickle.load(file)
@@ -106,7 +136,8 @@ def load_pickle(filepath: pathlib.Path) -> object:
     return serializable_object
 
 
-def save_pickle(serializable_object: object, filepath: pathlib.Path) -> None:
+def save_pickle(serializable_object: object, filepath: pathlib.Path | str) -> None:
+    filepath = get_system_depend_path(filepath)
     try:
         create_dir(filepath.parent)
         serialized_object = pickle.dumps(serializable_object)
@@ -123,23 +154,27 @@ def save_pickle(serializable_object: object, filepath: pathlib.Path) -> None:
     return
 
 
-def get_disk_free_size(path: pathlib.Path) -> int:
+def get_disk_free_size(path: pathlib.Path | str) -> int:
+    path = get_system_depend_path(path)
     disk_usage = psutil.disk_usage(path)
     return disk_usage.free
 
 
-def get_path_size(path: pathlib.Path) -> int:
+def get_path_size(path: pathlib.Path | str) -> int:
+    path = get_system_depend_path(path)
     if path.is_file():
         return get_file_size(path)
     else:
         return get_dir_size(path)
 
 
-def get_file_size(filepath: pathlib.Path) -> int:
+def get_file_size(filepath: pathlib.Path | str) -> int:
+    filepath = get_system_depend_path(filepath)
     return os.path.getsize(filepath)
 
 
-def get_dir_size(dirpath: pathlib.Path) -> int:
+def get_dir_size(dirpath: pathlib.Path | str) -> int:
+    filepath = get_system_depend_path(filepath)
     total_size = 0
     for root, _, files in os.walk(dirpath):
         for file in files:

@@ -56,11 +56,13 @@ def set_logger(
     name: str,
     mode: Literal['both', 'file', 'console'] = 'both',
     level: Literal['INFO', 'WARN', 'ERROR', 'DEBUG', 'FATAL', 'NOTSET'] = 'INFO',
-    logging_filepath: pathlib.Path | None = None,
+    logging_filepath: pathlib.Path | str | None = None,
     show_setting_log: bool = True
 ):
     assert mode in {'both', 'file', 'console'}, f'Not Support The Logging Mode - \'{mode}\'.'
     assert level in {'INFO', 'WARN', 'ERROR', 'DEBUG', 'FATAL', 'NOTSET'}, f'Not Support The Logging Level - \'{level}\'.'
+
+    logging_filepath = pathlib.Path(logging_filepath) if isinstance(logging_filepath, str) else logging_filepath
 
     logging_formatter = logging.Formatter("[%(asctime)s %(levelname)s] %(message)s")
     logger = logging.getLogger(name)

@@ -14,7 +14,8 @@ import pathlib
 import hashlib
 
 
-def hash_file(filepath: pathlib.Path, block_size: int = 8192, hash_algorithm: str = "SHA256") -> str:
+def hash_file(filepath: pathlib.Path | str, block_size: int = 8192, hash_algorithm: str = "SHA256") -> str:
+    filepath = pathlib.Path(filepath) if isinstance(filepath, str) else filepath
     hasher = hashlib.new(hash_algorithm)
     with open(filepath, 'rb') as file:
         while True:
