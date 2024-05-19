@@ -172,7 +172,7 @@ def select_instance(parameter: tuple[pathlib.Path, set[str], str]) -> tuple[Inst
     edge_size_ubound = instance_size[1] if edge_size_ubound is None else edge_size_ubound
     if instance_size[0] < node_size_lbound or node_size_ubound < instance_size[0] or instance_size[1] < edge_size_lbound or edge_size_ubound < instance_size[1]:
         return None
-
+    
     instance_tasks = list(instance_tasks & tasks)
     instance_metrics = eval_metrics.get(metric_name, list())
     instance.setup_labels(dict(downloads=instance_downloads, likes=instance_likes, tasks=instance_tasks, metrics=instance_metrics, hash=instance_hash))
