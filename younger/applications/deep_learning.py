@@ -43,7 +43,7 @@ def exact_eval(
     device_descriptor: torch.device,
     split: Literal['Valid', 'Test'],
 ):
-    task.logger.info(f'  -> {split} Begin ...')
+    task.logger.info(f'-> {split} Begin ...')
     all_outputs = list()
     all_goldens = list()
     tic = time.time()
@@ -57,7 +57,7 @@ def exact_eval(
     toc = time.time()
 
     logs = task.eval_calculate_logs(all_outputs, all_goldens)
-    task.logger.info(f'  -> {split} Finished. Overall Result - {get_logging_metrics_str(logs)} (Time Cost = {toc-tic:.2f}s)')
+    task.logger.info(f'-> {split} Finished. Overall Result -{get_logging_metrics_str(logs)} (Time Cost = {toc-tic:.2f}s)')
 
 
 def exact_train(
@@ -84,11 +84,14 @@ def exact_train(
     task: YoungerTask = task_builders[task_name](custom_config)
     task.logger.info(f'Configuration Loaded From {config_filepath}')
 
+    device_descriptor = get_device_descriptor(device, rank)
+    task.model.to(device_descriptor)
+    task.logger.info(f'Model Moved to Device \'{device_descriptor}\'')
+
     is_master = rank == master_rank
     fix_random_procedure(seed)
     set_deterministic(make_deterministic)
     torch.autograd.set_detect_anomaly(True)
-    device_descriptor = get_device_descriptor(device, rank)
 
     if is_master:
         task.logger.disabled = False
@@ -128,8 +131,6 @@ def exact_train(
     )
 
     # Model
-    task.model.to(device_descriptor)
-    task.logger.info(f'  Model Moved to Device \'{device_descriptor}\'')
     if distribution_flag:
         distributed.init_process_group('nccl', rank=rank, world_size=world_size)
         task.model = torch.nn.parallel.DistributedDataParallel(task.model, device_ids=[rank], find_unused_parameters=False)
@@ -149,32 +150,32 @@ def exact_train(
         checkpoint = None
 
     if checkpoint is None:
-        task.logger.info(f'  Train from scratch.')
+        task.logger.info(f'Train from scratch.')
         start_position = 0
     else:
-        task.logger.info(f'  Train from checkpoint [\'{checkpoint_filepath}\'] [Epoch/Step]@[{checkpoint["Epoch"]}/{checkpoint["Step"]}].')
+        task.logger.info(f'Train from checkpoint [\'{checkpoint_filepath}\'] [Epoch/Step]@[{checkpoint["Epoch"]}/{checkpoint["Step"]}].')
 
         if reset_optimizer:
-            task.logger.info(f'  Reset Optimizer.')
+            task.logger.info(f'Reset Optimizer.')
         else:
             task.optimizer.load_state_dict(checkpoint['optimizer_state'])
 
-        task.logger.info(f'  v Loading Parameters ...')
+        task.logger.info(f'v Loading Parameters ...')
         task.model.load_state_dict(checkpoint['model_state'])
-        task.logger.info(f'  ^ Loaded.')
+        task.logger.info(f'^ Loaded.')
 
         if reset_period:
-            task.logger.info(f'  Reset Epoch & Step.')
+            task.logger.info(f'Reset Epoch & Step.')
             start_position = 0
         else:
             start_position = checkpoint['Step']
 
-    task.logger.info(f'  -> Training Start ...')
-    task.logger.info(f'    Train Life Cycle: Total {life_cycle} Epochs!')
-    task.logger.info(f'    Update every {update_period} Step;')
-    task.logger.info(f'    Report every {report_period} Step;')
-    task.logger.info(f'    Validate every {valid_period} Step;')
-    task.logger.info(f'    Saving checkpoint every {train_period} Step.')
+    task.logger.info(f'-> Training Start ...')
+    task.logger.info(f'  Train Life Cycle: Total {life_cycle} Epochs!')
+    task.logger.info(f'  Update every {update_period} Step;')
+    task.logger.info(f'  Report every {report_period} Step;')
+    task.logger.info(f'  Validate every {valid_period} Step;')
+    task.logger.info(f'  Saving checkpoint every {train_period} Step.')
 
     task.model.train()
     task.optimizer.zero_grad()
@@ -212,7 +213,7 @@ def exact_train(
 
             # Save Model Parameters
             if step % train_period == 0 and is_master:
-                task.logger.info('  -> Saving checkpoint ...')
+                task.logger.info('-> Saving checkpoint ...')
                 tic = time.time()
                 checkpoint = dict()
                 checkpoint['Epoch'] = epoch
@@ -221,7 +222,7 @@ def exact_train(
                 checkpoint['optimizer_state'] = task.optimizer.state_dict()
                 save_checkpoint(checkpoint, checkpoint_path=checkpoint_dirpath, checkpoint_name=checkpoint_name, keep_number=keep_number)
                 toc = time.time()
-                task.logger.info(f'  -> Checkpoint is saved to \'{checkpoint_dirpath}\' at [Epoch/Step][{epoch}/{step}] (Time Cost: {toc-tic:.2f}s)')        
+                task.logger.info(f'-> Checkpoint is saved to \'{checkpoint_dirpath}\' at [Epoch/Step][{epoch}/{step}] (Time Cost: {toc-tic:.2f}s)')        
 
             # Do Validation
             if step % valid_period == 0:
@@ -240,7 +241,7 @@ def exact_train(
                 task.model.train()
 
         toc = time.time()
-        task.logger.info(f'  <=> Epoch@{epoch} Finished. Time Cost = {toc-tic:.2f}s')
+        task.logger.info(f'-> Epoch@{epoch} Finished. Time Cost = {toc-tic:.2f}s')
 
     if distribution_flag:
         distributed.destroy_process_group()
@@ -355,14 +356,14 @@ def test(
         f'\n{parameters_number_str}'
     )
 
-    task.logger.info(f'  v Loading Model Weights From Checkpoint [\'{checkpoint_filepath}\']...')
+    task.logger.info(f'v Loading Model Weights From Checkpoint [\'{checkpoint_filepath}\']...')
     checkpoint = load_checkpoint(checkpoint_filepath)
     task.model.load_state_dict(checkpoint['model_state'], strict=True)
-    task.logger.info(f'  ^ Loaded ')
+    task.logger.info(f'^ Loaded ')
 
-    task.logger.info(f'  v Moving model to the specified device ...')
+    task.logger.info(f'v Moving model to the specified device ...')
     task.model.to(device_descriptor)
-    task.logger.info(f'  ^ Moved.')
+    task.logger.info(f'^ Moved.')
 
     test_dataloader = DataLoader(task.test_dataset, batch_size=test_batch_size, shuffle=False)
     exact_eval(
