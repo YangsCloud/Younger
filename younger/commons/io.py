@@ -10,6 +10,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
+import toml
 import json
 import pickle
 import psutil
@@ -149,6 +150,31 @@ def save_pickle(serializable_object: object, filepath: pathlib.Path | str) -> No
             pickle.dump(safety_data, file)
     except Exception as exception:
         logger.error(f'An Error occurred while writing serializable object into the \'pickle\' file: {str(exception)}')
+        raise exception
+
+    return
+
+
+def load_toml(filepath: pathlib.Path | str) -> dict:
+    filepath = get_system_depend_path(filepath)
+    try:
+        with open(filepath, 'r') as file:
+            config = toml.load(file)
+    except Exception as exception:
+        logger.error(f'An Error occurred while reading serializable object from the \'json\' file: {str(exception)}')
+        raise exception
+
+    return config
+
+
+def save_toml(config: dict, filepath: pathlib.Path | str) -> None:
+    filepath = get_system_depend_path(filepath)
+    try:
+        create_dir(filepath.parent)
+        with open(filepath, 'w') as file:
+            json.dump(config, file)
+    except Exception as exception:
+        logger.error(f'An Error occurred while writing serializable object into the \'json\' file: {str(exception)}')
         raise exception
 
     return

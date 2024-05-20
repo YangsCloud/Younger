@@ -16,6 +16,7 @@ import pathlib
 import logging
 
 from typing import Literal
+from logging import Logger
 
 from younger.commons.constants import YoungerHandle
 

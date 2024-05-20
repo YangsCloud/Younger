@@ -10,4 +10,4 @@
 # LICENSE file in the root directory of this source tree.
 
 
-from younger.applications.performance_prediction.datasets.younger_dataset import YoungerDataset
+from younger.applications.datasets.architecture_dataset import ArchitectureDataset

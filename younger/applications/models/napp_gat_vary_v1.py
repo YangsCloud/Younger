@@ -38,30 +38,28 @@ class DenseAggregation(torch.nn.Module):
         transformed_x = self.transform_layer(x)
         # [ batch_size X node_number X out_channels ]
 
-        x = torch.matmul(gated_x.unsqueeze(1), transformed_x).squeeze(1)
+        output = torch.matmul(gated_x.unsqueeze(1), transformed_x).squeeze(1)
         # [ batch_size X out_channels ]
-        return x
+        return output
 
 
 class NAPPGATVaryV1(torch.nn.Module):
     # Neural Architecture Performance Prediction - GNN - Base Model
     def __init__(
         self,
-        meta: dict,
+        node_dict: dict,
+        task_dict: dict,
         node_dim: int = 100,
         task_dim: int = 100,
         hidden_dim: int = 100,
         readout_dim: int = 100,
         cluster_num: int = 16,
-        mode: Literal['Supervised', 'Unsupervised'] = 'Unsupervised'
     ) -> None:
         super().__init__()
 
-        assert mode in {'Supervised', 'Unsupervised'}
-        self.mode = mode
-
         # Embedding
-        self.node_embedding_layer = Embedding(len(meta['n2i']), node_dim)
+        self.node_embedding_layer = Embedding(len(node_dict), node_dim)
+        self.task_embedding_layer = Embedding(len(task_dict), task_dim)
 
         # v GNN Message Passing Head
         self.mp_head_layer = GATConv(node_dim, hidden_dim, heads=4, concat=False, dropout=0.1)
@@ -84,9 +82,6 @@ class NAPPGATVaryV1(torch.nn.Module):
         self.global_pooling_layer = DMoNPooling(hidden_dim, cluster_num)
         # ^ GNN Whole Coarsening
 
-        if self.mode == 'Unsupervised':
-            return
-
         # v GNN Message Passing Tail
         self.mp_tail_layer = DenseGATConv(hidden_dim, hidden_dim, heads=4, concat=False, dropout=0.1)
         self.mp_tail_activate = ReLU(inplace=False)
@@ -95,28 +90,22 @@ class NAPPGATVaryV1(torch.nn.Module):
 
         self.readout_layer = DenseAggregation(hidden_dim, readout_dim)
 
-        #self.task_transform_layer = Linear(task_dim, hidden_dim)
-        #self.task_transform_activate = ReLU(inplace=False)
+        self.task_transform_layer = Linear(task_dim, hidden_dim)
+        self.task_transform_activate = ReLU(inplace=False)
 
-        #self.dataset_transform_layer = Linear(dataset_dim, hidden_dim)
-        #self.dataset_transform_activate = ReLU(inplace=False)
+        self.fuse_layer = Linear(hidden_dim + readout_dim, hidden_dim)
+        self.fuse_activate = ReLU(inplace=False)
 
-        #self.fuse_layer = Linear(hidden_dim + hidden_dim + readout_dim, hidden_dim)
-        #self.fuse_activate = ReLU(inplace=False)
-
-        self.output_layer = Linear(readout_dim, 1)
+        self.output_layer = Linear(hidden_dim, 1)
 
         self.initialize_parameters()
 
-    def forward(self, x: torch.Tensor, edge_index: torch.Tensor, batch: torch.Tensor):
+    def forward(self, x: torch.Tensor, edge_index: torch.Tensor, batch: torch.Tensor, task: torch.Tensor):
         # x
         # total_node_number = sum(node_number_of_graph_{1}, ..., node_number_of_graph_{batch_size})
         # [ total_node_number X num_node_features ] (Current Version: num_node_features=1)
 
-        main_feature = x[:, 0]
-        # [ total_node_number X 1 ]
-
-        x = self.node_embedding_layer(main_feature)
+        x = self.node_embedding_layer(x)
         # [ total_node_number X node_dim ]
 
         x = self.mp_head_layer(x, edge_index)
@@ -136,41 +125,39 @@ class NAPPGATVaryV1(torch.nn.Module):
         x, edge_index, _, batch, _, _ = self.mp_body_sag_pooling(x, edge_index, batch=batch)
         # [ total_pooled_node_number X hidden_dim ]
 
-        (x, mask), adj = to_dense_batch(x, batch), to_dense_adj(edge_index, batch)
+        print("0:", x._version)
+        (dense_x, mask) = to_dense_batch(x, batch)
+        adj = to_dense_adj(edge_index, batch)
+        print("1:", dense_x._version)
         # max_pooled_node_number = max(pooled_node_number_of_graph_{1}, ..., pooled_node_number_of_graph_{batch_size})
         # [ batch_size X max_pooled_node_number X hidden_dim ]
 
-        _, x, adj, spectral_loss, orthogonality_loss, cluster_loss = self.global_pooling_layer(x, adj, mask)
+        _, dense_x, adj, spectral_loss, orthogonality_loss, cluster_loss = self.global_pooling_layer(dense_x, adj, mask)
         # [ batch_size X global_pooled_node_number X hidden_dim ]
 
         global_pooling_loss = spectral_loss + orthogonality_loss + cluster_loss
 
-        if self.mode == 'Unsupervised':
-            return global_pooling_loss
-
-        x = self.mp_tail_layer(x, adj)
-        x = self.mp_tail_activate(x)
-        x = self.mp_tail_dropout(x)
+        dense_x = self.mp_tail_layer(dense_x, adj)
+        dense_x = self.mp_tail_activate(dense_x)
+        dense_x = self.mp_tail_dropout(dense_x)
         # [ batch_size X global_pooled_node_number X hidden_dim ]
 
-        x = self.readout_layer(x)
+        dense_x = self.readout_layer(dense_x)
         # [ batch_size X readout_dim ]
 
-        #task = self.task_embedding_layer(task)
-        #task = self.task_transform_layer(task)
-        #task = self.task_transform_activate(task)
+        task = self.task_embedding_layer(task)
+        task = self.task_transform_layer(task)
+        task = self.task_transform_activate(task)
 
-        #dataset = self.dataset_embedding_layer(dataset)
-        #dataset = self.dataset_transform_layer(dataset)
-        #dataset = self.dataset_transform_activate(dataset)
+        fuse = torch.concat([dense_x, task], dim=-1)
+        fuse = self.fuse_layer(fuse)
+        fuse = self.fuse_activate(fuse)
 
-        #fuse = self.fuse_layer(torch.concat([x, task, dataset], dim=-1))
-        #fuse = self.fuse_activate(fuse)
-
-        output = self.output_layer(x)
+        output = self.output_layer(fuse)
         # output - [ batch_size X 1 ]
 
         return output, global_pooling_loss
 
     def initialize_parameters(self):
         torch.nn.init.normal_(self.node_embedding_layer.weight, mean=0, std=self.node_embedding_layer.embedding_dim ** -0.5)
+        torch.nn.init.normal_(self.task_embedding_layer.weight, mean=0, std=self.task_embedding_layer.embedding_dim ** -0.5)
