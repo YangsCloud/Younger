@@ -39,7 +39,7 @@ class ArchitectureDataset(Dataset):
 
         task_dict_size: int | None = None,
         node_dict_size: int | None = None,
-        metric_feature_get_type: Literal['none', 'mean', 'rand'] = 'mean',
+        metric_feature_get_type: Literal['none', 'mean', 'rand'] = 'none',
         worker_number: int = 4,
     ):
         self.worker_number = worker_number

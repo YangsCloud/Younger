@@ -125,10 +125,8 @@ class NAPPGATVaryV1(torch.nn.Module):
         x, edge_index, _, batch, _, _ = self.mp_body_sag_pooling(x, edge_index, batch=batch)
         # [ total_pooled_node_number X hidden_dim ]
 
-        print("0:", x._version)
         (dense_x, mask) = to_dense_batch(x, batch)
         adj = to_dense_adj(edge_index, batch)
-        print("1:", dense_x._version)
         # max_pooled_node_number = max(pooled_node_number_of_graph_{1}, ..., pooled_node_number_of_graph_{batch_size})
         # [ batch_size X max_pooled_node_number X hidden_dim ]
 
