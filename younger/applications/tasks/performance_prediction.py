@@ -35,8 +35,8 @@ def infer_cluster_num(dataset: ArchitectureDataset) -> int:
 
 
 class PerformancePrediction(YoungerTask):
-    def __init__(self, logger: Logger, custom_config: dict) -> None:
-        super().__init__(logger)
+    def __init__(self, custom_config: dict) -> None:
+        super().__init__(custom_config)
         self.build_config(custom_config)
         self.build()
 
@@ -113,14 +113,14 @@ class PerformancePrediction(YoungerTask):
             self.test_dataset = None
 
         if self.train_dataset:
-            self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["n2i"])}')
-            self.logger.info(f'    -> Tasks Dict Size: {len(self.train_dataset.y_dict["t2i"])}')
+            self.logger.info(f'-> Nodes Dict Size: {len(self.train_dataset.x_dict["n2i"])}')
+            self.logger.info(f'-> Tasks Dict Size: {len(self.train_dataset.y_dict["t2i"])}')
 
         if self.config['model']['cluster_num'] is None:
             self.config['model']['cluster_num'] = infer_cluster_num(self.train_dataset)
-            self.logger.info(f'  Cluster Number Not Specified! Infered Number: {self.config["model"]["cluster_num"]}')
+            self.logger.info(f'Cluster Number Not Specified! Infered Number: {self.config["model"]["cluster_num"]}')
         else:
-            self.logger.info(f'  Cluster Number: {self.config["model"]["cluster_num"]}')
+            self.logger.info(f'-> Cluster Number: {self.config["model"]["cluster_num"]}')
 
         self.model = NAPPGATVaryV1(
             node_dict=self.train_dataset.x_dict['n2i'],
@@ -138,9 +138,9 @@ class PerformancePrediction(YoungerTask):
 
     def train(self, minibatch: Any) -> tuple[torch.Tensor, OrderedDict]:
         y = minibatch.y.reshape(len(minibatch), -1)
-        tasks = y[:, 0].long().clone()
-        metrics = y[:, 1].clone()
-        outputs, global_pooling_loss = self.model(minibatch.x[:, 0].clone(), minibatch.edge_index, minibatch.batch, tasks)
+        tasks = y[:, 0].long()
+        metrics = y[:, 1]
+        outputs, global_pooling_loss = self.model(minibatch.x[:, 0], minibatch.edge_index, minibatch.batch, tasks)
         main_loss = torch.nn.functional.mse_loss(outputs.reshape(-1), metrics)
         loss = main_loss + global_pooling_loss
         logs = OrderedDict({
@@ -155,14 +155,14 @@ class PerformancePrediction(YoungerTask):
         y = minibatch.y.reshape(len(minibatch), -1)
         tasks = y[:, 0].long()
         metrics = y[:, 1]
-        outputs, _ = self.model(minibatch.x, minibatch.edge_index, minibatch.batch, tasks)
-        return outputs, metrics
+        outputs, _ = self.model(minibatch.x[:, 0], minibatch.edge_index, minibatch.batch, tasks)
+        return outputs.reshape(-1), metrics
 
     def eval_calculate_logs(self, all_outputs: list[torch.Tensor], all_goldens: list[torch.Tensor]) -> OrderedDict:
-        all_outputs = torch.stack(all_outputs)
-        all_goldens = torch.stack(all_goldens)
-        mae = torch.nn.functional.l1_loss(all_outputs.reshape(-1), all_goldens, reduction='mean')
-        mse = torch.nn.functional.mse_loss(all_outputs.reshape(-1), all_goldens, reduction='mean')
+        all_outputs = torch.stack(all_outputs).reshape(-1)
+        all_goldens = torch.stack(all_goldens).reshape(-1)
+        mae = torch.nn.functional.l1_loss(all_outputs, all_goldens, reduction='mean')
+        mse = torch.nn.functional.mse_loss(all_outputs, all_goldens, reduction='mean')
         rmse = torch.sqrt(mse)
         logs = OrderedDict({
             'MAE': float(mae),

@@ -13,16 +13,6 @@
 import pathlib
 import argparse
 
-from younger.commons.logging import set_logger, use_logger
-from younger.commons.constants import YoungerHandle
-
-
-def update_logger(arguments):
-    if arguments.logging_filepath:
-        logging_filepath = pathlib.Path(arguments.logging_filepath)
-        set_logger(YoungerHandle.ApplicationsName, mode='both', level='INFO', logging_filepath=logging_filepath)
-        use_logger(YoungerHandle.ApplicationsName)
-
 
 def run(arguments):
     pass
@@ -33,7 +23,6 @@ def deep_learning_run(arguments):
 
 
 def deep_learning_train_run(arguments):
-    update_logger(arguments)
     task_name = arguments.task_name
     config_filepath = pathlib.Path(arguments.config_filepath)
     checkpoint_dirpath = pathlib.Path(arguments.checkpoint_dirpath)
@@ -74,7 +63,6 @@ def deep_learning_train_run(arguments):
 
 
 def deep_learning_test_run(arguments):
-    update_logger(arguments)
     task_name = arguments.task_name
     config_filepath = pathlib.Path(arguments.config_filepath)
     checkpoint_filepath = pathlib.Path(arguments.checkpoint_filepath)
@@ -91,7 +79,6 @@ def deep_learning_test_run(arguments):
 
 
 def deep_learning_api_run(arguments):
-    update_logger(arguments)
     task_name = arguments.task_name
     config_filepath = pathlib.Path(arguments.config_filepath)
     checkpoint_filepath = pathlib.Path(arguments.checkpoint_filepath)
@@ -140,8 +127,6 @@ def set_applications_deep_learning_arguments(parser: argparse.ArgumentParser):
 
     train_parser.add_argument('--seed', type=int, default=1234)
     train_parser.add_argument('--make-deterministic', action='store_true')
-
-    train_parser.add_argument('--logging-filepath', type=str, default=None)
     train_parser.set_defaults(run=deep_learning_train_run)
 
     test_parser = subparser.add_parser('test')
@@ -152,8 +137,6 @@ def set_applications_deep_learning_arguments(parser: argparse.ArgumentParser):
     test_parser.add_argument('--test-batch-size', type=int, default=32)
 
     test_parser.add_argument('--device', type=str, choices=['CPU', 'GPU'], default='GPU')
-
-    test_parser.add_argument('--logging-filepath', type=str, default=None)
     test_parser.set_defaults(run=deep_learning_test_run)
 
     api_parser = subparser.add_parser('api')
@@ -161,8 +144,6 @@ def set_applications_deep_learning_arguments(parser: argparse.ArgumentParser):
     api_parser.add_argument('--config-filepath', type=str)
     api_parser.add_argument('--checkpoint-filepath', type=str)
     api_parser.add_argument('--device', type=str, choices=['CPU', 'GPU'], default='GPU')
-
-    api_parser.add_argument('--logging-filepath', type=str, default=None)
     api_parser.set_defaults(run=deep_learning_api_run)
 
     parser.set_defaults(run=deep_learning_run)

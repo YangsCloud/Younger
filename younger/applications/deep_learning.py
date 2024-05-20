@@ -24,7 +24,6 @@ from torch.utils.data import RandomSampler
 from torch_geometric.loader import DataLoader
 
 from younger.commons.io import create_dir, load_toml
-from younger.commons.logging import logger
 
 from younger.applications.utils.neural_network import get_model_parameters_number, get_device_descriptor, fix_random_procedure, set_deterministic, load_checkpoint, save_checkpoint
 
@@ -57,15 +56,17 @@ def exact_eval(
             all_goldens.append(goldens)
     toc = time.time()
 
-    logs = task.eval_caculate_logs(all_outputs, all_goldens)
+    logs = task.eval_calculate_logs(all_outputs, all_goldens)
     task.logger.info(f'  -> {split} Finished. Overall Result - {get_logging_metrics_str(logs)} (Time Cost = {toc-tic:.2f}s)')
 
 
 def exact_train(
-    rank: int, master_rank: int,
-    world_size: int, is_distribution: bool,
+    rank: int,
+    distribution_flag: bool,
+    master_rank: int,
+    world_size: int,
     seed: int, make_deterministic: bool,
-    task: YoungerTask,
+    task_name: YoungerTask, config_filepath: pathlib.Path,
 
     checkpoint_dirpath: pathlib.Path, checkpoint_name: str, keep_number: int,
 
@@ -77,26 +78,64 @@ def exact_train(
 
     device: Literal['CPU', 'GPU'],
 ):
+    assert task_name in task_builders, f'Task ({task_name}) is not Defined'
+
+    custom_config = load_toml(config_filepath)
+    task: YoungerTask = task_builders[task_name](custom_config)
+    task.logger.info(f'Configuration Loaded From {config_filepath}')
+
     is_master = rank == master_rank
     fix_random_procedure(seed)
     set_deterministic(make_deterministic)
+    torch.autograd.set_detect_anomaly(True)
     device_descriptor = get_device_descriptor(device, rank)
-
-    task.logger.info(f'  Model Moved to Device \'{device_descriptor}\'')
 
     if is_master:
         task.logger.disabled = False
     else:
         task.logger.disabled = True
 
+    task.logger.info(f'Using Device: {device};')
+    task.logger.info(f'Distribution: {distribution_flag}; {f"(Total {world_size} GPU)" if distribution_flag else ""}')
+    task.logger.info(f'Task: \'{task_name}\'')
+
+    create_dir(checkpoint_dirpath)
+    task.logger.info(f'Checkpoint will saved into: \'{checkpoint_dirpath}\'')
+
+    # Build Task
+    task.logger.info(f'Preparing Task: Model & Dataset ...')
+    # Print Dataset
+    task.logger.info(f'-> Dataset Split Sizes:')
+    task.logger.info(f'   Train - {len(task.train_dataset)}')
+    if task.valid_dataset:
+        task.logger.info(f'   Valid - {len(task.valid_dataset)}')
+    else:
+        task.logger.info(f'   No Valid')
+
+    # Print Model
+    task.logger.info(f'-> Model Specs:')
+    parameters_number = get_model_parameters_number(task.model)
+    parameters_number_str = str()
+    for name, number in parameters_number.items():
+        parameters_number_str += f'{name}: {number} Elements ;\n'
+    parameters_number_str += f'Total: {sum(parameters_number.values())} Elements .\n'
+    task.logger.info(
+        f'\n======= v Model Architecture v ======='
+        f'\n{task.model}'
+        f'\n'
+        f'\n====== v Number of Parameters v ======'
+        f'\n{parameters_number_str}'
+    )
+
     # Model
     task.model.to(device_descriptor)
-    if is_distribution:
+    task.logger.info(f'  Model Moved to Device \'{device_descriptor}\'')
+    if distribution_flag:
         distributed.init_process_group('nccl', rank=rank, world_size=world_size)
         task.model = torch.nn.parallel.DistributedDataParallel(task.model, device_ids=[rank], find_unused_parameters=False)
 
     # Datasets
-    if is_distribution:
+    if distribution_flag:
         train_sampler = DistributedSampler(task.train_dataset, num_replicas=world_size, rank=rank, shuffle=shuffle, seed=seed, drop_last=True)
     else:
         train_sampler = RandomSampler(task.train_dataset) if shuffle else None
@@ -138,12 +177,11 @@ def exact_train(
     task.logger.info(f'    Saving checkpoint every {train_period} Step.')
 
     task.model.train()
-    torch.autograd.set_detect_anomaly(True)
     task.optimizer.zero_grad()
     epoch = 0
     step = start_position
     while epoch < life_cycle:
-        if is_distribution:
+        if distribution_flag:
             train_sampler.set_epoch(epoch)
         epoch += 1
         tic = time.time()
@@ -156,8 +194,8 @@ def exact_train(
             if step % report_period == 0:
                 metrics = OrderedDict()
                 for log_key, log_value in logs.items():
-                    log_value = torch.tensor(log_value)
-                    if is_distribution:
+                    log_value = torch.tensor(log_value).to(device_descriptor)
+                    if distribution_flag:
                         distributed.all_reduce(log_value, op = distributed.ReduceOp.SUM)
                         log_value = log_value / world_size
                     metrics[log_key] = f'{float(log_value):.4f}'
@@ -179,7 +217,7 @@ def exact_train(
                 checkpoint = dict()
                 checkpoint['Epoch'] = epoch
                 checkpoint['Step'] = step
-                checkpoint['model_state'] = task.model.module.state_dict() if is_distribution else task.model.state_dict()
+                checkpoint['model_state'] = task.model.module.state_dict() if distribution_flag else task.model.state_dict()
                 checkpoint['optimizer_state'] = task.optimizer.state_dict()
                 save_checkpoint(checkpoint, checkpoint_path=checkpoint_dirpath, checkpoint_name=checkpoint_name, keep_number=keep_number)
                 toc = time.time()
@@ -188,7 +226,7 @@ def exact_train(
             # Do Validation
             if step % valid_period == 0:
                 task.model.eval()
-                if is_distribution:
+                if distribution_flag:
                     distributed.barrier()
                 if is_master:
                     exact_eval(
@@ -197,14 +235,14 @@ def exact_train(
                         device_descriptor,
                         'Valid',
                     )
-                if is_distribution:
+                if distribution_flag:
                     distributed.barrier()
                 task.model.train()
 
         toc = time.time()
         task.logger.info(f'  <=> Epoch@{epoch} Finished. Time Cost = {toc-tic:.2f}s')
 
-    if is_distribution:
+    if distribution_flag:
         distributed.destroy_process_group()
 
 
@@ -223,62 +261,26 @@ def train(
     world_size: int = 1, master_addr: str = 'localhost', master_port: str = '16161', master_rank: int = 0,
     seed: int = 1234, make_deterministic: bool = False,
 ):
-    assert task_name in task_builders, f'Task ({task_name}) is not Defined'
-    logger.info(f'Select Task: \'{task_name}\'')
-
     assert device in {'CPU', 'GPU'}
     if device == 'CPU':
-        is_distribution = False
+        distribution_flag = False
     if device == 'GPU':
         assert torch.cuda.device_count() >= world_size, f'Insufficient GPU: {torch.cuda.device_count()}'
         assert master_rank < world_size, f'Wrong Master Rank: {master_rank}'
-        is_distribution = False if world_size == 1 else True
-    logger.info(f'Using Device: {device};')
-    logger.info(f'Distribution: {is_distribution}; {f"(Total {world_size} GPU)" if is_distribution else ""}')
+        distribution_flag = False if world_size == 1 else True
 
-    fix_random_procedure(seed)
-
-    # Build Task
-    logger.info(f'Preparing Task: Model & Dataset ...')
-    custom_config = load_toml(config_filepath)
-    logger.info(f'Configuration Loaded From {config_filepath}')
-
-    task: YoungerTask = task_builders[task_name](logger, custom_config)
-
-    # Print Dataset
-    logger.info(f'  -> Dataset Split Sizes:')
-    logger.info(f'    Train - {len(task.train_dataset)}')
-    if task.valid_dataset:
-        logger.info(f'    Valid - {len(task.valid_dataset)}')
-    else:
-        logger.info(f'    No Valid')
-
-    # Print Model
-    logger.info(f'  -> Model Specs:')
-    parameters_number = get_model_parameters_number(task.model)
-    parameters_number_str = str()
-    for name, number in parameters_number.items():
-        parameters_number_str += f'{name}: {number} Elements ;\n'
-    parameters_number_str += f'Total: {sum(parameters_number.values())} Elements .\n'
-    logger.info(
-        f'\n  - Model Architecture:'
-        f'\n{task.model}'
-        f'\n  - Number of Parameters:'
-        f'\n{parameters_number_str}'
-    )
-
-    create_dir(checkpoint_dirpath)
-    if is_distribution:
+    if distribution_flag:
         os.environ['MASTER_ADDR'] = master_addr
         os.environ['MASTER_PORT'] = master_port
         torch.multiprocessing.spawn(
             exact_train,
             args=(
+                distribution_flag,
                 master_rank,
-                world_size, is_distribution,
+                world_size,
                 seed, make_deterministic,
 
-                task,
+                task_name, config_filepath,
 
                 checkpoint_dirpath, checkpoint_name, keep_number,
 
@@ -295,11 +297,12 @@ def train(
         )
     else:
         exact_train(0,
+            distribution_flag,
             master_rank,
-            world_size, is_distribution,
+            world_size,
             seed, make_deterministic,
 
-            task,
+            task_name, config_filepath,
 
             checkpoint_dirpath, checkpoint_name, keep_number,
 
@@ -319,45 +322,47 @@ def test(
     test_batch_size: int = 32,
     device: Literal['CPU', 'GPU'] = 'GPU',
 ):
+    assert task_name in task_builders, f'Task ({task_name}) is not Defined'
+
+    # Build Task
+    custom_config = load_toml(config_filepath)
+    task: YoungerTask = task_builders[task_name](custom_config)
+    task.logger.info(f'Configuration Loaded From {config_filepath}')
+
     assert device in {'CPU', 'GPU'}
     device_descriptor = get_device_descriptor(device, 0)
     assert torch.cuda.is_available() or device == 'CPU'
 
-    logger.info(f'Using Device: {device};')
+    task.logger.info(f'Using Device: {device};')
 
-    # Build Task
-    logger.info(f'Preparing Task: Model & Dataset ...')
-    custom_config = load_toml(config_filepath)
-    logger.info(f'Configuration Loaded From {config_filepath}')
-
-    task: YoungerTask = task_builders[task_name](logger, custom_config)
-
+    task.logger.info(f'Preparing Task: Model & Dataset ...')
     # Print Dataset
-    logger.info(f'  -> Dataset Split Size:')
-    logger.info(f'    Test - {len(task.test_dataset)}')
+    task.logger.info(f'-> Dataset Split Size:')
+    task.logger.info(f'   Test - {len(task.test_dataset)}')
 
     # Print Model
-    logger.info(f'  -> Model Specs:')
+    task.logger.info(f'-> Model Specs:')
     parameters_number = get_model_parameters_number(task.model)
     parameters_number_str = str()
     for name, number in parameters_number.items():
         parameters_number_str += f'{name}: {number} Elements ;\n'
     parameters_number_str += f'Total: {sum(parameters_number.values())} Elements .\n'
-    logger.info(
-        f'\n  - Model Architecture:'
+    task.logger.info(
+        f'\n======= v Model Architecture v ======='
         f'\n{task.model}'
-        f'\n  - Number of Parameters:'
+        f'\n'
+        f'\n====== v Number of Parameters v ======'
         f'\n{parameters_number_str}'
     )
 
-    logger.info(f'  v Loading Model Weights From Checkpoint [\'{checkpoint_filepath}\']...')
+    task.logger.info(f'  v Loading Model Weights From Checkpoint [\'{checkpoint_filepath}\']...')
     checkpoint = load_checkpoint(checkpoint_filepath)
     task.model.load_state_dict(checkpoint['model_state'], strict=True)
-    logger.info(f'  ^ Loaded ')
+    task.logger.info(f'  ^ Loaded ')
 
-    logger.info(f'  v Moving model to the specified device ...')
+    task.logger.info(f'  v Moving model to the specified device ...')
     task.model.to(device_descriptor)
-    logger.info(f'  ^ Moved.')
+    task.logger.info(f'  ^ Moved.')
 
     test_dataloader = DataLoader(task.test_dataset, batch_size=test_batch_size, shuffle=False)
     exact_eval(
@@ -374,44 +379,46 @@ def api(
     **kwargs,
 ):
     # TODO: Serve!
+    assert task_name in task_builders, f'Task ({task_name}) is not Defined'
+
+    # Build Task
+    custom_config = load_toml(config_filepath)
+    task: YoungerTask = task_builders[task_name](custom_config)
+    task.logger.info(f'Configuration Loaded From {config_filepath}')
+
     assert device in {'CPU', 'GPU'}
     device_descriptor = get_device_descriptor(device, 0)
     assert torch.cuda.is_available() or device == 'CPU'
 
-    logger.info(f'Using Device: {device};')
+    task.logger.info(f'Using Device: {device};')
 
-    # Build Task
-    logger.info(f'Preparing Task: Model & Dataset ...')
-    custom_config = load_toml(config_filepath)
-    logger.info(f'Configuration Loaded From {config_filepath}')
-
-    task: YoungerTask = task_builders[task_name](logger, custom_config)
-
+    task.logger.info(f'Preparing Task: Model & Dataset ...')
     # Print Model
-    logger.info(f'  -> Model Specs:')
+    task.logger.info(f'  -> Model Specs:')
     parameters_number = get_model_parameters_number(task.model)
     parameters_number_str = str()
     for name, number in parameters_number.items():
         parameters_number_str += f'{name}: {number} Elements ;\n'
     parameters_number_str += f'Total: {sum(parameters_number.values())} Elements .\n'
-    logger.info(
+    task.logger.info(
         f'\n  - Model Architecture:'
         f'\n{task.model}'
         f'\n  - Number of Parameters:'
         f'\n{parameters_number_str}'
     )
 
-    logger.info(f'  v Loading Model Weights From Checkpoint [\'{checkpoint_filepath}\']...')
+    task.logger.info(f'  v Loading Model Weights From Checkpoint [\'{checkpoint_filepath}\']...')
     checkpoint = load_checkpoint(checkpoint_filepath)
+    print(checkpoint)
     task.model.load_state_dict(checkpoint['model_state'], strict=True)
-    logger.info(f'  ^ Loaded ')
+    task.logger.info(f'  ^ Loaded ')
 
-    logger.info(f'  v Moving model to the specified device ...')
+    task.logger.info(f'  v Moving model to the specified device ...')
     task.model.to(device_descriptor)
-    logger.info(f'  ^ Moved.')
+    task.logger.info(f'  ^ Moved.')
 
     tic = time.time()
     task.api(device_descriptor, **kwargs)
     toc = time.time()
 
-    logger.info(f'  -> Test Finished. (Time Cost = {toc-tic:.2f}s)')
+    task.logger.info(f'  -> Test Finished. (Time Cost = {toc-tic:.2f}s)')
