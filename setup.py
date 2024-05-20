@@ -53,6 +53,7 @@ except FileNotFoundError:
 # Required Packages and Optional Packages
 # Required
 REQUIRED = [
+    'toml',
     'tqdm',
     'psutil',
     'networkx',
@@ -73,7 +74,7 @@ DATASET_OFFICIAL_EXTRAS = set(['onnx'])
 
 # Optional 2
 BENCHMARK_EXTRAS = set([])
-APPLICATION_EXTRAS = set(['pytorch-geometric'])
+APPLICATION_EXTRAS = set(['torch-geometric'])
 
 EXTRAS = {
     'dataset-onnx': DATASET_ONNX_EXTRAS,
