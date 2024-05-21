@@ -56,7 +56,7 @@ def create_dir(dirpath: pathlib.Path | str) -> None:
 
 
 def delete_dir(dirpath: pathlib.Path | str, only_clean: bool = False):
-    dirpath = get_system_depend_paths(dirpath)
+    dirpath = get_system_depend_path(dirpath)
     for filepath in dirpath.iterdir():
         if filepath.is_dir():
             shutil.rmtree(filepath)
