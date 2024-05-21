@@ -13,11 +13,9 @@
 import torch
 import torch.utils.data
 
-from typing import Any
+from typing import Any, Callable
 from collections import OrderedDict
 from torch_geometric.data import Batch, Data
-
-from younger.commons.logging import Logger
 
 from younger.datasets.modules import Instance, Network
 from younger.datasets.utils.translation import get_complete_attributes_of_node
@@ -35,8 +33,8 @@ def infer_cluster_num(dataset: ArchitectureDataset) -> int:
 
 
 class PerformancePrediction(YoungerTask):
-    def __init__(self, custom_config: dict) -> None:
-        super().__init__(custom_config)
+    def __init__(self, custom_config: dict, device_descriptor: torch.device) -> None:
+        super().__init__(custom_config, device_descriptor)
         self.build_config(custom_config)
         self.build()
 
@@ -136,7 +134,8 @@ class PerformancePrediction(YoungerTask):
         else:
             self.optimizer = None
 
-    def train(self, minibatch: Any) -> tuple[torch.Tensor, OrderedDict]:
+    def train(self, minibatch: Any) -> tuple[torch.Tensor, OrderedDict[str, tuple[torch.Tensor, Callable | None]]]:
+        minibatch = minibatch.to(self.device_descriptor)
         y = minibatch.y.reshape(len(minibatch), -1)
         tasks = y[:, 0].long()
         metrics = y[:, 1]
@@ -144,34 +143,35 @@ class PerformancePrediction(YoungerTask):
         main_loss = torch.nn.functional.mse_loss(outputs.reshape(-1), metrics)
         loss = main_loss + global_pooling_loss
         logs = OrderedDict({
-            'Total-Loss': float(loss),
-            'REG-Loss (MSE)': float(main_loss),
-            'Cluster-loss': float(global_pooling_loss),
+            'Total-Loss': (loss, lambda x: f'{x:.4f}'),
+            'REG-Loss (MSE)': (main_loss, lambda x: f'{x:.4f}'),
+            'Cluster-loss': (global_pooling_loss, lambda x: f'{x:.4f}'),
         })
         return loss, logs
 
     def eval(self, minibatch: Any) -> tuple[torch.Tensor, torch.Tensor]:
         # Return Output & Golden
+        minibatch = minibatch.to(self.device_descriptor)
         y = minibatch.y.reshape(len(minibatch), -1)
         tasks = y[:, 0].long()
         metrics = y[:, 1]
         outputs, _ = self.model(minibatch.x[:, 0], minibatch.edge_index, minibatch.batch, tasks)
         return outputs.reshape(-1), metrics
 
-    def eval_calculate_logs(self, all_outputs: list[torch.Tensor], all_goldens: list[torch.Tensor]) -> OrderedDict:
+    def eval_calculate_logs(self, all_outputs: list[torch.Tensor], all_goldens: list[torch.Tensor]) -> OrderedDict[str, tuple[torch.Tensor, Callable | None]]:
         all_outputs = torch.stack(all_outputs).reshape(-1)
         all_goldens = torch.stack(all_goldens).reshape(-1)
         mae = torch.nn.functional.l1_loss(all_outputs, all_goldens, reduction='mean')
         mse = torch.nn.functional.mse_loss(all_outputs, all_goldens, reduction='mean')
         rmse = torch.sqrt(mse)
         logs = OrderedDict({
-            'MAE': float(mae),
-            'MSE': float(mse),
-            'RMSE': float(rmse),
+            'MAE': (mae, lambda x: f'{x:.4f}'),
+            'MSE': (mse, lambda x: f'{x:.4f}'),
+            'RMSE': (rmse, lambda x: f'{x:.4f}'),
         })
         return logs
 
-    def api(self, device_descriptor, **kwargs):
+    def api(self, **kwargs):
         meta_filepath = self.config['api']['meta_filepath']
         onnx_model_dirpath = self.config['api']['onnx_model_dirpath']
         assert meta_filepath, f'No Meta File.'
@@ -206,7 +206,7 @@ class PerformancePrediction(YoungerTask):
         self.logger.info(f'  -> Interact Test Begin ...')
 
         with torch.no_grad():
-            minibatch: Data = minibatch.to(device_descriptor)
+            minibatch: Data = minibatch.to(self.device_descriptor)
             output, _ = self.model(minibatch.x, minibatch.edge_index, minibatch.batch)
 
             for onnx_model_filename, output_value in zip(onnx_model_filenames, output):

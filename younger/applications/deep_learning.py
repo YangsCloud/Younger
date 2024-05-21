@@ -40,7 +40,6 @@ def get_logging_metrics_str(metrics: OrderedDict[str, str]) -> str:
 def exact_eval(
     task: YoungerTask,
     dataloader: DataLoader, 
-    device_descriptor: torch.device,
     split: Literal['Valid', 'Test'],
 ):
     task.logger.info(f'-> {split} Begin ...')
@@ -49,7 +48,6 @@ def exact_eval(
     tic = time.time()
     with torch.no_grad():
         for index, minibatch in enumerate(dataloader, start=1):
-            minibatch = minibatch.to(device_descriptor)
             outputs, goldens = task.eval(minibatch)
 
             all_outputs.append(outputs)
@@ -57,7 +55,10 @@ def exact_eval(
     toc = time.time()
 
     logs = task.eval_calculate_logs(all_outputs, all_goldens)
-    task.logger.info(f'-> {split} Finished. Overall Result -{get_logging_metrics_str(logs)} (Time Cost = {toc-tic:.2f}s)')
+    metrics = OrderedDict()
+    for log_key, (log_value, log_format) in logs.items():
+        metrics[log_key] = log_format(float(log_value))
+    task.logger.info(f'-> {split} Finished. Overall Result -{get_logging_metrics_str(metrics)} (Time Cost = {toc-tic:.2f}s)')
 
 
 def exact_train(
@@ -79,12 +80,12 @@ def exact_train(
     device: Literal['CPU', 'GPU'],
 ):
     assert task_name in task_builders, f'Task ({task_name}) is not Defined'
+    device_descriptor = get_device_descriptor(device, rank)
 
     custom_config = load_toml(config_filepath)
-    task: YoungerTask = task_builders[task_name](custom_config)
+    task: YoungerTask = task_builders[task_name](custom_config, device_descriptor)
     task.logger.info(f'Configuration Loaded From {config_filepath}')
 
-    device_descriptor = get_device_descriptor(device, rank)
     task.model.to(device_descriptor)
     task.logger.info(f'Model Moved to Device \'{device_descriptor}\'')
 
@@ -188,18 +189,16 @@ def exact_train(
         tic = time.time()
         for minibatch in train_dataloader:
             step += 1
-            minibatch = minibatch.to(device_descriptor)
             (loss, logs) = task.train(minibatch)
 
             # Report Model Parameters
             if step % report_period == 0:
                 metrics = OrderedDict()
-                for log_key, log_value in logs.items():
-                    log_value = torch.tensor(log_value).to(device_descriptor)
+                for log_key, (log_value, log_format) in logs.items():
                     if distribution_flag:
                         distributed.all_reduce(log_value, op = distributed.ReduceOp.SUM)
                         log_value = log_value / world_size
-                    metrics[log_key] = f'{float(log_value):.4f}'
+                    metrics[log_key] = log_format(float(log_value))
                 task.logger.info(f'  [Epoch/Step]@[{epoch}/{step}] -{get_logging_metrics_str(metrics)}')
 
             # Update Model Parameters
@@ -233,7 +232,6 @@ def exact_train(
                     exact_eval(
                         task,
                         valid_dataloader, 
-                        device_descriptor,
                         'Valid',
                     )
                 if distribution_flag:
@@ -325,14 +323,14 @@ def test(
 ):
     assert task_name in task_builders, f'Task ({task_name}) is not Defined'
 
-    # Build Task
-    custom_config = load_toml(config_filepath)
-    task: YoungerTask = task_builders[task_name](custom_config)
-    task.logger.info(f'Configuration Loaded From {config_filepath}')
-
     assert device in {'CPU', 'GPU'}
     device_descriptor = get_device_descriptor(device, 0)
     assert torch.cuda.is_available() or device == 'CPU'
+
+    # Build Task
+    custom_config = load_toml(config_filepath)
+    task: YoungerTask = task_builders[task_name](custom_config, device_descriptor)
+    task.logger.info(f'Configuration Loaded From {config_filepath}')
 
     task.logger.info(f'Using Device: {device};')
 
@@ -369,7 +367,6 @@ def test(
     exact_eval(
         task,
         test_dataloader, 
-        device_descriptor,
         'Test',
     )
 
@@ -382,14 +379,14 @@ def api(
     # TODO: Serve!
     assert task_name in task_builders, f'Task ({task_name}) is not Defined'
 
-    # Build Task
-    custom_config = load_toml(config_filepath)
-    task: YoungerTask = task_builders[task_name](custom_config)
-    task.logger.info(f'Configuration Loaded From {config_filepath}')
-
     assert device in {'CPU', 'GPU'}
     device_descriptor = get_device_descriptor(device, 0)
     assert torch.cuda.is_available() or device == 'CPU'
+
+    # Build Task
+    custom_config = load_toml(config_filepath)
+    task: YoungerTask = task_builders[task_name](custom_config, device_descriptor)
+    task.logger.info(f'Configuration Loaded From {config_filepath}')
 
     task.logger.info(f'Using Device: {device};')
 
@@ -419,7 +416,7 @@ def api(
     task.logger.info(f'  ^ Moved.')
 
     tic = time.time()
-    task.api(device_descriptor, **kwargs)
+    task.api(**kwargs)
     toc = time.time()
 
     task.logger.info(f'  -> Test Finished. (Time Cost = {toc-tic:.2f}s)')
