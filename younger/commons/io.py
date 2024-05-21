@@ -200,7 +200,7 @@ def get_file_size(filepath: pathlib.Path | str) -> int:
 
 
 def get_dir_size(dirpath: pathlib.Path | str) -> int:
-    filepath = get_system_depend_path(filepath)
+    dirpath = get_system_depend_path(dirpath)
     total_size = 0
     for root, _, files in os.walk(dirpath):
         for file in files:
