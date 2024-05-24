@@ -27,7 +27,7 @@ from younger.datasets.modules import Network
 from younger.datasets.utils.constants import YoungerDatasetAddress
 
 
-class ClusterDataset(Dataset):
+class BlockDataset(Dataset):
     def __init__(
         self,
         root: str,
@@ -39,8 +39,10 @@ class ClusterDataset(Dataset):
 
         task_dict_size: int | None = None,
         node_dict_size: int | None = None,
+        seed: int | None = None,
         worker_number: int = 4,
     ):
+        self.seed = seed
         self.worker_number = worker_number
 
         meta_filepath = os.path.join(root, 'meta.json')
@@ -50,7 +52,17 @@ class ClusterDataset(Dataset):
         self.x_dict = self.__class__.get_x_dict(self.meta, node_dict_size)
         self.y_dict = self.__class__.get_y_dict(self.meta, task_dict_size)
 
+        self._community_locations_filename = 'community_locations.pt'
+        self._community_locations_filepath = os.path.join(self.processed_dir, self._community_locations_filename)
+        self._community_locations: list[tuple[int, int]] = list()
+
         super().__init__(root, transform, pre_transform, pre_filter, log, force_reload)
+
+        try:
+            self._community_locations = torch.load(self._community_locations_filepath)
+        except FileExistsError as error:
+            print(f'There is no community locations file \'{self._community_locations_filename}\', please remove the processed data directory: {self.processed_dir} and re-run the command.')
+            raise error
 
     @property
     def raw_dir(self) -> str:
@@ -71,10 +83,16 @@ class ClusterDataset(Dataset):
         return [f'sample-{index}.pth' for index in range(self.meta['size'])]
 
     def len(self) -> int:
-        return self.meta['size']
+        return len(self._community_locations)
 
-    def get(self, index: int):
-        return torch.load(os.path.join(self.processed_dir, f'sample-{index}.pth'))
+    def get(self, index: int) -> Data:
+        sample_index, community_index = self._community_locations[index]
+        graph_data_with_communities: dict[str, Data | list[set]] = torch.load(os.path.join(self.processed_dir, f'sample-{sample_index}.pth'))
+
+        graph_data: Data = graph_data_with_communities['graph_data']
+        community: set = graph_data_with_communities['communities'][community_index]
+        zero_one_label
+        return
 
     def download(self):
         archive_filepath = os.path.join(self.root, self.meta['archive'])
@@ -82,26 +100,34 @@ class ClusterDataset(Dataset):
             archive_filepath = download_url(getattr(YoungerDatasetAddress, self.meta['url']), self.root, filename=self.meta['archive'])
         tar_extract(archive_filepath, self.raw_dir)
 
-        for index in range(self.meta['size']):
-            assert fs.exists(os.path.join(self.raw_dir, f'sample-{index}.pkl'))
+        for sample_index in range(self.meta['size']):
+            assert fs.exists(os.path.join(self.raw_dir, f'sample-{sample_index}.pkl'))
 
     def process(self):
+        unordered_community_records = list()
         with multiprocessing.Pool(self.worker_number) as pool:
             with tqdm.tqdm(total=self.meta['size']) as progress_bar:
-                for _ in pool.imap_unordered(self.process_instance, range(self.meta['size'])):
+                for sample_index, community_number in pool.imap_unordered(self.process_sample, range(self.meta['size'])):
+                    unordered_community_records.append((sample_index, community_number))
                     progress_bar.update()
+        sorted_community_records = sorted(unordered_community_records, key=lambda x: x[0])
+        for sample_index, community_number in sorted_community_records:
+            community_location = [(sample_index, community_index) for community_index in range(community_number)]
+            self._community_locations.extend(community_location)
+        torch.save(self._community_locations, self._community_locations_filepath)
 
-    def process_instance(self, index):
-        sample_filepath = os.path.join(self.raw_dir, f'sample-{index}.pkl')
-        sample = load_pickle(sample_filepath)
+    def process_sample(self, sample_index: int) -> tuple[int, int]:
+        sample_filepath = os.path.join(self.raw_dir, f'sample-{sample_index}.pkl')
+        sample: networkx.DiGraph = load_pickle(sample_filepath)
 
-        graph_with_blocks = self.__class__.get_graph_with_blocks(sample, self.x_dict, self.y_dict)
-        if self.pre_filter is not None and not self.pre_filter(graph_with_blocks):
+        graph_data_with_communities = self.__class__.get_graph_data_with_communities(sample, self.x_dict, self.y_dict, self.seed)
+        if self.pre_filter is not None and not self.pre_filter(graph_data_with_communities):
             return
 
         if self.pre_transform is not None:
-            graph_with_blocks = self.pre_transform(graph_with_blocks)
-        torch.save(graph_with_blocks, os.path.join(self.processed_dir, f'sample-{index}.pth'))
+            graph_data_with_communities = self.pre_transform(graph_data_with_communities)
+        torch.save(graph_data_with_communities, os.path.join(self.processed_dir, f'sample-{sample_index}.pth'))
+        return (sample_index, len(graph_data_with_communities['communities']))
 
     @classmethod
     def load_meta(cls, meta_filepath: str) -> dict[str, Any]:
@@ -202,18 +228,49 @@ class ClusterDataset(Dataset):
         return graph_feature
 
     @classmethod
-    def get_graph_with_blocks(
+    def get_graph_data(
         cls,
-        sample,
+        sample: networkx.DiGraph,
         x_dict: dict[str, Any], y_dict: dict[str, Any],
-        block_get_type: Literal['louvain', 'label']
     ) -> Data:
         x = cls.get_x(sample, x_dict)
         edge_index = cls.get_edge_index(sample)
         y = cls.get_y(sample, y_dict)
 
-        data = Data(x=x, edge_index=edge_index, y=y)
+        graph_data = Data(x=x, edge_index=edge_index, y=y)
+        return graph_data
 
-        cls.get_blocks(sample, )
+    @classmethod
+    def get_communities(cls, sample: networkx.DiGraph, block_get_type: Literal['louvain', 'label'], **kwargs) -> list[set]:
+        if block_get_type == 'louvain':
+            seed = kwargs.get('seed', None)
+            resolution = kwargs.get('resolution', 1)
+            communities = list(networkx.community.louvain_communities(sample, resolution=resolution, seed=seed))
 
-        return data
+        if block_get_type == 'label':
+            seed = kwargs.get('seed', None)
+            communities = list(networkx.community.asyn_lpa_communities(sample, resolution=resolution, seed=seed))
+
+        # blocks = list()
+        # for community in communities:
+        #     blocks.append(sample.subgraph(community))
+        return communities
+
+    @classmethod
+    def get_graph_data_with_communities(
+        cls,
+        sample: networkx.DiGraph,
+        x_dict: dict[str, Any], y_dict: dict[str, Any],
+        block_get_type: Literal['louvain', 'label'],
+        seed: int | None = None,
+    ) -> dict[str, Data | list[set]]:
+
+        graph_data = cls.get_graph_data(sample, x_dict, y_dict)
+        communities: list[set] = list()
+        for community in cls.get_communities(sample, block_get_type, seed=seed):
+            communities.append(community)
+
+        return dict(
+            graph_data = graph_data,
+            communities = communities
+        )

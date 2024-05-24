@@ -91,12 +91,12 @@ class ArchitectureDataset(Dataset):
     def process(self):
         with multiprocessing.Pool(self.worker_number) as pool:
             with tqdm.tqdm(total=self.meta['size']) as progress_bar:
-                for _ in pool.imap_unordered(self.process_instance, range(self.meta['size'])):
+                for _ in pool.imap_unordered(self.process_sample, range(self.meta['size'])):
                     progress_bar.update()
 
-    def process_instance(self, index):
+    def process_sample(self, index: int):
         sample_filepath = os.path.join(self.raw_dir, f'sample-{index}.pkl')
-        sample = load_pickle(sample_filepath)
+        sample: networkx.DiGraph = load_pickle(sample_filepath)
 
         data = self.__class__.get_data(sample, self.x_dict, self.y_dict, self.metric_feature_get_type)
         if self.pre_filter is not None and not self.pre_filter(data):
@@ -207,7 +207,7 @@ class ArchitectureDataset(Dataset):
     @classmethod
     def get_data(
         cls,
-        sample,
+        sample: networkx.DiGraph,
         x_dict: dict[str, Any], y_dict: dict[str, Any],
         metric_feature_get_type: Literal['none', 'mean', 'rand']
     ) -> Data:
