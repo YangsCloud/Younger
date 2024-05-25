@@ -124,6 +124,10 @@ class ArchitectureDataset(Dataset):
         return meta
 
     @classmethod
+    def get_mapping(cls, sample: networkx.DiGraph):
+        return dict(zip(sorted(sample.nodes()), range(sample.number_of_nodes())))
+
+    @classmethod
     def get_x_dict(cls, meta: dict[str, Any], node_dict_size: int | None = None) -> dict[str, list[str] | dict[str, int]]:
         all_nodes = [(node_id, node_count) for node_id, node_count in meta['all_nodes']['onnx'].items()] + [(node_id, node_count) for node_id, node_count in meta['all_nodes']['others'].items()]
         all_nodes = sorted(all_nodes, key=lambda x: x[1])
@@ -151,7 +155,7 @@ class ArchitectureDataset(Dataset):
 
     @classmethod
     def get_edge_index(cls, sample: networkx.DiGraph) -> torch.Tensor:
-        mapping = dict(zip(sample.nodes(), range(sample.number_of_nodes())))
+        mapping = cls.get_mapping(sample)
         edge_index = torch.empty((2, sample.number_of_edges()), dtype=torch.long)
         for index, (src, dst) in enumerate(sample.edges()):
             edge_index[0, index] = mapping[src]

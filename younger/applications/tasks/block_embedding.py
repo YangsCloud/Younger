@@ -13,42 +13,39 @@
 import torch
 import torch.utils.data
 
-from typing import Any, Callable
+from typing import Any, Literal
 from collections import OrderedDict
 from torch_geometric.data import Batch, Data
+
+from younger.commons.logging import Logger
 
 from younger.datasets.modules import Instance, Network
 from younger.datasets.utils.translation import get_complete_attributes_of_node
 
-from younger.applications.models import NAPPGATVaryV1
-from younger.applications.datasets import ArchitectureDataset
+from younger.applications.models import GLASS
+from younger.applications.datasets import BlockDataset
 from younger.applications.tasks.base_task import YoungerTask
 
 
-def infer_cluster_num(dataset: ArchitectureDataset) -> int:
-    total_node_num = 0
-    for data in dataset:
-        total_node_num += data.num_nodes
-    return int(total_node_num / len(dataset))
-
-
-class PerformancePrediction(YoungerTask):
-    def __init__(self, custom_config: dict, device_descriptor: torch.device) -> None:
-        super().__init__(custom_config, device_descriptor)
+class BlockEmbedding(YoungerTask):
+    def __init__(self, logger: Logger, custom_config: dict) -> None:
+        super().__init__(logger)
         self.build_config(custom_config)
         self.build()
 
     def build_config(self, custom_config: dict):
+        mode = custom_config.get('mode', 'Train')
+        assert mode in {'Train', 'Test', 'API'}
+
         # Dataset
         dataset_config = dict()
         custom_dataset_config = custom_config.get('dataset', dict())
         dataset_config['train_dataset_dirpath'] = custom_dataset_config.get('train_dataset_dirpath', None)
         dataset_config['valid_dataset_dirpath'] = custom_dataset_config.get('valid_dataset_dirpath', None)
         dataset_config['test_dataset_dirpath'] = custom_dataset_config.get('test_dataset_dirpath', None)
-        dataset_config['metric_feature_get_type'] = custom_dataset_config.get('metric_feature_get_type', 'mean') # 'none','mean','rand'
-        dataset_config['worker_number'] = custom_dataset_config.get('worker_number', 4) 
-        dataset_config['node_dict_size'] = custom_dataset_config.get('node_dict_size', None) 
-        dataset_config['task_dict_size'] = custom_dataset_config.get('task_dict_size', None) 
+        dataset_config['worker_number'] = custom_dataset_config.get('worker_number', 4)
+        dataset_config['node_dict_size'] = custom_dataset_config.get('node_dict_size', None)
+        dataset_config['task_dict_size'] = custom_dataset_config.get('task_dict_size', None)
 
         # Model
         model_config = dict()
@@ -62,8 +59,14 @@ class PerformancePrediction(YoungerTask):
         # Optimizer
         optimizer_config = dict()
         custom_optimizer_config = custom_config.get('optimizer', dict())
-        optimizer_config['learning_rate'] = custom_optimizer_config.get('learning_rate', 1e-3)
-        optimizer_config['weight_decay'] = custom_optimizer_config.get('weight_decay', 1e-1)
+        optimizer_config['learning_rate'] = custom_optimizer_config.get('learning_rate', 0.0005)
+        optimizer_config['weight_decay'] = custom_optimizer_config.get('weight_decay', 0)
+
+        # Scheduler
+        scheduler_config = dict()
+        custom_scheduler_config = custom_config.get('scheduler', dict())
+        scheduler_config['factor'] = custom_scheduler_config.get('factor', 0.2)
+        scheduler_config['min_lr'] = custom_scheduler_config.get('min_lr', 5e-5)
 
         # API
         api_config = dict()
@@ -75,52 +78,37 @@ class PerformancePrediction(YoungerTask):
         config['dataset'] = dataset_config
         config['model'] = model_config
         config['optimizer'] = optimizer_config
+        config['scheduler'] = scheduler_config
         config['api'] = api_config
+        config['mode'] = mode
         self.config = config
 
     def build(self):
-        if self.config['dataset']['train_dataset_dirpath']:
-            self.train_dataset = ArchitectureDataset(
+        if self.config['mode'] == 'Train':
+            self.train_dataset = BlockDataset(
                 self.config['dataset']['train_dataset_dirpath'],
                 task_dict_size=self.config['dataset']['task_dict_size'],
                 node_dict_size=self.config['dataset']['node_dict_size'],
-                metric_feature_get_type=self.config['dataset']['metric_feature_get_type'],
                 worker_number=self.config['dataset']['worker_number']
             )
-        else:
-            self.train_dataset = None
-        if self.config['dataset']['valid_dataset_dirpath']:
-            self.valid_dataset = ArchitectureDataset(
+            self.valid_dataset = BlockDataset(
                 self.config['dataset']['valid_dataset_dirpath'],
                 task_dict_size=self.config['dataset']['task_dict_size'],
                 node_dict_size=self.config['dataset']['node_dict_size'],
-                metric_feature_get_type=self.config['dataset']['metric_feature_get_type'],
                 worker_number=self.config['dataset']['worker_number']
             )
-        else:
-            self.valid_dataset = None
-        if self.config['dataset']['test_dataset_dirpath']:
-            self.test_dataset = ArchitectureDataset(
+            self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["n2i"])}')
+            self.logger.info(f'    -> Tasks Dict Size: {len(self.train_dataset.y_dict["t2i"])}')
+
+        if self.config['mode'] == 'Test':
+            self.test_dataset = BlockDataset(
                 self.config['dataset']['test_dataset_dirpath'],
                 task_dict_size=self.config['dataset']['task_dict_size'],
                 node_dict_size=self.config['dataset']['node_dict_size'],
-                metric_feature_get_type=self.config['dataset']['metric_feature_get_type'],
                 worker_number=self.config['dataset']['worker_number']
             )
-        else:
-            self.test_dataset = None
 
-        if self.train_dataset:
-            self.logger.info(f'-> Nodes Dict Size: {len(self.train_dataset.x_dict["n2i"])}')
-            self.logger.info(f'-> Tasks Dict Size: {len(self.train_dataset.y_dict["t2i"])}')
-
-        if self.config['model']['cluster_num'] is None:
-            self.config['model']['cluster_num'] = infer_cluster_num(self.train_dataset)
-            self.logger.info(f'Cluster Number Not Specified! Infered Number: {self.config["model"]["cluster_num"]}')
-        else:
-            self.logger.info(f'-> Cluster Number: {self.config["model"]["cluster_num"]}')
-
-        self.model = NAPPGATVaryV1(
+        self.model = GLASS(
             node_dict=self.train_dataset.x_dict['n2i'],
             task_dict=self.train_dataset.y_dict['t2i'],
             node_dim=self.config['model']['node_dim'],
@@ -129,46 +117,40 @@ class PerformancePrediction(YoungerTask):
             readout_dim=self.config['model']['readout_dim'],
             cluster_num=self.config['model']['cluster_num'],
         )
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config['optimizer']['learning_rate'], weight_decay=self.config['optimizer']['weight_decay'])
 
-    def train(self, minibatch: Any) -> tuple[torch.Tensor, OrderedDict[str, tuple[torch.Tensor, Callable | None]]]:
-        minibatch = minibatch.to(self.device_descriptor)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config['optimizer']['learning_rate'], weight_decay=self.config['optimizer']['weight_decay'])
+        self.learning_rate_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, factor=self.config['scheduler']['factor'], min_lr=self.config['scheduler']['min_lr'])
+
+    def update_learning_rate(self, stage: Literal['Step', 'Epoch']):
+        assert stage in {'Step', 'Epoch'}, f'Only Support \'Step\' or \'Epoch\''
+        if stage == 'Epoch':
+            self.learning_rate_scheduler.step()
+        return
+
+    def train(self, minibatch: Any) -> tuple[torch.Tensor, OrderedDict]:
         y = minibatch.y.reshape(len(minibatch), -1)
-        tasks = y[:, 0].long()
-        metrics = y[:, 1]
-        outputs, global_pooling_loss = self.model(minibatch.x[:, 0], minibatch.edge_index, minibatch.batch, tasks)
-        main_loss = torch.nn.functional.mse_loss(outputs.reshape(-1), metrics)
-        loss = main_loss + global_pooling_loss
+        tasks = y[:, 0].long().clone()
+        global_pooling_loss = self.model(minibatch.x[:, 0].clone(), minibatch.edge_index, minibatch.batch)
         logs = OrderedDict({
-            'Total-Loss': (loss, lambda x: f'{x:.4f}'),
-            'REG-Loss (MSE)': (main_loss, lambda x: f'{x:.4f}'),
-            'Cluster-loss': (global_pooling_loss, lambda x: f'{x:.4f}'),
+            'Cluster-loss': float(global_pooling_loss),
         })
-        return loss, logs
+        return global_pooling_loss, logs
 
     def eval(self, minibatch: Any) -> tuple[torch.Tensor, torch.Tensor]:
         # Return Output & Golden
-        minibatch = minibatch.to(self.device_descriptor)
         y = minibatch.y.reshape(len(minibatch), -1)
         tasks = y[:, 0].long()
-        metrics = y[:, 1]
-        outputs, _ = self.model(minibatch.x[:, 0], minibatch.edge_index, minibatch.batch, tasks)
-        return outputs.reshape(-1), metrics
+        outputs, _ = self.model(minibatch.x, minibatch.edge_index, minibatch.batch)
+        return outputs, None
 
-    def eval_calculate_logs(self, all_outputs: list[torch.Tensor], all_goldens: list[torch.Tensor]) -> OrderedDict[str, tuple[torch.Tensor, Callable | None]]:
-        all_outputs = torch.stack(all_outputs).reshape(-1)
-        all_goldens = torch.stack(all_goldens).reshape(-1)
-        mae = torch.nn.functional.l1_loss(all_outputs, all_goldens, reduction='mean')
-        mse = torch.nn.functional.mse_loss(all_outputs, all_goldens, reduction='mean')
-        rmse = torch.sqrt(mse)
+    def eval_calculate_logs(self, all_outputs: list[torch.Tensor], all_goldens: list[torch.Tensor]) -> OrderedDict:
+        all_outputs = torch.mean(torch.stack(all_outputs))
         logs = OrderedDict({
-            'MAE': (mae, lambda x: f'{x:.4f}'),
-            'MSE': (mse, lambda x: f'{x:.4f}'),
-            'RMSE': (rmse, lambda x: f'{x:.4f}'),
+            'Cluster-loss': float(logs),
         })
         return logs
 
-    def api(self, **kwargs):
+    def api(self, device_descriptor, **kwargs):
         meta_filepath = self.config['api']['meta_filepath']
         onnx_model_dirpath = self.config['api']['onnx_model_dirpath']
         assert meta_filepath, f'No Meta File.'
@@ -203,7 +185,7 @@ class PerformancePrediction(YoungerTask):
         self.logger.info(f'  -> Interact Test Begin ...')
 
         with torch.no_grad():
-            minibatch: Data = minibatch.to(self.device_descriptor)
+            minibatch: Data = minibatch.to(device_descriptor)
             output, _ = self.model(minibatch.x, minibatch.edge_index, minibatch.batch)
 
             for onnx_model_filename, output_value in zip(onnx_model_filenames, output):

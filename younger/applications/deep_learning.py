@@ -111,10 +111,7 @@ def exact_train(
     # Print Dataset
     task.logger.info(f'-> Dataset Split Sizes:')
     task.logger.info(f'   Train - {len(task.train_dataset)}')
-    if task.valid_dataset:
-        task.logger.info(f'   Valid - {len(task.valid_dataset)}')
-    else:
-        task.logger.info(f'   No Valid')
+    task.logger.info(f'   Valid - {len(task.valid_dataset)}')
 
     # Print Model
     task.logger.info(f'-> Model Specs:')
@@ -238,8 +235,12 @@ def exact_train(
                     distributed.barrier()
                 task.model.train()
 
+            task.update_learning_rate(stage='Step')
+
         toc = time.time()
         task.logger.info(f'-> Epoch@{epoch} Finished. Time Cost = {toc-tic:.2f}s')
+
+        task.update_learning_rate(stage='Epoch')
 
     if distribution_flag:
         distributed.destroy_process_group()

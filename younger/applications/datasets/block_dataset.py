@@ -90,9 +90,12 @@ class BlockDataset(Dataset):
         graph_data_with_communities: dict[str, Data | list[set]] = torch.load(os.path.join(self.processed_dir, f'sample-{sample_index}.pth'))
 
         graph_data: Data = graph_data_with_communities['graph_data']
-        community: set = graph_data_with_communities['communities'][community_index]
-        zero_one_label
-        return
+        community, labels = graph_data_with_communities['communities'][community_index]
+        block_mask = torch.zeros(graph_data.x.shape[0], dtype=torch.long)
+        block_mask[list(community)] = 1
+        block_labels = torch.tensor(labels, dtype=torch.float)
+        block_data: Data = Data(x=graph_data.x, edge_index=graph_data.edge_index, y=graph_data.y, block_mask=block_mask, block_labels=block_labels)
+        return block_data
 
     def download(self):
         archive_filepath = os.path.join(self.root, self.meta['archive'])
@@ -147,6 +150,10 @@ class BlockDataset(Dataset):
         return meta
 
     @classmethod
+    def get_mapping(cls, sample: networkx.DiGraph):
+        return dict(zip(sorted(sample.nodes()), range(sample.number_of_nodes())))
+
+    @classmethod
     def get_x_dict(cls, meta: dict[str, Any], node_dict_size: int | None = None) -> dict[str, list[str] | dict[str, int]]:
         all_nodes = [(node_id, node_count) for node_id, node_count in meta['all_nodes']['onnx'].items()] + [(node_id, node_count) for node_id, node_count in meta['all_nodes']['others'].items()]
         all_nodes = sorted(all_nodes, key=lambda x: x[1])
@@ -174,7 +181,7 @@ class BlockDataset(Dataset):
 
     @classmethod
     def get_edge_index(cls, sample: networkx.DiGraph) -> torch.Tensor:
-        mapping = dict(zip(sample.nodes(), range(sample.number_of_nodes())))
+        mapping = cls.get_mapping(sample)
         edge_index = torch.empty((2, sample.number_of_edges()), dtype=torch.long)
         for index, (src, dst) in enumerate(sample.edges()):
             edge_index[0, index] = mapping[src]
@@ -241,7 +248,8 @@ class BlockDataset(Dataset):
         return graph_data
 
     @classmethod
-    def get_communities(cls, sample: networkx.DiGraph, block_get_type: Literal['louvain', 'label'], **kwargs) -> list[set]:
+    def get_communities(cls, sample: networkx.DiGraph, block_get_type: Literal['louvain', 'label'], **kwargs) -> list[tuple[set, tuple]]:
+        mapping = cls.get_mapping(sample)
         if block_get_type == 'louvain':
             seed = kwargs.get('seed', None)
             resolution = kwargs.get('resolution', 1)
@@ -251,10 +259,18 @@ class BlockDataset(Dataset):
             seed = kwargs.get('seed', None)
             communities = list(networkx.community.asyn_lpa_communities(sample, resolution=resolution, seed=seed))
 
-        # blocks = list()
-        # for community in communities:
-        #     blocks.append(sample.subgraph(community))
-        return communities
+        community_with_labels = list()
+        for community in communities:
+            block: networkx.DiGraph = networkx.subgraph(sample, community).copy()
+
+            # Labels
+            density = networkx.density(block)
+            coreness = numpy.average(list(networkx.core_number(block).values()))
+            cut_ratio = len(list(networkx.edge_boundary(sample, block.nodes))) / (block.number_of_nodes() * (sample.number_of_nodes() - block.number_of_nodes()))
+
+            community = set([mapping[node] for node in community])
+            community_with_labels.append((community, (density, coreness, cut_ratio)))
+        return community_with_labels
 
     @classmethod
     def get_graph_data_with_communities(

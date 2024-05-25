@@ -13,3 +13,4 @@
 from younger.applications.models.napp_gat_base import NAPPGATBase
 from younger.applications.models.napp_gin_base import NAPPGINBase
 from younger.applications.models.napp_gat_vary_v1 import NAPPGATVaryV1
+from younger.applications.models.glass import GLASS

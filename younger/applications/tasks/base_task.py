@@ -14,7 +14,7 @@ import torch
 import pathlib
 import torch.utils.data
 
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 from collections import OrderedDict
 
 from younger.commons.logging import set_logger
@@ -32,6 +32,10 @@ class YoungerTask(object):
         self.logging_config = logging_config
         self.logger = set_logger(logging_config['name'], mode=logging_config['mode'], level=logging_config['level'], logging_filepath=logging_config['filepath'])
         self.device_descriptor = device_descriptor
+
+    def update_learning_rate(self, stage: Literal['Step', 'Epoch']):
+        assert stage in {'Step', 'Epoch'}, f'Only Support \'Step\' or \'Epoch\''
+        return
 
     def train(self, minibatch: Any) -> tuple[torch.Tensor, OrderedDict[str, tuple[torch.Tensor, Callable | None]]]:
         raise NotImplementedError
