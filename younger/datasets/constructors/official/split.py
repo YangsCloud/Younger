@@ -67,6 +67,24 @@ def save_split(meta: dict[str, Any], instances: list[Instance], save_dirpath: pa
     logger.info(f'Saved.')
 
 
+def clean_split(split: list[Instance], task_dict: dict[str, int], node_dict: dict[str, dict[str, int]]):
+    task_dict_keys = set(task_dict.keys())
+    node_dict_keys = set(node_dict['onnx'].keys()) | set(node_dict['others'].keys())
+    cleaned_split = []
+    with tqdm.tqdm(total=len(split), desc='Cleaning') as progress_bar:
+        for index, instance in enumerate(split, start=1):
+            instance_tasks, instance_nodes = check_instance(instance)
+            instance_task_keys = set(instance_tasks.keys())
+            instance_node_keys = set(instance_nodes['onnx'].keys()) | set(instance_nodes['others'].keys())
+            if len(instance_task_keys - task_dict_keys) != 0 or len(instance_node_keys - node_dict_keys) != 0:
+                pass
+            else:
+                cleaned_split.append(instance)
+            progress_bar.update(1)
+            progress_bar.set_postfix({f'Current Cleaned': f'{len(cleaned_split)}'})
+    return cleaned_split
+
+
 def update_dict_count(origin_dict: dict[str, int], other_dict: dict[str, int]) -> dict[str, int]:
     for key, value in other_dict.items():
         count = origin_dict.get(key, 0)
@@ -75,7 +93,7 @@ def update_dict_count(origin_dict: dict[str, int], other_dict: dict[str, int]) -
     return origin_dict
 
 
-def check_instance(instance: Instance) -> tuple[dict[str, int], dict[str, int]]:
+def check_instance(instance: Instance) -> tuple[dict[str, int], dict[str, dict[str, int]]]:
     instance_tasks: dict[str, int] = {task: 1 for task in instance.labels['tasks']}
     instance_nodes: dict[str, dict[str, int]] = dict()
     instance_nodes['onnx'] = dict()
@@ -92,7 +110,7 @@ def check_instance(instance: Instance) -> tuple[dict[str, int], dict[str, int]]:
     return instance_tasks, instance_nodes
 
 
-def extract_dict(split: list[Instance], worker_number: int) -> tuple[dict[str, int], dict[str, int]]:
+def extract_dict(split: list[Instance], worker_number: int) -> tuple[dict[str, int], dict[str, dict[str, int]]]:
     all_tasks: dict[str, int] = dict()
     all_nodes: dict[str, dict[str, int]] = dict()
     all_nodes['onnx'] = dict()
@@ -183,6 +201,7 @@ def select_instance(parameter: tuple[pathlib.Path, set[str], str]) -> tuple[Inst
 def main(
     tasks_filepath: pathlib.Path, dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path,
     version: str,
+    silly: bool = True,
     metric_name: str | None = None,
     node_size_lbound: int | None = None, node_size_ubound: int | None = None,
     edge_size_lbound: int | None = None, edge_size_ubound: int | None = None,
@@ -250,11 +269,18 @@ def main(
 
     logger.info(f'Extract Dictionaries From Train Split: Task_Dict & Node_Dict')
     train_task_dict, train_node_dict = extract_dict(train_split, worker_number)
+    if silly:
+        valid_split = clean_split(valid_split, train_task_dict, train_node_dict)
+        test_split = clean_split(test_split, train_task_dict, train_node_dict)
+        logger.info(f'-!!!-New-!!!-')
+        logger.info(f'Clean Split Finished - Train: {len(train_split)}; Valid: {len(valid_split)}; Test: {len(test_split)};')
+        logger.info(f' - First 10 Train Index: {train_indices[:10]}')
+        logger.info(f' - First 10 Valid Index: {valid_indices[:10]}')
+        logger.info(f' - First 10 Test  Index: {test_indices[:10]}')
 
     train_task_dict_keys = set(train_task_dict.keys())
     train_node_dict_keys = set(train_node_dict['onnx'].keys()) | set(train_node_dict['others'].keys())
     logger.info(f'Extracted - Task_Dict: {len(train_task_dict_keys)}; (ONNX Node_Dict/Others Node_Dict): ({len(train_node_dict["onnx"])}/{len(train_node_dict["others"])});')
-
     logger.info(f'Checking Unknown Tasks & Nodes In Valid & Test Splits.')
 
     logger.info(f'Valid Split:')

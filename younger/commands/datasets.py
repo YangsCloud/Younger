@@ -61,6 +61,7 @@ def split_run(arguments):
     split.main(
         tasks_filepath, dataset_dirpath, save_dirpath,
         arguments.version,
+        arguments.silly,
         arguments.metric_name,
         arguments.node_size_lbound, arguments.node_size_ubound,
         arguments.edge_size_lbound, arguments.edge_size_ubound,
@@ -252,6 +253,7 @@ def set_datasets_split_arguments(parser: argparse.ArgumentParser):
     parser.add_argument('--save-dirpath', type=str, default='.')
 
     parser.add_argument('--version', type=str, required=True)
+    parser.add_argument('--silly', action='store_true')
     parser.add_argument('--metric-name', type=str, default=None)
 
     parser.add_argument('--node-size-lbound', type=int, default=None)
