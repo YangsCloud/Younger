@@ -44,6 +44,7 @@ class BlockEmbedding(YoungerTask):
         dataset_config['valid_dataset_dirpath'] = custom_dataset_config.get('valid_dataset_dirpath', None)
         dataset_config['test_dataset_dirpath'] = custom_dataset_config.get('test_dataset_dirpath', None)
         dataset_config['block_get_type'] = custom_dataset_config.get('block_get_type', 'louvain')
+        dataset_config['block_get_number'] = custom_dataset_config.get('block_get_number', 10)
         dataset_config['seed'] = custom_dataset_config.get('seed', None)
         dataset_config['worker_number'] = custom_dataset_config.get('worker_number', 4)
         dataset_config['node_dict_size'] = custom_dataset_config.get('node_dict_size', None)
@@ -103,6 +104,7 @@ class BlockEmbedding(YoungerTask):
                 node_dict_size=self.config['dataset']['node_dict_size'],
                 worker_number=self.config['dataset']['worker_number'],
                 block_get_type=self.config['dataset']['block_get_type'],
+                block_get_number=self.config['dataset']['block_get_number'],
                 seed=self.config['dataset']['seed']
             )
             self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["n2i"])}')
@@ -115,6 +117,7 @@ class BlockEmbedding(YoungerTask):
                 node_dict_size=self.config['dataset']['node_dict_size'],
                 worker_number=self.config['dataset']['worker_number'],
                 block_get_type=self.config['dataset']['block_get_type'],
+                block_get_number=self.config['dataset']['block_get_number'],
                 seed=self.config['dataset']['seed']
             )
 

@@ -14,6 +14,7 @@ import os
 import tqdm
 import numpy
 import torch
+import random
 import networkx
 import multiprocessing
 
@@ -40,11 +41,15 @@ class BlockDataset(Dataset):
         task_dict_size: int | None = None,
         node_dict_size: int | None = None,
         block_get_type: Literal['louvain', 'label'] = 'louvain',
+        block_get_number: int | None = None,
+
         seed: int | None = None,
         worker_number: int = 4,
     ):
         assert block_get_type in {'louvain', 'label'}
+
         self.block_get_type = block_get_type
+        self.block_get_number = block_get_number
         self.seed = seed
         self.worker_number = worker_number
 
@@ -128,7 +133,7 @@ class BlockDataset(Dataset):
         sample_filepath = os.path.join(self.raw_dir, f'sample-{sample_index}.pkl')
         sample: networkx.DiGraph = load_pickle(sample_filepath)
 
-        graph_data_with_communities = self.__class__.get_graph_data_with_communities(sample, self.x_dict, self.y_dict, self.block_get_type, self.seed)
+        graph_data_with_communities = self.__class__.get_graph_data_with_communities(sample, self.x_dict, self.y_dict, self.block_get_type, self.block_get_number, self.seed)
         if self.pre_filter is not None and not self.pre_filter(graph_data_with_communities):
             return
 
@@ -247,7 +252,7 @@ class BlockDataset(Dataset):
         return graph_data
 
     @classmethod
-    def get_communities(cls, sample: networkx.DiGraph, block_get_type: Literal['louvain', 'label'], **kwargs) -> list[tuple[set, tuple]]:
+    def get_communities(cls, sample: networkx.DiGraph, block_get_type: Literal['louvain', 'label'], block_get_number: int | None = None, **kwargs) -> list[tuple[set, tuple]]:
         mapping = cls.get_mapping(sample)
         if block_get_type == 'louvain':
             seed = kwargs.get('seed', None)
@@ -258,6 +263,10 @@ class BlockDataset(Dataset):
             seed = kwargs.get('seed', None)
             communities = list(networkx.community.asyn_lpa_communities(sample, resolution=resolution, seed=seed))
 
+        if block_get_number is None:
+            pass
+        else:
+            communities = random.sample(communities, block_get_number)
         community_with_labels = list()
         for community in communities:
             block: networkx.DiGraph = networkx.subgraph(sample, community).copy()
@@ -277,12 +286,13 @@ class BlockDataset(Dataset):
         sample: networkx.DiGraph,
         x_dict: dict[str, Any], y_dict: dict[str, Any],
         block_get_type: Literal['louvain', 'label'],
+        block_get_number: int | None = None,
         seed: int | None = None,
     ) -> dict[str, Data | list[set]]:
 
         graph_data = cls.get_graph_data(sample, x_dict, y_dict)
         communities: list[set] = list()
-        for community in cls.get_communities(sample, block_get_type, seed=seed):
+        for community in cls.get_communities(sample, block_get_type, block_get_number=block_get_number, seed=seed):
             communities.append(community)
 
         return dict(
