@@ -90,7 +90,7 @@ class BlockEmbedding(YoungerTask):
 
     def build(self):
         if self.config['mode'] == 'Train':
-            self.train_dataset = BlockDataset(
+            self._train_dataset = BlockDataset(
                 self.config['dataset']['train_dataset_dirpath'],
                 task_dict_size=self.config['dataset']['task_dict_size'],
                 node_dict_size=self.config['dataset']['node_dict_size'],
@@ -98,7 +98,7 @@ class BlockEmbedding(YoungerTask):
                 block_get_type=self.config['dataset']['block_get_type'],
                 seed=self.config['dataset']['seed']
             )
-            self.valid_dataset = BlockDataset(
+            self._valid_dataset = BlockDataset(
                 self.config['dataset']['valid_dataset_dirpath'],
                 task_dict_size=self.config['dataset']['task_dict_size'],
                 node_dict_size=self.config['dataset']['node_dict_size'],
@@ -111,7 +111,7 @@ class BlockEmbedding(YoungerTask):
             self.logger.info(f'    -> Tasks Dict Size: {len(self.train_dataset.y_dict["t2i"])}')
 
         if self.config['mode'] == 'Test':
-            self.test_dataset = BlockDataset(
+            self._test_dataset = BlockDataset(
                 self.config['dataset']['test_dataset_dirpath'],
                 task_dict_size=self.config['dataset']['task_dict_size'],
                 node_dict_size=self.config['dataset']['node_dict_size'],
@@ -121,7 +121,7 @@ class BlockEmbedding(YoungerTask):
                 seed=self.config['dataset']['seed']
             )
 
-        self.model = GLASS(
+        self._model = GLASS(
             node_dict=self.train_dataset.x_dict['n2i'],
             hidden_dim=self.config['model']['hidden_dim'],
             output_dim=self.config['model']['output_dim'],
@@ -132,8 +132,8 @@ class BlockEmbedding(YoungerTask):
         )
 
         if self.config['mode'] == 'Train':
-            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config['optimizer']['learning_rate'], weight_decay=self.config['optimizer']['weight_decay'])
-            self.learning_rate_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, factor=self.config['scheduler']['factor'], min_lr=self.config['scheduler']['min_lr'])
+            self._optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config['optimizer']['learning_rate'], weight_decay=self.config['optimizer']['weight_decay'])
+            self._learning_rate_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, factor=self.config['scheduler']['factor'], min_lr=self.config['scheduler']['min_lr'])
             label_name_to_id = dict(
                 density = 0,
                 coreness = 1,
@@ -144,7 +144,7 @@ class BlockEmbedding(YoungerTask):
     def update_learning_rate(self, stage: Literal['Step', 'Epoch']):
         assert stage in {'Step', 'Epoch'}, f'Only Support \'Step\' or \'Epoch\''
         if stage == 'Epoch':
-            self.learning_rate_scheduler.step()
+            self._learning_rate_scheduler.step()
         return
 
     def train(self, minibatch: Data) -> tuple[torch.Tensor, OrderedDict]:
@@ -165,8 +165,8 @@ class BlockEmbedding(YoungerTask):
         return outputs.reshape(-1), subgraph_label
 
     def eval_calculate_logs(self, all_outputs: list[torch.Tensor], all_goldens: list[torch.Tensor]) -> OrderedDict:
-        all_outputs = torch.stack(all_outputs).reshape(-1)
-        all_goldens = torch.stack(all_goldens).reshape(-1)
+        all_outputs = torch.cat(all_outputs)
+        all_goldens = torch.cat(all_goldens)
         mae = torch.nn.functional.l1_loss(all_outputs, all_goldens, reduction='mean')
         mse = torch.nn.functional.mse_loss(all_outputs, all_goldens, reduction='mean')
         rmse = torch.sqrt(mse)
@@ -217,3 +217,23 @@ class BlockEmbedding(YoungerTask):
 
             for onnx_model_filename, output_value in zip(onnx_model_filenames, output):
                 self.logger.info(f'  -> Result - {onnx_model_filename}: {output_value}')
+
+    @property
+    def model(self):
+        return self._model
+
+    @property
+    def optimizer(self):
+        return self._optimizer
+
+    @property
+    def train_dataset(self):
+        return self._train_dataset
+
+    @property
+    def valid_dataset(self):
+        return self._valid_dataset
+
+    @property
+    def test_dataset(self):
+        return self._test_dataset

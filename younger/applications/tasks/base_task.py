@@ -37,6 +37,26 @@ class YoungerTask(object):
         assert stage in {'Step', 'Epoch'}, f'Only Support \'Step\' or \'Epoch\''
         return
 
+    @property
+    def model(self):
+        raise NotImplementedError
+
+    @property
+    def optimizer(self):
+        raise NotImplementedError
+
+    @property
+    def train_dataset(self):
+        raise NotImplementedError
+
+    @property
+    def valid_dataset(self):
+        raise NotImplementedError
+
+    @property
+    def test_dataset(self):
+        raise NotImplementedError
+
     def train(self, minibatch: Any) -> tuple[torch.Tensor, OrderedDict[str, tuple[torch.Tensor, Callable | None]]]:
         raise NotImplementedError
 

@@ -266,7 +266,7 @@ class BlockDataset(Dataset):
         if block_get_number is None:
             pass
         else:
-            communities = random.sample(communities, block_get_number)
+            communities = random.sample(communities, min(block_get_number, len(communities)))
         community_with_labels = list()
         for community in communities:
             block: networkx.DiGraph = networkx.subgraph(sample, community).copy()
