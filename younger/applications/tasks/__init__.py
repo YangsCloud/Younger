@@ -12,8 +12,10 @@
 
 from younger.applications.tasks.base_task import YoungerTask
 from younger.applications.tasks.performance_prediction import PerformancePrediction
+from younger.applications.tasks.block_embedding import BlockEmbedding
 
 
 task_builders: dict[str, YoungerTask] = dict(
-    performance_prediction = PerformancePrediction
+    performance_prediction = PerformancePrediction,
+    block_embedding = BlockEmbedding
 )

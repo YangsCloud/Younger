@@ -39,9 +39,12 @@ class BlockDataset(Dataset):
 
         task_dict_size: int | None = None,
         node_dict_size: int | None = None,
+        block_get_type: Literal['louvain', 'label'] = 'louvain',
         seed: int | None = None,
         worker_number: int = 4,
     ):
+        assert block_get_type in {'louvain', 'label'}
+        self.block_get_type = block_get_type
         self.seed = seed
         self.worker_number = worker_number
 
@@ -52,15 +55,16 @@ class BlockDataset(Dataset):
         self.x_dict = self.__class__.get_x_dict(self.meta, node_dict_size)
         self.y_dict = self.__class__.get_y_dict(self.meta, task_dict_size)
 
-        self._community_locations_filename = 'community_locations.pt'
-        self._community_locations_filepath = os.path.join(self.processed_dir, self._community_locations_filename)
         self._community_locations: list[tuple[int, int]] = list()
+
+        self._community_locations_filename = 'community_locations.pt'
 
         super().__init__(root, transform, pre_transform, pre_filter, log, force_reload)
 
         try:
-            self._community_locations = torch.load(self._community_locations_filepath)
-        except FileExistsError as error:
+            _community_locations_filepath = os.path.join(self.processed_dir, self._community_locations_filename)
+            self._community_locations = torch.load(_community_locations_filepath)
+        except FileNotFoundError as error:
             print(f'There is no community locations file \'{self._community_locations_filename}\', please remove the processed data directory: {self.processed_dir} and re-run the command.')
             raise error
 
@@ -93,7 +97,7 @@ class BlockDataset(Dataset):
         community, labels = graph_data_with_communities['communities'][community_index]
         block_mask = torch.zeros(graph_data.x.shape[0], dtype=torch.long)
         block_mask[list(community)] = 1
-        block_labels = torch.tensor(labels, dtype=torch.float)
+        block_labels = torch.tensor(list(labels), dtype=torch.float)
         block_data: Data = Data(x=graph_data.x, edge_index=graph_data.edge_index, y=graph_data.y, block_mask=block_mask, block_labels=block_labels)
         return block_data
 
@@ -117,13 +121,14 @@ class BlockDataset(Dataset):
         for sample_index, community_number in sorted_community_records:
             community_location = [(sample_index, community_index) for community_index in range(community_number)]
             self._community_locations.extend(community_location)
-        torch.save(self._community_locations, self._community_locations_filepath)
+        _community_locations_filepath = os.path.join(self.processed_dir, self._community_locations_filename)
+        torch.save(self._community_locations, _community_locations_filepath)
 
     def process_sample(self, sample_index: int) -> tuple[int, int]:
         sample_filepath = os.path.join(self.raw_dir, f'sample-{sample_index}.pkl')
         sample: networkx.DiGraph = load_pickle(sample_filepath)
 
-        graph_data_with_communities = self.__class__.get_graph_data_with_communities(sample, self.x_dict, self.y_dict, self.seed)
+        graph_data_with_communities = self.__class__.get_graph_data_with_communities(sample, self.x_dict, self.y_dict, self.block_get_type, self.seed)
         if self.pre_filter is not None and not self.pre_filter(graph_data_with_communities):
             return
 
@@ -206,7 +211,7 @@ class BlockDataset(Dataset):
         return node_features
 
     @classmethod
-    def get_graph_feature(cls, graph_labels: dict, y_dict: dict[str, list[str] | dict[str, int]], metric_feature_get_type: Literal['none', 'mean', 'rand']) -> list:
+    def get_graph_feature(cls, graph_labels: dict, y_dict: dict[str, list[str] | dict[str, int]]) -> list:
 
         downloads: int = graph_labels['downloads']
         likes: int = graph_labels['likes']
@@ -217,17 +222,11 @@ class BlockDataset(Dataset):
         task = tasks[numpy.random.randint(len(tasks))] if len(tasks) else None
         graph_feature.append(y_dict['t2i'].get(task, y_dict['t2i']['__UNK__']))
 
-        if metric_feature_get_type == 'mean':
-            graph_feature.append(numpy.mean(metrics))
-
-        if metric_feature_get_type == 'rand':
-            graph_feature.append(metrics[numpy.random.randint(len(metrics))])
-
         return graph_feature
 
     @classmethod
-    def get_y(cls, sample: networkx.DiGraph, y_dict: dict[str, Any], metric_feature_get_type: Literal['none', 'mean', 'rand']) -> torch.Tensor:
-        graph_feature = cls.get_graph_feature(sample.graph, y_dict, metric_feature_get_type)
+    def get_y(cls, sample: networkx.DiGraph, y_dict: dict[str, Any]) -> torch.Tensor:
+        graph_feature = cls.get_graph_feature(sample.graph, y_dict)
         if graph_feature is None:
             graph_feature = None
         else:

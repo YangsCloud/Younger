@@ -13,357 +13,219 @@
 
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch_geometric.nn import GCNConv
+
+from typing import Literal
+
+from torch.nn import Embedding, ELU, Dropout, Linear
+
 from torch_geometric.nn import GraphNorm, GraphSizeNorm
 from torch_geometric.nn import global_mean_pool, global_add_pool, global_max_pool
-from .utils import pad2batch
 
 
-class Seq(nn.Module):
-    ''' 
-    An extension of nn.Sequential. 
-    Args: 
-        modlist an iterable of modules to add.
-    '''
-    def __init__(self, modlist):
-        super().__init__()
-        self.modlist = nn.ModuleList(modlist)
+def to_sparse_adj(edge_index: torch.Tensor, edge_weight: torch.Tensor, node_number: int, aggr_type: Literal['sum', 'avg', 'gcn'] = 'avg'):
+    sparse_adj = torch.sparse_coo_tensor(edge_index, edge_weight, size=(node_number, node_number), device=edge_index.device)
+    if aggr_type == 'avg':
+        i_degree = torch.sparse.sum(sparse_adj, dim=(0, )).to_dense().flatten()
+        i_degree[i_degree < 1] += 1
+        i_degree = 1.0 / i_degree
+        aggr_weight = i_degree[edge_index[0]] * edge_weight
 
-    def forward(self, *args, **kwargs):
-        out = self.modlist[0](*args, **kwargs)
-        for i in range(1, len(self.modlist)):
-            out = self.modlist[i](out)
-        return out
+    if aggr_type == "sum":
+        aggr_weight = edge_weight
 
+    if aggr_type == "gcn":
+        i_degree = torch.sparse.sum(sparse_adj, dim=(0, )).to_dense().flatten()
+        i_degree[i_degree < 1] += 1
+        i_degree = torch.pow(i_degree, -0.5)
 
-class MLP(nn.Module):
-    '''
-    Multi-Layer Perception.
-    Args:
-        tail_activation: whether to use activation function at the last layer.
-        activation: activation function.
-        gn: whether to use GraphNorm layer.
-    '''
-    def __init__(self,
-                 input_channels: int,
-                 hidden_channels: int,
-                 output_channels: int,
-                 num_layers: int,
-                 dropout=0,
-                 tail_activation=False,
-                 activation=nn.ReLU(inplace=True),
-                 gn=False):
-        super().__init__()
-        modlist = []
-        self.seq = None
-        if num_layers == 1:
-            modlist.append(nn.Linear(input_channels, output_channels))
-            if tail_activation:
-                if gn:
-                    modlist.append(GraphNorm(output_channels))
-                if dropout > 0:
-                    modlist.append(nn.Dropout(p=dropout, inplace=True))
-                modlist.append(activation)
-            self.seq = Seq(modlist)
-        else:
-            modlist.append(nn.Linear(input_channels, hidden_channels))
-            for _ in range(num_layers - 2):
-                if gn:
-                    modlist.append(GraphNorm(hidden_channels))
-                if dropout > 0:
-                    modlist.append(nn.Dropout(p=dropout, inplace=True))
-                modlist.append(activation)
-                modlist.append(nn.Linear(hidden_channels, hidden_channels))
-            if gn:
-                modlist.append(GraphNorm(hidden_channels))
-            if dropout > 0:
-                modlist.append(nn.Dropout(p=dropout, inplace=True))
-            modlist.append(activation)
-            modlist.append(nn.Linear(hidden_channels, output_channels))
-            if tail_activation:
-                if gn:
-                    modlist.append(GraphNorm(output_channels))
-                if dropout > 0:
-                    modlist.append(nn.Dropout(p=dropout, inplace=True))
-                modlist.append(activation)
-            self.seq = Seq(modlist)
+        o_degree = torch.sparse.sum(sparse_adj, dim=(1, )).to_dense().flatten()
+        o_degree[o_degree < 1] += 1
+        o_degree = torch.pow(o_degree, -0.5)
 
-    def forward(self, x):
-        return self.seq(x)
-
-
-def buildAdj(edge_index, edge_weight, n_node: int, aggr: str):
-    '''
-        Calculating the normalized adjacency matrix.
-        Args:
-            n_node: number of nodes in graph.
-            aggr: the aggregation method, can be "mean", "sum" or "gcn".
-        '''
-    adj = torch.sparse_coo_tensor(edge_index,
-                                  edge_weight,
-                                  size=(n_node, n_node))
-    deg = torch.sparse.sum(adj, dim=(1, )).to_dense().flatten()
-    deg[deg < 0.5] += 1.0
-    if aggr == "mean":
-        deg = 1.0 / deg
-        return torch.sparse_coo_tensor(edge_index,
-                                       deg[edge_index[0]] * edge_weight,
-                                       size=(n_node, n_node))
-    elif aggr == "sum":
-        return torch.sparse_coo_tensor(edge_index,
-                                       edge_weight,
-                                       size=(n_node, n_node))
-    elif aggr == "gcn":
-        deg = torch.pow(deg, -0.5)
-        return torch.sparse_coo_tensor(edge_index,
-                                       deg[edge_index[0]] * edge_weight *
-                                       deg[edge_index[1]],
-                                       size=(n_node, n_node))
-    else:
-        raise NotImplementedError
+        aggr_weight = i_degree[edge_index[0]] * edge_weight * o_degree[edge_index[1]]
+    return torch.sparse_coo_tensor(edge_index, aggr_weight, size=(node_number, node_number), device=edge_index.device)
 
 
 class GLASSConv(torch.nn.Module):
-    '''
-    A kind of message passing layer we use for GLASS.
-    We use different parameters to transform the features of node with different labels individually, and mix them.
-    Args:
-        aggr: the aggregation method.
-        z_ratio: the ratio to mix the transformed features.
-    '''
-    def __init__(self,
-                 in_channels: int,
-                 out_channels: int,
-                 activation=nn.ReLU(inplace=True),
-                 aggr="mean",
-                 z_ratio=0.8,
-                 dropout=0.2):
+    def __init__(
+        self,
+        input_dim: int,
+        output_dim: int,
+        aggr_type: Literal['sum', 'avg', 'gcn'] = 'avg',
+        ratio=0.8,
+        dropout=0.2,
+    ):
         super().__init__()
-        self.trans_fns = nn.ModuleList([
-            nn.Linear(in_channels, out_channels),
-            nn.Linear(in_channels, out_channels)
-        ])
-        self.comb_fns = nn.ModuleList([
-            nn.Linear(in_channels + out_channels, out_channels),
-            nn.Linear(in_channels + out_channels, out_channels)
-        ])
-        self.adj = torch.sparse_coo_tensor(size=(0, 0))
-        self.activation = activation
-        self.aggr = aggr
-        self.gn = GraphNorm(out_channels)
-        self.z_ratio = z_ratio
-        self.reset_parameters()
+        self.transform_for_0 = Linear(input_dim, output_dim)
+        self.combine_for_0 = Linear(input_dim + output_dim, output_dim)
+
+        self.transform_for_1 = Linear(input_dim, output_dim)
+        self.combine_for_1 = Linear(input_dim + output_dim, output_dim)
+
+        self.activation = ELU(inplace=True)
+        self.graph_norm = GraphNorm(output_dim)
+
+        self.aggr_type = aggr_type
+        self.ratio = ratio
         self.dropout = dropout
 
-    def reset_parameters(self):
-        for _ in self.trans_fns:
-            _.reset_parameters()
-        for _ in self.comb_fns:
-            _.reset_parameters()
-        self.gn.reset_parameters()
+        self.reset_parameters()
 
-    def forward(self, x_, edge_index, edge_weight, mask):
-        if self.adj.shape[0] == 0:
-            n_node = x_.shape[0]
-            self.adj = buildAdj(edge_index, edge_weight, n_node, self.aggr)
+    def forward(self, x, edge_index, edge_weight, block_mask):
+        adj = to_sparse_adj(edge_index, edge_weight, x.shape[0], self.aggr_type)
+
+        origin_x = x
+
         # transform node features with different parameters individually.
-        x1 = self.activation(self.trans_fns[1](x_))
-        x0 = self.activation(self.trans_fns[0](x_))
+        x0 = self.activation(self.transform_for_0(x))
+        x1 = self.activation(self.transform_for_1(x))
+
         # mix transformed feature.
-        x = torch.where(mask, self.z_ratio * x1 + (1 - self.z_ratio) * x0,
-                        self.z_ratio * x0 + (1 - self.z_ratio) * x1)
+        x = torch.where(block_mask, self.ratio * x1 + (1 - self.ratio) * x0, self.ratio * x0 + (1 - self.ratio) * x1)
+
         # pass messages.
-        x = self.adj @ x
-        x = self.gn(x)
-        x = F.dropout(x, p=self.dropout, training=self.training)
-        x = torch.cat((x, x_), dim=-1)
+        x = adj @ x
+        x = self.graph_norm(x)
+        x = torch.nn.functional.dropout(x, p=self.dropout, training=self.training)
+        x = torch.cat((x, origin_x), dim=-1)
+
         # transform node features with different parameters individually.
-        x1 = self.comb_fns[1](x)
-        x0 = self.comb_fns[0](x)
+        x0 = self.combine_for_0(x)
+        x1 = self.combine_for_1(x)
+
         # mix transformed feature.
-        x = torch.where(mask, self.z_ratio * x1 + (1 - self.z_ratio) * x0,
-                        self.z_ratio * x0 + (1 - self.z_ratio) * x1)
+        x = torch.where(block_mask, self.ratio * x1 + (1 - self.ratio) * x0, self.ratio * x0 + (1 - self.ratio) * x1)
         return x
 
+    def reset_parameters(self):
+        self.transform_for_0.reset_parameters()
+        self.transform_for_1.reset_parameters()
+        self.combine_for_0.reset_parameters()
+        self.combine_for_1.reset_parameters()
+        self.graph_norm.reset_parameters()
 
-class EmbZGConv(nn.Module):
-    '''
-    combination of some GLASSConv layers, normalization layers, dropout layers, and activation function.
-    Args:
-        max_deg: the max integer in input node features.
-        conv: the message passing layer we use.
-        gn: whether to use GraphNorm.
-        jk: whether to use Jumping Knowledge Network.
-    '''
-    def __init__(self,
-                 hidden_channels,
-                 output_channels,
-                 num_layers,
-                 max_deg,
-                 dropout=0,
-                 activation=nn.ReLU(),
-                 conv=GLASSConv,
-                 gn=True,
-                 jk=False,
-                 **kwargs):
+
+class GLASS(torch.nn.Module):
+    def __init__(
+        self,
+        node_dict: dict,
+        hidden_dim: int = 64,
+        output_dim: int = 64,
+        pool_type: Literal['sum', 'max', 'mean', 'size'] = 'mean',
+        dropout: float = 0.2,
+
+        aggr_type: Literal['sum', 'avg', 'gcn'] = 'avg',
+        ratio: float = 0.8,
+    ):
         super().__init__()
-        self.input_emb = nn.Embedding(max_deg + 1,
-                                      hidden_channels,
-                                      scale_grad_by_freq=False)
-        self.emb_gn = GraphNorm(hidden_channels)
-        self.convs = nn.ModuleList()
-        self.jk = jk
-        for _ in range(num_layers - 1):
-            self.convs.append(
-                conv(in_channels=hidden_channels,
-                     out_channels=hidden_channels,
-                     activation=activation,
-                     **kwargs))
-        self.convs.append(
-            conv(in_channels=hidden_channels,
-                 out_channels=output_channels,
-                 activation=activation,
-                 **kwargs))
-        self.activation = activation
+        self.node_emb = Embedding(len(node_dict), hidden_dim)
+        self.graph_norm_emb = GraphNorm(hidden_dim)
+
+        self.glass_conv_1 = GLASSConv(input_dim=hidden_dim, output_dim=hidden_dim, aggr_type=aggr_type, ratio=ratio, dropout=dropout)
+        self.graph_norm_1 = GraphNorm(hidden_dim)
+
+        self.glass_conv_2 = GLASSConv(input_dim=hidden_dim, output_dim=hidden_dim, aggr_type=aggr_type, ratio=ratio, dropout=dropout)
+        self.graph_norm_2 = GraphNorm(hidden_dim + hidden_dim)
+
+        self.activation = ELU(inplace=True)
+        self.pool = Pool(pool_type)
         self.dropout = dropout
-        if gn:
-            self.gns = nn.ModuleList()
-            for _ in range(num_layers - 1):
-                self.gns.append(GraphNorm(hidden_channels))
-            if self.jk:
-                self.gns.append(
-                    GraphNorm(output_channels +
-                              (num_layers - 1) * hidden_channels))
-            else:
-                self.gns.append(GraphNorm(output_channels))
-        else:
-            self.gns = None
+
+        self.output = Linear(hidden_dim + hidden_dim, output_dim)
+
         self.reset_parameters()
 
-    def reset_parameters(self):
-        self.input_emb.reset_parameters()
-        self.emb_gn.reset_parameters()
-        for conv in self.convs:
-            conv.reset_parameters()
-        if not (self.gns is None):
-            for gn in self.gns:
-                gn.reset_parameters()
+    def forward(self, x, edge_index, edge_weight, block_mask, batch):
+        # x
+        # total_node_number = sum(node_number_of_graph_{1}, ..., node_number_of_graph_{batch_size})
+        # [ total_node_number X num_node_features ] (Current Version: num_node_features=1)
+        # block_mask
+        # [ total_node_number X 1]
+        assert x.shape[0] == block_mask.shape[0], f'Wrong shape of input \'x\'({x.shape[0]}) and \'block_mask\'({block_mask.shape[0]})'
+        block_mask = block_mask.reshape(block_mask.shape[0], -1)
 
-    def forward(self, x, edge_index, edge_weight, z=None):
-        # z is the node label.
-        if z is None:
-            mask = (torch.zeros(
-                (x.shape[0]), device=x.device) < 0.5).reshape(-1, 1)
-        else:
-            mask = (z > 0.5).reshape(-1, 1)
-        # convert integer input to vector node features.
-        x = self.input_emb(x).reshape(x.shape[0], -1)
-        x = self.emb_gn(x)
-        xs = []
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        if edge_weight is None:
+            edge_weight = torch.ones(edge_index.shape[1], dtype=torch.float, device=edge_index.device)
+
+        main_feature = x[:, 0]
+        # [ total_node_number X 1 ]
+
+        x = self.node_emb(main_feature)
+        x = self.graph_norm_emb(x)
+        x = torch.nn.functional.dropout(x, p=self.dropout, training=self.training)
+
+        block_mask = (block_mask > 0)
         # pass messages at each layer.
-        for layer, conv in enumerate(self.convs[:-1]):
-            x = conv(x, edge_index, edge_weight, mask)
-            xs.append(x)
-            if not (self.gns is None):
-                x = self.gns[layer](x)
-            x = self.activation(x)
-            x = F.dropout(x, p=self.dropout, training=self.training)
-        x = self.convs[-1](x, edge_index, edge_weight, mask)
-        xs.append(x)
+        x = self.glass_conv_1(x, edge_index, edge_weight, block_mask)
+        jumping_knowledge = x
+        x = self.graph_norm_1(x)
+        x = self.activation(x)
+        x = torch.nn.functional.dropout(x, p=self.dropout, training=self.training)
 
-        if self.jk:
-            x = torch.cat(xs, dim=-1)
-            if not (self.gns is None):
-                x = self.gns[-1](x)
-            return x
-        else:
-            x = xs[-1]
-            if not (self.gns is None):
-                x = self.gns[-1](x)
-            return x
+        x = self.glass_conv_2(x, edge_index, edge_weight, block_mask)
+        x = torch.cat([jumping_knowledge, x], dim=-1)
+        x = self.graph_norm_2(x)
+
+        x = torch.where(block_mask, x, 0)
+        x = self.pool(x, batch)
+        return self.output(x)
+
+    def reset_parameters(self):
+        self.node_emb.reset_parameters()
+        self.graph_norm_emb.reset_parameters()
+
+        self.glass_conv_1.reset_parameters()
+        self.graph_norm_1.reset_parameters()
+
+        self.glass_conv_2.reset_parameters()
+        self.graph_norm_2.reset_parameters()
 
 
-class PoolModule(nn.Module):
-    '''
-    Modules used for pooling node embeddings to produce subgraph embeddings.
-    Args: 
-        trans_fn: module to transfer node embeddings.
-        pool_fn: module to pool node embeddings like global_add_pool.
-    '''
-    def __init__(self, pool_fn, trans_fn=None):
+class BasePool(torch.nn.Module):
+    def __init__(self, pool_method):
         super().__init__()
-        self.pool_fn = pool_fn
-        self.trans_fn = trans_fn
+        self.pool_method = pool_method
 
     def forward(self, x, batch):
         # The j-th element in batch vector is i if node j is in the i-th subgraph.
         # for example [0,1,0,0,1,1,2,2] means nodes 0,2,3 in subgraph 0, nodes 1,4,5 in subgraph 1, and nodes 6,7 in subgraph 2.
-        if self.trans_fn is not None:
-            x = self.trans_fn(x)
-        return self.pool_fn(x, batch)
+        return self.pool_method(x, batch)
 
 
-class AddPool(PoolModule):
-    def __init__(self, trans_fn=None):
-        super().__init__(global_add_pool, trans_fn)
+class AddPool(BasePool):
+    def __init__(self):
+        super().__init__(global_add_pool)
 
 
-class MaxPool(PoolModule):
-    def __init__(self, trans_fn=None):
-        super().__init__(global_max_pool, trans_fn)
+class MaxPool(BasePool):
+    def __init__(self):
+        super().__init__(global_max_pool)
 
 
-class MeanPool(PoolModule):
-    def __init__(self, trans_fn=None):
-        super().__init__(global_mean_pool, trans_fn)
+class MeanPool(BasePool):
+    def __init__(self):
+        super().__init__(global_mean_pool)
 
 
 class SizePool(AddPool):
-    def __init__(self, trans_fn=None):
-        super().__init__(trans_fn)
+    def __init__(self):
+        super().__init__()
 
     def forward(self, x, batch):
-        if x is not None:
-            if self.trans_fn is not None:
-                x = self.trans_fn(x)
         x = GraphSizeNorm()(x, batch)
         return self.pool_fn(x, batch)
 
 
-class GLASS(nn.Module):
-    '''
-    GLASS model: combine message passing layers and mlps and pooling layers.
-    Args:
-        preds and pools are ModuleList containing the same number of MLPs and Pooling layers.
-        preds[id] and pools[id] is used to predict the id-th target. Can be used for SSL.
-    '''
-    def __init__(self, conv: EmbZGConv, preds: nn.ModuleList,
-                 pools: nn.ModuleList):
+class Pool(torch.nn.Module):
+    def __init__(self, pool_type: Literal['sum', 'max', 'mean', 'size'] = 'mean'):
         super().__init__()
-        self.conv = conv
-        self.preds = preds
-        self.pools = pools
+        mapping = dict(
+            max = MaxPool,
+            sum = AddPool,
+            mean = MeanPool,
+            size = SizePool,
+        )
+        self.pool = mapping[pool_type]()
 
-    def NodeEmb(self, x, edge_index, edge_weight, z=None):
-        embs = []
-        for _ in range(x.shape[1]):
-            emb = self.conv(x[:, _, :].reshape(x.shape[0], x.shape[-1]),
-                            edge_index, edge_weight, z)
-            embs.append(emb.reshape(emb.shape[0], 1, emb.shape[-1]))
-        emb = torch.cat(embs, dim=1)
-        emb = torch.mean(emb, dim=1)
-        return emb
-
-    def Pool(self, emb, subG_node, pool):
-        batch, pos = pad2batch(subG_node)
-        emb = emb[pos]
-        emb = pool(emb, batch)
-        return emb
-
-    def forward(self, x, edge_index, edge_weight, subG_node, z=None, id=0):
-        x = self.NodeEmb(x, edge_index, edge_weight, z)
-        emb = self.Pool(emb, subG_node, self.pools[id])
-        return self.preds[id](emb)
+    def forward(self, x, batch):
+        return self.pool(x, batch)

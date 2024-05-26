@@ -28,8 +28,8 @@ from younger.applications.tasks.base_task import YoungerTask
 
 
 class BlockEmbedding(YoungerTask):
-    def __init__(self, logger: Logger, custom_config: dict) -> None:
-        super().__init__(logger)
+    def __init__(self, custom_config: dict, device_descriptor: torch.device) -> None:
+        super().__init__(custom_config, device_descriptor)
         self.build_config(custom_config)
         self.build()
 
@@ -43,6 +43,8 @@ class BlockEmbedding(YoungerTask):
         dataset_config['train_dataset_dirpath'] = custom_dataset_config.get('train_dataset_dirpath', None)
         dataset_config['valid_dataset_dirpath'] = custom_dataset_config.get('valid_dataset_dirpath', None)
         dataset_config['test_dataset_dirpath'] = custom_dataset_config.get('test_dataset_dirpath', None)
+        dataset_config['block_get_type'] = custom_dataset_config.get('block_get_type', 'louvain')
+        dataset_config['seed'] = custom_dataset_config.get('seed', None)
         dataset_config['worker_number'] = custom_dataset_config.get('worker_number', 4)
         dataset_config['node_dict_size'] = custom_dataset_config.get('node_dict_size', None)
         dataset_config['task_dict_size'] = custom_dataset_config.get('task_dict_size', None)
@@ -50,11 +52,13 @@ class BlockEmbedding(YoungerTask):
         # Model
         model_config = dict()
         custom_model_config = custom_config.get('model', dict())
-        model_config['node_dim'] = custom_model_config.get('node_dim', 512)
-        model_config['task_dim'] = custom_model_config.get('task_dim', 512)
-        model_config['hidden_dim'] = custom_model_config.get('hidden_dim', 512)
-        model_config['readout_dim'] = custom_model_config.get('readout_dim', 256)
-        model_config['cluster_num'] = custom_model_config.get('cluster_num', None)
+        model_config['hidden_dim'] = custom_model_config.get('hidden_dim', 64)
+        model_config['output_dim'] = custom_model_config.get('output_dim', 1)
+        model_config['aggr_type'] = custom_model_config.get('aggr_type', 'avg')
+        model_config['pool_type'] = custom_model_config.get('pool_type', 'mean')
+        model_config['dropout'] = custom_model_config.get('dropout', 0.2)
+        model_config['ratio'] = custom_model_config.get('ratio', 0.8)
+        model_config['label'] = custom_model_config.get('label', 'coreness')
 
         # Optimizer
         optimizer_config = dict()
@@ -89,13 +93,17 @@ class BlockEmbedding(YoungerTask):
                 self.config['dataset']['train_dataset_dirpath'],
                 task_dict_size=self.config['dataset']['task_dict_size'],
                 node_dict_size=self.config['dataset']['node_dict_size'],
-                worker_number=self.config['dataset']['worker_number']
+                worker_number=self.config['dataset']['worker_number'],
+                block_get_type=self.config['dataset']['block_get_type'],
+                seed=self.config['dataset']['seed']
             )
             self.valid_dataset = BlockDataset(
                 self.config['dataset']['valid_dataset_dirpath'],
                 task_dict_size=self.config['dataset']['task_dict_size'],
                 node_dict_size=self.config['dataset']['node_dict_size'],
-                worker_number=self.config['dataset']['worker_number']
+                worker_number=self.config['dataset']['worker_number'],
+                block_get_type=self.config['dataset']['block_get_type'],
+                seed=self.config['dataset']['seed']
             )
             self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["n2i"])}')
             self.logger.info(f'    -> Tasks Dict Size: {len(self.train_dataset.y_dict["t2i"])}')
@@ -105,21 +113,30 @@ class BlockEmbedding(YoungerTask):
                 self.config['dataset']['test_dataset_dirpath'],
                 task_dict_size=self.config['dataset']['task_dict_size'],
                 node_dict_size=self.config['dataset']['node_dict_size'],
-                worker_number=self.config['dataset']['worker_number']
+                worker_number=self.config['dataset']['worker_number'],
+                block_get_type=self.config['dataset']['block_get_type'],
+                seed=self.config['dataset']['seed']
             )
 
         self.model = GLASS(
             node_dict=self.train_dataset.x_dict['n2i'],
-            task_dict=self.train_dataset.y_dict['t2i'],
-            node_dim=self.config['model']['node_dim'],
-            task_dim=self.config['model']['task_dim'],
             hidden_dim=self.config['model']['hidden_dim'],
-            readout_dim=self.config['model']['readout_dim'],
-            cluster_num=self.config['model']['cluster_num'],
+            output_dim=self.config['model']['output_dim'],
+            pool_type=self.config['model']['pool_type'],
+            dropout=self.config['model']['dropout'],
+            aggr_type=self.config['model']['aggr_type'],
+            ratio=self.config['model']['ratio'],
         )
 
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config['optimizer']['learning_rate'], weight_decay=self.config['optimizer']['weight_decay'])
-        self.learning_rate_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, factor=self.config['scheduler']['factor'], min_lr=self.config['scheduler']['min_lr'])
+        if self.config['mode'] == 'Train':
+            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config['optimizer']['learning_rate'], weight_decay=self.config['optimizer']['weight_decay'])
+            self.learning_rate_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, factor=self.config['scheduler']['factor'], min_lr=self.config['scheduler']['min_lr'])
+            label_name_to_id = dict(
+                density = 0,
+                coreness = 1,
+                cut_ratio = 2,
+            )
+            self.label_id = label_name_to_id[self.config['model']['label']]
 
     def update_learning_rate(self, stage: Literal['Step', 'Epoch']):
         assert stage in {'Step', 'Epoch'}, f'Only Support \'Step\' or \'Epoch\''
@@ -127,26 +144,33 @@ class BlockEmbedding(YoungerTask):
             self.learning_rate_scheduler.step()
         return
 
-    def train(self, minibatch: Any) -> tuple[torch.Tensor, OrderedDict]:
-        y = minibatch.y.reshape(len(minibatch), -1)
-        tasks = y[:, 0].long().clone()
-        global_pooling_loss = self.model(minibatch.x[:, 0].clone(), minibatch.edge_index, minibatch.batch)
+    def train(self, minibatch: Data) -> tuple[torch.Tensor, OrderedDict]:
+        minibatch = minibatch.to(self.device_descriptor)
+        subgraph_label = minibatch.block_labels.reshape(len(minibatch), -1)[:, self.label_id]
+        output = self.model(minibatch.x, minibatch.edge_index, minibatch.edge_attr, minibatch.block_mask, minibatch.batch)
+        loss = torch.nn.functional.mse_loss(output.reshape(-1), subgraph_label)
         logs = OrderedDict({
-            'Cluster-loss': float(global_pooling_loss),
+            'REG-Loss (MSE)': (loss, lambda x: f'{x:.4f}'),
         })
-        return global_pooling_loss, logs
+        return loss, logs
 
-    def eval(self, minibatch: Any) -> tuple[torch.Tensor, torch.Tensor]:
+    def eval(self, minibatch: Data) -> tuple[torch.Tensor, torch.Tensor]:
+        minibatch = minibatch.to(self.device_descriptor)
         # Return Output & Golden
-        y = minibatch.y.reshape(len(minibatch), -1)
-        tasks = y[:, 0].long()
-        outputs, _ = self.model(minibatch.x, minibatch.edge_index, minibatch.batch)
-        return outputs, None
+        subgraph_label = minibatch.block_labels.reshape(len(minibatch), -1)[:, self.label_id]
+        outputs = self.model(minibatch.x, minibatch.edge_index, minibatch.edge_attr, minibatch.block_mask, minibatch.batch)
+        return outputs.reshape(-1), subgraph_label
 
     def eval_calculate_logs(self, all_outputs: list[torch.Tensor], all_goldens: list[torch.Tensor]) -> OrderedDict:
-        all_outputs = torch.mean(torch.stack(all_outputs))
+        all_outputs = torch.stack(all_outputs).reshape(-1)
+        all_goldens = torch.stack(all_goldens).reshape(-1)
+        mae = torch.nn.functional.l1_loss(all_outputs, all_goldens, reduction='mean')
+        mse = torch.nn.functional.mse_loss(all_outputs, all_goldens, reduction='mean')
+        rmse = torch.sqrt(mse)
         logs = OrderedDict({
-            'Cluster-loss': float(logs),
+            'MAE': (mae, lambda x: f'{x:.4f}'),
+            'MSE': (mse, lambda x: f'{x:.4f}'),
+            'RMSE': (rmse, lambda x: f'{x:.4f}'),
         })
         return logs
 
@@ -157,9 +181,9 @@ class BlockEmbedding(YoungerTask):
         assert onnx_model_dirpath, f'No ONNX Dir.'
 
         self.logger.info(f'  v Loading Meta ...')
-        meta = ArchitectureDataset.load_meta(meta_filepath)
-        x_dict = ArchitectureDataset.get_x_dict(meta, node_dict_size=self.config['dataset']['node_dict_size'])
-        y_dict = ArchitectureDataset.get_y_dict(meta, task_dict_size=self.config['dataset']['task_dict_size'])
+        meta = BlockDataset.load_meta(meta_filepath)
+        x_dict = BlockDataset.get_x_dict(meta, node_dict_size=self.config['dataset']['node_dict_size'])
+        y_dict = BlockDataset.get_y_dict(meta, task_dict_size=self.config['dataset']['task_dict_size'])
         self.logger.info(f'    -> Tasks Dict Size: {len(x_dict)}')
         self.logger.info(f'    -> Nodes Dict Size: {len(y_dict)}')
         self.logger.info(f'  ^ Built.')
@@ -176,7 +200,7 @@ class BlockEmbedding(YoungerTask):
                 attributes = standardized_graph.nodes[node_index]['features']['attributes']
                 standardized_graph.nodes[node_index]['features']['attributes'] = get_complete_attributes_of_node(attributes, operator['op_type'], operator['domain'], meta['max_inclusive_version'])
             standardized_graph.graph.clear()
-            data = ArchitectureDataset.get_data(standardized_graph, x_dict, y_dict, feature_get_type='none')
+            data = BlockDataset.get_data(standardized_graph, x_dict, y_dict, feature_get_type='none')
             datas.append(data)
         minibatch = Batch.from_data_list(datas)
         self.logger.info(f'  ^ Loaded. Total - {len(datas)}.')

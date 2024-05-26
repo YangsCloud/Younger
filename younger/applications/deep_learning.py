@@ -11,6 +11,7 @@
 
 
 import os
+import tqdm
 import time
 import torch
 import pathlib
@@ -47,11 +48,13 @@ def exact_eval(
     all_goldens = list()
     tic = time.time()
     with torch.no_grad():
-        for index, minibatch in enumerate(dataloader, start=1):
-            outputs, goldens = task.eval(minibatch)
+        with tqdm.tqdm(total=len(dataloader)) as progress_bar:
+            for index, minibatch in enumerate(dataloader, start=1):
+                outputs, goldens = task.eval(minibatch)
 
-            all_outputs.append(outputs)
-            all_goldens.append(goldens)
+                all_outputs.append(outputs)
+                all_goldens.append(goldens)
+                progress_bar.update(1)
     toc = time.time()
 
     logs = task.eval_calculate_logs(all_outputs, all_goldens)
