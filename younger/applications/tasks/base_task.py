@@ -33,7 +33,7 @@ class YoungerTask(object):
         self.logger = set_logger(logging_config['name'], mode=logging_config['mode'], level=logging_config['level'], logging_filepath=logging_config['filepath'])
         self.device_descriptor = device_descriptor
 
-    def update_learning_rate(self, stage: Literal['Step', 'Epoch']):
+    def update_learning_rate(self, stage: Literal['Step', 'Epoch'], **kwargs):
         assert stage in {'Step', 'Epoch'}, f'Only Support \'Step\' or \'Epoch\''
         return
 

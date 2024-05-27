@@ -141,10 +141,10 @@ class BlockEmbedding(YoungerTask):
             )
             self.label_id = label_name_to_id[self.config['model']['label']]
 
-    def update_learning_rate(self, stage: Literal['Step', 'Epoch']):
+    def update_learning_rate(self, stage: Literal['Step', 'Epoch'], **kwargs):
         assert stage in {'Step', 'Epoch'}, f'Only Support \'Step\' or \'Epoch\''
         if stage == 'Epoch':
-            self._learning_rate_scheduler.step()
+            self._learning_rate_scheduler.step(kwargs['loss'])
         return
 
     def train(self, minibatch: Data) -> tuple[torch.Tensor, OrderedDict]:

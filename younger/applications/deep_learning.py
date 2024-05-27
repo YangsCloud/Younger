@@ -238,12 +238,12 @@ def exact_train(
                     distributed.barrier()
                 task.model.train()
 
-            task.update_learning_rate(stage='Step')
+            task.update_learning_rate(stage='Step', step=step, epoch=epoch, loss=loss)
 
         toc = time.time()
         task.logger.info(f'-> Epoch@{epoch} Finished. Time Cost = {toc-tic:.2f}s')
 
-        task.update_learning_rate(stage='Epoch')
+        task.update_learning_rate(stage='Epoch', step=step, epoch=epoch, loss=loss)
 
     if distribution_flag:
         distributed.destroy_process_group()
