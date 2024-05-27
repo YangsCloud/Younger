@@ -20,6 +20,7 @@ import multiprocessing
 from typing import Any, Callable, Literal
 from torch_geometric.io import fs
 from torch_geometric.data import Data, Dataset, download_url
+from torch_geometric.utils import negative_sampling
 
 from younger.commons.io import load_json, load_pickle, tar_extract
 
@@ -27,7 +28,7 @@ from younger.datasets.modules import Network
 from younger.datasets.utils.constants import YoungerDatasetAddress
 
 
-class BlockDataset(Dataset):
+class LinkDataset(Dataset):
     def __init__(
         self,
         root: str,
@@ -40,10 +41,13 @@ class BlockDataset(Dataset):
         task_dict_size: int | None = None,
         node_dict_size: int | None = None,
         seed: int | None = None,
+        link_get_number: int | None = None,
         worker_number: int = 4,
     ):
         self.seed = seed
         self.worker_number = worker_number
+        self.link_get_number = link_get_number
+        print(self.link_get_number)
 
         meta_filepath = os.path.join(root, 'meta.json')
         assert os.path.isfile(meta_filepath), f'Please Download The \'meta.json\' File Of A Specific Version Of The Younger Dataset From Official Website.'
@@ -52,16 +56,17 @@ class BlockDataset(Dataset):
         self.x_dict = self.__class__.get_x_dict(self.meta, node_dict_size)
         self.y_dict = self.__class__.get_y_dict(self.meta, task_dict_size)
 
-        self._community_locations_filename = 'community_locations.pt'
-        self._community_locations_filepath = os.path.join(self.processed_dir, self._community_locations_filename)
-        self._community_locations: list[tuple[int, int]] = list()
+        self._link_locations: list[tuple[int, int]] = list()
+        self._link_locations_filename = 'link_locations.pt'
 
         super().__init__(root, transform, pre_transform, pre_filter, log, force_reload)
 
+        _link_locations_filepath = os.path.join(self.processed_dir, self._link_locations_filename)
+
         try:
-            self._community_locations = torch.load(self._community_locations_filepath)
+            self._link_locations = torch.load(_link_locations_filepath)
         except FileExistsError as error:
-            print(f'There is no community locations file \'{self._community_locations_filename}\', please remove the processed data directory: {self.processed_dir} and re-run the command.')
+            print(f'There is no link locations file \'{self._link_locations_filename}\', please remove the processed data directory: {self.processed_dir} and re-run the command.')
             raise error
 
     @property
@@ -83,16 +88,21 @@ class BlockDataset(Dataset):
         return [f'sample-{index}.pth' for index in range(self.meta['size'])]
 
     def len(self) -> int:
-        return len(self._community_locations)
+        return len(self._link_locations)
 
     def get(self, index: int) -> Data:
-        sample_index, community_index = self._community_locations[index]
-        graph_data_with_communities: dict[str, Data | list[set]] = torch.load(os.path.join(self.processed_dir, f'sample-{sample_index}.pth'))
+        sample_index, link_index = self._link_locations[index]
+        graph_data_with_links: dict[str, Data | torch.LongTensor] = torch.load(os.path.join(self.processed_dir, f'sample-{sample_index}.pth'))
+        graph_data: Data = graph_data_with_links['graph_data']
+        link: torch.LongTensor = graph_data_with_links['links'][:,link_index].view(2,1)
+        link_label: int = graph_data_with_links['link_labels'][link_index]
+        # print("here!____________:", link)
+        # print("here!____________:", link.view(2,1))
+        # print("here!____________:", graph_data.edge_index[:,link_index])
 
-        graph_data: Data = graph_data_with_communities['graph_data']
-        community: set = graph_data_with_communities['communities'][community_index]
-        zero_one_label
-        return
+        combined_data: Data = Data(x=graph_data.x, edge_index=graph_data.edge_index, y=graph_data.y, link=link, link_label=link_label)
+        # print("here!-------: ", combined_data)]
+        return combined_data
 
     def download(self):
         archive_filepath = os.path.join(self.root, self.meta['archive'])
@@ -104,30 +114,32 @@ class BlockDataset(Dataset):
             assert fs.exists(os.path.join(self.raw_dir, f'sample-{sample_index}.pkl'))
 
     def process(self):
-        unordered_community_records = list()
+        unordered_link_records = list()
         with multiprocessing.Pool(self.worker_number) as pool:
             with tqdm.tqdm(total=self.meta['size']) as progress_bar:
-                for sample_index, community_number in pool.imap_unordered(self.process_sample, range(self.meta['size'])):
-                    unordered_community_records.append((sample_index, community_number))
+                for sample_index, link_number in pool.imap_unordered(self.process_sample, range(self.meta['size'])):
+                    print("link_num: ",link_number)
+                    unordered_link_records.append((sample_index, link_number))
                     progress_bar.update()
-        sorted_community_records = sorted(unordered_community_records, key=lambda x: x[0])
-        for sample_index, community_number in sorted_community_records:
-            community_location = [(sample_index, community_index) for community_index in range(community_number)]
-            self._community_locations.extend(community_location)
-        torch.save(self._community_locations, self._community_locations_filepath)
+        sorted_link_records = sorted(unordered_link_records, key=lambda x: x[0])
+        for sample_index, link_number in sorted_link_records:
+            link_location = [(sample_index, link_index) for link_index in range(link_number)]
+            self._link_locations.extend(link_location)
+        _link_locations_filepath = os.path.join(self.processed_dir, self._link_locations_filename)
+        torch.save(self._link_locations, _link_locations_filepath)
 
     def process_sample(self, sample_index: int) -> tuple[int, int]:
         sample_filepath = os.path.join(self.raw_dir, f'sample-{sample_index}.pkl')
         sample: networkx.DiGraph = load_pickle(sample_filepath)
 
-        graph_data_with_communities = self.__class__.get_graph_data_with_communities(sample, self.x_dict, self.y_dict, self.seed)
-        if self.pre_filter is not None and not self.pre_filter(graph_data_with_communities):
+        graph_data_with_links = self.__class__.get_graph_data_with_links(sample, self.x_dict, self.y_dict, self.seed, self.link_get_number)
+        if self.pre_filter is not None and not self.pre_filter(graph_data_with_links):
             return
 
         if self.pre_transform is not None:
-            graph_data_with_communities = self.pre_transform(graph_data_with_communities)
-        torch.save(graph_data_with_communities, os.path.join(self.processed_dir, f'sample-{sample_index}.pth'))
-        return (sample_index, len(graph_data_with_communities['communities']))
+            graph_data_with_links = self.pre_transform(graph_data_with_links)
+        torch.save(graph_data_with_links, os.path.join(self.processed_dir, f'sample-{sample_index}.pth'))
+        return (sample_index, graph_data_with_links['links'].shape[-1])
 
     @classmethod
     def load_meta(cls, meta_filepath: str) -> dict[str, Any]:
@@ -182,6 +194,22 @@ class BlockDataset(Dataset):
         return edge_index
 
     @classmethod
+    def get_label_edge(cls, edge_index: Data.edge_index, x: Data.x) -> tuple[list, list]:
+        neg_edge_index = negative_sampling(
+            edge_index=edge_index, num_nodes=len(x),
+            num_neg_samples=edge_index.size(1), method='sparse')
+        edge_label_index = torch.cat(
+            [edge_index, neg_edge_index],
+            dim=-1,
+        )
+        edge_label = torch.cat([
+            torch.ones(edge_index.size(1)),
+            torch.zeros(neg_edge_index.size(1))
+        ], dim=0)
+
+        return edge_label, edge_label_index
+
+    @classmethod
     def get_node_feature(cls, node_features: dict, x_dict: dict[str, Any]) -> list:
         node_identifier: str = Network.get_node_identifier_from_features(node_features)
         node_feature = list()
@@ -199,7 +227,7 @@ class BlockDataset(Dataset):
         return node_features
 
     @classmethod
-    def get_graph_feature(cls, graph_labels: dict, y_dict: dict[str, list[str] | dict[str, int]], metric_feature_get_type: Literal['none', 'mean', 'rand']) -> list:
+    def get_graph_feature(cls, graph_labels: dict, y_dict: dict[str, list[str] | dict[str, int]]) -> list:
 
         downloads: int = graph_labels['downloads']
         likes: int = graph_labels['likes']
@@ -209,18 +237,12 @@ class BlockDataset(Dataset):
         graph_feature = list()
         task = tasks[numpy.random.randint(len(tasks))] if len(tasks) else None
         graph_feature.append(y_dict['t2i'].get(task, y_dict['t2i']['__UNK__']))
-
-        if metric_feature_get_type == 'mean':
-            graph_feature.append(numpy.mean(metrics))
-
-        if metric_feature_get_type == 'rand':
-            graph_feature.append(metrics[numpy.random.randint(len(metrics))])
-
+        
         return graph_feature
 
     @classmethod
-    def get_y(cls, sample: networkx.DiGraph, y_dict: dict[str, Any], metric_feature_get_type: Literal['none', 'mean', 'rand']) -> torch.Tensor:
-        graph_feature = cls.get_graph_feature(sample.graph, y_dict, metric_feature_get_type)
+    def get_y(cls, sample: networkx.DiGraph, y_dict: dict[str, Any]) -> torch.Tensor:
+        graph_feature = cls.get_graph_feature(sample.graph, y_dict)
         if graph_feature is None:
             graph_feature = None
         else:
@@ -231,46 +253,48 @@ class BlockDataset(Dataset):
     def get_graph_data(
         cls,
         sample: networkx.DiGraph,
-        x_dict: dict[str, Any], y_dict: dict[str, Any],
+        x_dict: dict[str, Any], y_dict: dict[str, Any]
     ) -> Data:
         x = cls.get_x(sample, x_dict)
         edge_index = cls.get_edge_index(sample)
         y = cls.get_y(sample, y_dict)
 
-        graph_data = Data(x=x, edge_index=edge_index, y=y)
+        edge_label, edge_label_index = cls.get_label_edge(edge_index, x)
+
+        graph_data = Data(x=x, edge_index=edge_index, y=y, edge_label=edge_label, edge_label_index=edge_label_index)
         return graph_data
 
     @classmethod
-    def get_communities(cls, sample: networkx.DiGraph, block_get_type: Literal['louvain', 'label'], **kwargs) -> list[set]:
-        if block_get_type == 'louvain':
-            seed = kwargs.get('seed', None)
-            resolution = kwargs.get('resolution', 1)
-            communities = list(networkx.community.louvain_communities(sample, resolution=resolution, seed=seed))
-
-        if block_get_type == 'label':
-            seed = kwargs.get('seed', None)
-            communities = list(networkx.community.asyn_lpa_communities(sample, resolution=resolution, seed=seed))
-
-        # blocks = list()
-        # for community in communities:
-        #     blocks.append(sample.subgraph(community))
-        return communities
-
-    @classmethod
-    def get_graph_data_with_communities(
+    def get_graph_data_with_links(
         cls,
         sample: networkx.DiGraph,
         x_dict: dict[str, Any], y_dict: dict[str, Any],
-        block_get_type: Literal['louvain', 'label'],
         seed: int | None = None,
+        link_get_number: int | None = None
     ) -> dict[str, Data | list[set]]:
 
         graph_data = cls.get_graph_data(sample, x_dict, y_dict)
-        communities: list[set] = list()
-        for community in cls.get_communities(sample, block_get_type, seed=seed):
-            communities.append(community)
+        print("link_get_number: ", link_get_number)
+        if link_get_number is not None:
+            pos_links = graph_data.edge_label_index[:, :link_get_number//2]
+            neg_loc = graph_data.edge_label_index.shape[1]//2
+            neg_links = graph_data.edge_label_index[:, neg_loc:neg_loc+(link_get_number//2)]
+            links = torch.cat([pos_links,neg_links],dim=1)
+            link_labels = torch.cat([
+                torch.ones(link_get_number//2),
+                torch.zeros(link_get_number//2)
+            ], dim=0)
+            print("full: " , graph_data.edge_label_index)
+            print("pos: ", pos_links)
+            print("neg: ", neg_links)
+            print("links: ", links)
+            print("label: ", link_labels)
+        else:
+            links = graph_data.edge_label_index
+            link_labels = graph_data.edge_label
 
         return dict(
             graph_data = graph_data,
-            communities = communities
+            links = links,
+            link_labels = link_labels
         )
