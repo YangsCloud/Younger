@@ -67,16 +67,18 @@ def save_split(meta: dict[str, Any], instances: list[Instance], save_dirpath: pa
     logger.info(f'Saved.')
 
 
-def clean_split(split: list[Instance], task_dict: dict[str, int], node_dict: dict[str, dict[str, int]]):
+def clean_split(split: list[Instance], task_dict: dict[str, int], node_dict: dict[str, dict[str, int]], operator_dict: dict[str, dict[str, int]]):
     task_dict_keys = set(task_dict.keys())
     node_dict_keys = set(node_dict['onnx'].keys()) | set(node_dict['others'].keys())
+    operator_dict_keys = set(operator_dict['onnx'].keys()) | set(operator_dict['others'].keys())
     cleaned_split = []
     with tqdm.tqdm(total=len(split), desc='Cleaning') as progress_bar:
         for index, instance in enumerate(split, start=1):
-            instance_tasks, instance_nodes = check_instance(instance)
+            instance_tasks, instance_nodes, instance_operators = check_instance(instance)
             instance_task_keys = set(instance_tasks.keys())
             instance_node_keys = set(instance_nodes['onnx'].keys()) | set(instance_nodes['others'].keys())
-            if len(instance_task_keys - task_dict_keys) != 0 or len(instance_node_keys - node_dict_keys) != 0:
+            instance_operator_keys = set(instance_operators['onnx'].keys()) | set(instance_operators['others'].keys())
+            if len(instance_task_keys - task_dict_keys) != 0 or len(instance_node_keys - node_dict_keys) != 0 or len(instance_operator_keys - operator_dict_keys) != 0:
                 pass
             else:
                 cleaned_split.append(instance)
@@ -93,11 +95,17 @@ def update_dict_count(origin_dict: dict[str, int], other_dict: dict[str, int]) -
     return origin_dict
 
 
-def check_instance(instance: Instance) -> tuple[dict[str, int], dict[str, dict[str, int]]]:
+def check_instance(instance: Instance) -> tuple[dict[str, int], dict[str, dict[str, int]], dict[str, dict[str, int]]]:
     instance_tasks: dict[str, int] = {task: 1 for task in instance.labels['tasks']}
+
     instance_nodes: dict[str, dict[str, int]] = dict()
     instance_nodes['onnx'] = dict()
     instance_nodes['others'] = dict()
+
+    instance_operators: dict[str, dict[str, int]] = dict()
+    instance_operators['onnx'] = dict()
+    instance_operators['others'] = dict()
+
     for node_index in instance.network.graph.nodes():
         node_features = instance.network.graph.nodes[node_index]['features']
         node_identifier = Network.get_node_identifier_from_features(node_features)
@@ -107,24 +115,47 @@ def check_instance(instance: Instance) -> tuple[dict[str, int], dict[str, dict[s
 
         node_count = instance_nodes[node_origin].get(node_identifier, 0)
         instance_nodes[node_origin][node_identifier] = node_count + 1
-    return instance_tasks, instance_nodes
+
+        operator = str((node_features['operator']['op_type'], node_features['operator']['domain']))
+        operator_count = instance_operators[node_origin].get(operator, 0)
+        instance_operators[node_origin][operator] = operator_count + 1
+
+    return instance_tasks, instance_nodes, instance_operators
 
 
-def extract_dict(split: list[Instance], worker_number: int) -> tuple[dict[str, int], dict[str, dict[str, int]]]:
+def extract_dict(split: list[Instance], worker_number: int) -> tuple[dict[str, int], dict[str, dict[str, int]], dict[str, dict[str, int]]]:
     all_tasks: dict[str, int] = dict()
+
     all_nodes: dict[str, dict[str, int]] = dict()
     all_nodes['onnx'] = dict()
     all_nodes['others'] = dict()
+
+    all_operators: dict[str, dict[str, int]] = dict()
+    all_operators['onnx'] = dict()
+    all_operators['others'] = dict()
+
     with multiprocessing.Pool(worker_number) as pool:
         with tqdm.tqdm(total=len(split), desc='Extracting') as progress_bar:
             for index, result in enumerate(pool.imap_unordered(check_instance, split), start=1):
-                (instance_tasks, instance_nodes) = result
+                (instance_tasks, instance_nodes, instance_operators) = result
+
                 all_tasks = update_dict_count(all_tasks, instance_tasks)
-                all_nodes['onnx'] = update_dict_count(all_nodes['onnx'], instance_nodes['onnx'])
+
+                all_nodes['onnx']   = update_dict_count(all_nodes['onnx'],   instance_nodes['onnx'])
                 all_nodes['others'] = update_dict_count(all_nodes['others'], instance_nodes['others'])
+
+                all_operators['onnx']   = update_dict_count(all_operators['onnx'],   instance_operators['onnx'])
+                all_operators['others'] = update_dict_count(all_operators['others'], instance_operators['others'])
+
                 progress_bar.update(1)
-                progress_bar.set_postfix({f'Current Size [Task / (ONNX Node - Others Node)]': f'{len(all_tasks)} / ({len(all_nodes["onnx"])} - {len(all_nodes["others"])})'})
-    return all_tasks, all_nodes
+                progress_bar.set_postfix(
+                    {
+                        f'Task': f'{len(all_tasks)}',
+                        f'ONNX Node{{OP}}': f'{len(all_nodes["onnx"])}{{{len(all_operators["onnx"])}}}',
+                        f'Others Node{{OP}}': f'{len(all_nodes["others"])}{{{len(all_operators["others"])}}}',
+                    }
+                )
+    return all_tasks, all_nodes, all_operators
 
 
 def sample_by_partition(examples: list, partition_number: int, train_ratio: float, valid_ratio: float, test_ratio: float) -> tuple[list[int], list[int], list[int]]:
@@ -268,10 +299,10 @@ def main(
     logger.info(f' - First 10 Test  Index: {test_indices[:10]}')
 
     logger.info(f'Extract Dictionaries From Train Split: Task_Dict & Node_Dict')
-    train_task_dict, train_node_dict = extract_dict(train_split, worker_number)
+    train_task_dict, train_node_dict, train_operator_dict = extract_dict(train_split, worker_number)
     if silly:
-        valid_split = clean_split(valid_split, train_task_dict, train_node_dict)
-        test_split = clean_split(test_split, train_task_dict, train_node_dict)
+        valid_split = clean_split(valid_split, train_task_dict, train_node_dict, train_operator_dict)
+        test_split = clean_split(test_split, train_task_dict, train_node_dict, train_operator_dict)
         logger.info(f'-!!!-New-!!!-')
         logger.info(f'Clean Split Finished - Train: {len(train_split)}; Valid: {len(valid_split)}; Test: {len(test_split)};')
         logger.info(f' - First 10 Train Index: {train_indices[:10]}')
@@ -280,55 +311,81 @@ def main(
 
     train_task_dict_keys = set(train_task_dict.keys())
     train_node_dict_keys = set(train_node_dict['onnx'].keys()) | set(train_node_dict['others'].keys())
-    logger.info(f'Extracted - Task_Dict: {len(train_task_dict_keys)}; (ONNX Node_Dict/Others Node_Dict): ({len(train_node_dict["onnx"])}/{len(train_node_dict["others"])});')
-    logger.info(f'Checking Unknown Tasks & Nodes In Valid & Test Splits.')
+    train_operator_dict_keys = set(train_operator_dict['onnx'].keys()) | set(train_operator_dict['others'].keys())
+    logger.info(f'Extracted - Task_Dict: {len(train_task_dict_keys)};')
+    logger.info(f'Extracted - ONNX & Others Node_Dict: {len(train_node_dict["onnx"])} & {len(train_node_dict["others"])};')
+    logger.info(f'Extracted - ONNX & Others Operator_Dict: {len(train_operator_dict["onnx"])} & {len(train_operator_dict["others"])};')
+    logger.info(f'Checking Unknown [Tasks & Nodes & Operators] In Valid & Test Splits.')
 
     logger.info(f'Valid Split:')
-    valid_task_dict, valid_node_dict = extract_dict(valid_split, worker_number)
+    valid_task_dict, valid_node_dict, valid_operator_dict = extract_dict(valid_split, worker_number)
 
     valid_task_dict_keys = set(valid_task_dict.keys())
     valid_node_dict_keys = set(valid_node_dict['onnx'].keys()) | set(valid_node_dict['others'].keys())
+    valid_operator_dict_keys = set(valid_operator_dict['onnx'].keys()) | set(valid_operator_dict['others'].keys())
 
     num_valid_unknown_tasks = len(valid_task_dict_keys - train_task_dict_keys)
     num_valid_unknown_nodes = len(valid_node_dict_keys - train_node_dict_keys)
+    num_valid_unknown_operators = len(valid_operator_dict_keys - train_operator_dict_keys)
 
     num_onnx_valid_unknown_nodes = len(set(valid_node_dict['onnx'].keys()) - set(train_node_dict['onnx'].keys()))
     num_others_valid_unknown_nodes = len(set(valid_node_dict['others'].keys()) - set(train_node_dict['others'].keys()))
 
+    num_onnx_valid_unknown_operators = len(set(valid_operator_dict['onnx'].keys()) - set(train_operator_dict['onnx'].keys()))
+    num_others_valid_unknown_operators = len(set(valid_operator_dict['others'].keys()) - set(train_operator_dict['others'].keys()))
+
     percent_tasks_valid = num_valid_unknown_tasks / len(valid_task_dict_keys) * 100
+
     percent_nodes_valid = num_valid_unknown_nodes / len(valid_node_dict_keys) * 100
     percent_onnx_nodes_valid = num_onnx_valid_unknown_nodes / len(valid_node_dict_keys) * 100
     percent_others_nodes_valid = num_others_valid_unknown_nodes / len(valid_node_dict_keys) * 100
 
-    logger.info(f'Valid Unknown [Tasks & Nodes (ONNX/Others)]:')
-    logger.info(f' - Valid = [{num_valid_unknown_tasks} & {num_valid_unknown_nodes} ({num_onnx_valid_unknown_nodes}/{num_others_valid_unknown_nodes})]')
-    logger.info(f' - Valid Ratio = [{percent_tasks_valid:.2f}% & {percent_nodes_valid:.2f}% ({percent_onnx_nodes_valid:.2f}%/{percent_others_nodes_valid:.2f}%)]')
+    percent_operators_valid = num_valid_unknown_operators / len(valid_operator_dict_keys) * 100
+    percent_onnx_operators_valid = num_onnx_valid_unknown_operators / len(valid_operator_dict_keys) * 100
+    percent_others_operators_valid = num_others_valid_unknown_operators / len(valid_operator_dict_keys) * 100
+
+    logger.info(f'Valid Unknown [ Number / Ratio ]:')
+    logger.info(f' - Tasks = [ {num_valid_unknown_tasks} & {percent_tasks_valid:.2f}% ]')
+    logger.info(f' - Nodes = [ {num_valid_unknown_nodes} ({num_onnx_valid_unknown_nodes}/{num_others_valid_unknown_nodes}) & {percent_nodes_valid:.2f}% ({percent_onnx_nodes_valid}/{percent_others_nodes_valid}) ]')
+    logger.info(f' - Operators = [ {num_valid_unknown_operators} ({num_onnx_valid_unknown_operators}/{num_others_valid_unknown_operators}) & {percent_operators_valid:.2f}% ({percent_onnx_operators_valid}/{percent_others_operators_valid}) ]')
 
     logger.info(f'Test Split:')
-    test_task_dict, test_node_dict = extract_dict(test_split, worker_number)
+    test_task_dict, test_node_dict, test_operator_dict = extract_dict(test_split, worker_number)
 
     test_task_dict_keys = set(test_task_dict.keys())
     test_node_dict_keys = set(test_node_dict['onnx'].keys()) | set(test_node_dict['others'].keys())
+    test_operator_dict_keys = set(test_operator_dict['onnx'].keys()) | set(test_operator_dict['others'].keys())
 
     num_test_unknown_tasks = len(test_task_dict_keys - train_task_dict_keys)
-    num_test_unknown_nodes = len(test_node_dict_keys - train_node_dict_keys)
 
+    num_test_unknown_nodes = len(test_node_dict_keys - train_node_dict_keys)
     num_onnx_test_unknown_nodes = len(set(test_node_dict['onnx'].keys()) - set(train_node_dict['onnx'].keys()))
     num_others_test_unknown_nodes = len(set(test_node_dict['others'].keys()) - set(train_node_dict['others'].keys()))
 
+    num_test_unknown_operators = len(test_operator_dict_keys - train_operator_dict_keys)
+    num_onnx_test_unknown_operators = len(set(test_operator_dict['onnx'].keys()) - set(train_operator_dict['onnx'].keys()))
+    num_others_test_unknown_operators = len(set(test_operator_dict['others'].keys()) - set(train_operator_dict['others'].keys()))
+
     percent_tasks_test = num_test_unknown_tasks / len(test_task_dict_keys) * 100
+
     percent_nodes_test = num_test_unknown_nodes / len(test_node_dict_keys) * 100
     percent_onnx_nodes_test = num_onnx_test_unknown_nodes / len(test_node_dict_keys) * 100
     percent_others_nodes_test = num_others_test_unknown_nodes / len(test_node_dict_keys) * 100
 
-    logger.info(f'Test Unknown [Tasks & Nodes (ONNX/Others)]:')
-    logger.info(f' - Test = [{num_test_unknown_tasks} & {num_test_unknown_nodes} ({num_onnx_test_unknown_nodes}/{num_others_test_unknown_nodes})]')
-    logger.info(f' - Test Ratio = [{percent_tasks_test:.2f}% & {percent_nodes_test:.2f}% ({percent_onnx_nodes_test:.2f}%/{percent_others_nodes_test:.2f}%)]')
+    percent_operators_test = num_test_unknown_operators / len(test_operator_dict_keys) * 100
+    percent_onnx_operators_test = num_onnx_test_unknown_operators / len(test_operator_dict_keys) * 100
+    percent_others_operators_test = num_others_test_unknown_operators / len(test_operator_dict_keys) * 100
+
+    logger.info(f'Test Unknown  [ Number / Ratio ]:')
+    logger.info(f' - Tasks = [ {num_test_unknown_tasks} & {percent_tasks_test:.2f}% ]')
+    logger.info(f' - Nodes = [ {num_test_unknown_nodes} ({num_onnx_test_unknown_nodes}/{num_others_test_unknown_nodes}) & {percent_nodes_test:.2f}% ({percent_onnx_nodes_test}/{percent_others_nodes_test}) ]')
+    logger.info(f' - Operators = [ {num_test_unknown_operators} ({num_onnx_test_unknown_operators}/{num_others_test_unknown_operators}) & {percent_operators_test:.2f}% ({percent_onnx_operators_test}/{percent_others_operators_test}) ]')
 
     meta = dict(
         metric_name = metric_name,
         all_tasks = train_task_dict,
         all_nodes = train_node_dict,
+        all_operators = train_operator_dict,
     )
 
     if len(train_split):
