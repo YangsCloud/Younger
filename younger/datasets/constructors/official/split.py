@@ -108,7 +108,7 @@ def check_instance(instance: Instance) -> tuple[dict[str, int], dict[str, dict[s
 
     for node_index in instance.network.graph.nodes():
         node_features = instance.network.graph.nodes[node_index]['features']
-        node_identifier = Network.get_node_identifier_from_features(node_features)
+        node_identifier = Network.get_node_identifier_from_features(node_features, mode='full')
         node_origin = get_operator_origin(node_features['operator']['op_type'], domain=node_features['operator']['domain'])
         if node_origin != 'onnx':
             node_origin = 'others'
@@ -116,9 +116,9 @@ def check_instance(instance: Instance) -> tuple[dict[str, int], dict[str, dict[s
         node_count = instance_nodes[node_origin].get(node_identifier, 0)
         instance_nodes[node_origin][node_identifier] = node_count + 1
 
-        operator = str((node_features['operator']['op_type'], node_features['operator']['domain']))
-        operator_count = instance_operators[node_origin].get(operator, 0)
-        instance_operators[node_origin][operator] = operator_count + 1
+        operator_identifier = Network.get_node_identifier_from_features(node_features, mode='type')
+        operator_count = instance_operators[node_origin].get(operator_identifier, 0)
+        instance_operators[node_origin][operator_identifier] = operator_count + 1
 
     return instance_tasks, instance_nodes, instance_operators
 
