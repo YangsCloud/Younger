@@ -42,7 +42,7 @@ def update_unique_instance(unique_instance: Instance, purified_instance: Instanc
             unique_instance.labels['evaluations'].append([task, dataset_name, dataset_split, metric_name, metric_value])
 
 
-def purify_instance(parameter: tuple[str, int]) -> Instance:
+def purify_instance_with_graph_hash(parameter: tuple[str, int]) -> tuple[Instance, str]:
     path, max_inclusive_version = parameter
     instance = Instance()
     instance.load(path)
@@ -56,7 +56,8 @@ def purify_instance(parameter: tuple[str, int]) -> Instance:
     standardized_graph.graph.clear()
 
     instance.setup_network(Network(standardized_graph))
-    return instance
+    graph_hash = Network.hash(instance.network.graph, node_attr='features')
+    return (instance, graph_hash)
 
 
 def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, worker_number: int = 4, max_inclusive_version: int | None = None):
@@ -77,10 +78,9 @@ def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, worker_numbe
     unique_instances: dict[str, Instance] = dict()
     with multiprocessing.Pool(worker_number) as pool:
         with tqdm.tqdm(total=len(parameters), desc='Filtering') as progress_bar:
-            for index, purified_instance in enumerate(pool.imap_unordered(purify_instance, parameters), start=1):
+            for index, (purified_instance, graph_hash) in enumerate(pool.imap_unordered(purify_instance_with_graph_hash, parameters), start=1):
                 if purified_instance is None:
                     continue
-                graph_hash = Network.hash(purified_instance.network.graph, node_attr='features')
                 if graph_hash in unique_instances:
                     unique_instance = unique_instances[graph_hash]
                 else:
@@ -90,7 +90,9 @@ def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, worker_numbe
                 update_unique_instance(unique_instance, purified_instance)
                 unique_instances[graph_hash] = unique_instance
                 progress_bar.update(1)
-                progress_bar.set_postfix({f'Current Unique': f'{len(unique_instances)}'})
+                graph_num_node = unique_instance.network.graph.number_of_nodes()
+                graph_num_edge = unique_instance.network.graph.number_of_edges()
+                progress_bar.set_postfix({f'Current Node/Edge': f'{graph_num_node}/{graph_num_edge}', f'Current Unique': f'{len(unique_instances)}'})
     logger.info(f'Total Unique Instances Filtered: {len(unique_instances)}')
 
     logger.info(f'Saving Unique Instances Into: {save_dirpath}')

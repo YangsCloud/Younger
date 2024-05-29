@@ -41,11 +41,11 @@ def save_split(meta: dict[str, Any], instances: list[Instance], save_dirpath: pa
     meta_filepath = split_dirpath.joinpath('meta.json')
     create_dir(graph_dirpath)
 
-    logger.info(f'Saving \'{split}\' Split META {meta_filepath.absolute().relative_to(pathlib.Path.cwd())} ... ')
+    logger.info(f'Saving \'{split}\' Split META {meta_filepath.absolute()} ... ')
     save_json(meta, meta_filepath, indent=2)
     logger.info(f'Saved.')
 
-    logger.info(f'Saving \'{split}\' Split {graph_dirpath.absolute().relative_to(pathlib.Path.cwd())} ... ')
+    logger.info(f'Saving \'{split}\' Split {graph_dirpath.absolute()} ... ')
     parameters = [
         (
             graph_dirpath.joinpath(f'sample-{i}.pkl'),
@@ -58,7 +58,7 @@ def save_split(meta: dict[str, Any], instances: list[Instance], save_dirpath: pa
                 progress_bar.update(1)
     logger.info(f'Saved.')
 
-    logger.info(f'Saving \'{split}\' Split Tar {archive_filepath.absolute().relative_to(pathlib.Path.cwd())} ... ')
+    logger.info(f'Saving \'{split}\' Split Tar {archive_filepath.absolute()} ... ')
     tar_archive(
         [graph_dirpath.joinpath(f'sample-{i}.pkl') for i, _ in enumerate(instances)],
         archive_filepath,

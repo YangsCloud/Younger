@@ -158,7 +158,7 @@ class Network(object):
         return node_features
 
     @classmethod
-    def hash(cls, graph: networkx.DiGraph, node_attr: str | None = None, edge_attr: str | None = None, iterations: int = 6, digest_size: int = 16) -> str:
+    def hash(cls, graph: networkx.DiGraph, node_attr: str | None = None, edge_attr: str | None = None, iterations: int = 3, digest_size: int = 16) -> str:
         return networkx.weisfeiler_lehman_graph_hash(graph, edge_attr=edge_attr, node_attr=node_attr, iterations=iterations, digest_size=digest_size)
 
     @classmethod
