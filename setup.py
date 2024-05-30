@@ -56,6 +56,7 @@ REQUIRED = [
     'toml',
     'tqdm',
     'psutil',
+    'pandas',
     'networkx',
     'python-semantic-release'
 ]

@@ -15,7 +15,7 @@ import onnx
 import pathlib
 import networkx
 
-from typing import Any
+from typing import Any, Literal
 
 from younger.commons.io import load_json, save_json, load_pickle, save_pickle, create_dir
 
@@ -132,10 +132,15 @@ class Network(object):
             return tobe_saved
 
     @classmethod
-    def get_node_identifier_from_features(cls, node_features: dict[str, dict]) -> str:
-        operator_id = str([['op_type', node_features['operator']['op_type']], ['domain', node_features['operator']['domain']]])
-        attributes_id = str(sorted([(attr_name, attr_type, attr_value) for attr_name, (attr_type, attr_value) in node_features['attributes'].items()]))
-        return operator_id + '-o-a-' + attributes_id
+    def get_node_identifier_from_features(cls, node_features: dict[str, dict], mode: Literal['type', 'full'] = 'full') -> str:
+        if mode == 'type':
+            node_identifier = str((node_features['operator']['op_type'], node_features['operator']['domain']))
+
+        if mode == 'full':
+            operator_id = str([['op_type', node_features['operator']['op_type']], ['domain', node_features['operator']['domain']]])
+            attributes_id = str(sorted([(attr_name, attr_type, attr_value) for attr_name, (attr_type, attr_value) in node_features['attributes'].items()]))
+            node_identifier = operator_id + '-o-a-' + attributes_id
+        return node_identifier
 
     @classmethod
     def get_node_features_from_identifier(cls, node_identifier: str) -> dict[str, dict]:
