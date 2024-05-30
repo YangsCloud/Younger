@@ -47,7 +47,7 @@ class LinkDataset(Dataset):
         self.seed = seed
         self.worker_number = worker_number
         self.link_get_number = link_get_number
-        print(self.link_get_number)
+        # print(self.link_get_number)
 
         meta_filepath = os.path.join(root, 'meta.json')
         assert os.path.isfile(meta_filepath), f'Please Download The \'meta.json\' File Of A Specific Version Of The Younger Dataset From Official Website.'
@@ -88,14 +88,15 @@ class LinkDataset(Dataset):
         return [f'sample-{index}.pth' for index in range(self.meta['size'])]
 
     def len(self) -> int:
-        return len(self._link_locations)
+        return self.meta['size']
 
     def get(self, index: int) -> Data:
-        sample_index, link_index = self._link_locations[index]
-        graph_data_with_links: dict[str, Data | torch.LongTensor] = torch.load(os.path.join(self.processed_dir, f'sample-{sample_index}.pth'))
+        graph_data_with_links: dict[str, Data | torch.LongTensor] = torch.load(os.path.join(self.processed_dir, f'sample-{index}.pth'))
         graph_data: Data = graph_data_with_links['graph_data']
-        link: torch.LongTensor = graph_data_with_links['links'][:,link_index].view(2,1)
-        link_label: int = graph_data_with_links['link_labels'][link_index]
+        link: torch.LongTensor = graph_data_with_links['links']
+        link_label: int = graph_data_with_links['link_labels']
+        # print(link.shape)
+        # print(link_label.shape)
         # print("here!____________:", link)
         # print("here!____________:", link.view(2,1))
         # print("here!____________:", graph_data.edge_index[:,link_index])

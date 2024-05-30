@@ -13,3 +13,4 @@
 from younger.applications.datasets.architecture_dataset import ArchitectureDataset
 from younger.applications.datasets.block_dataset import BlockDataset
 from younger.applications.datasets.node_dataset import NodeDataset
+from younger.applications.datasets.link_dataset import LinkDataset
