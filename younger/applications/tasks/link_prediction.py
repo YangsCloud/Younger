@@ -26,7 +26,7 @@ from younger.commons.logging import set_logger
 from younger.commons.constants import YoungerHandle
 from younger.commons.logging import Logger
 
-from younger.applications.models import GCN_LP
+from younger.applications.models import GCN_LP, GAT_LP, SAGE_LP
 from younger.applications.datasets import LinkDataset
 from younger.applications.tasks.base_task import YoungerTask
 
@@ -47,15 +47,13 @@ class LinkPridiction(YoungerTask):
         dataset_config['train_dataset_dirpath'] = custom_dataset_config.get('train_dataset_dirpath', None)
         dataset_config['valid_dataset_dirpath'] = custom_dataset_config.get('valid_dataset_dirpath', None)
         dataset_config['test_dataset_dirpath'] = custom_dataset_config.get('test_dataset_dirpath', None)
-        dataset_config['link_get_number'] = custom_dataset_config.get('link_get_number', 100)
+        dataset_config['link_get_number'] = custom_dataset_config.get('link_get_number', None)
         dataset_config['worker_number'] = custom_dataset_config.get('worker_number', 4)
-        dataset_config['node_dict_size'] = custom_dataset_config.get('node_dict_size', None)
         dataset_config['seed'] = custom_dataset_config.get('seed', None)
 
         # Model
         model_config = dict()
         custom_model_config = custom_config.get('model', dict())
-        # model_config['node_dim'] = custom_model_config.get('node_dim', dataset_config['node_dict_size'])
         model_config['node_dim'] = custom_model_config.get('node_dim', 256)
         model_config['hidden_dim'] = custom_model_config.get('hidden_dim', 128)
         model_config['output_dim'] = custom_model_config.get('output_dim', 64)
@@ -91,27 +89,28 @@ class LinkPridiction(YoungerTask):
         if self.config['mode'] == 'Train':
             self._train_dataset = LinkDataset(
                 self.config['dataset']['train_dataset_dirpath'],
-                node_dict_size=self.config['dataset']['node_dict_size'],
-                worker_number=self.config['dataset']['worker_number']
+                worker_number=self.config['dataset']['worker_number'],
+                seed=self.config['dataset']['seed']
             )
             self._valid_dataset = LinkDataset(
                 self.config['dataset']['valid_dataset_dirpath'],
-                node_dict_size=self.config['dataset']['node_dict_size'],
                 link_get_number=self.config['dataset']['link_get_number'],
-                worker_number=self.config['dataset']['worker_number']
+                worker_number=self.config['dataset']['worker_number'],
+                seed=self.config['dataset']['seed']
             )
             self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["n2i"])}')
+            self.node_dict_size = len(self.train_dataset.x_dict["n2i"])
 
         if self.config['mode'] == 'Test':
             self._test_dataset = LinkDataset(
                 self.config['dataset']['test_dataset_dirpath'],
-                node_dict_size=self.config['dataset']['node_dict_size'],
                 link_get_number=self.config['dataset']['link_get_number'],
                 worker_number=self.config['dataset']['worker_number']
             )
+            self.node_dict_size = len(self.test_dataset.x_dict["n2i"])
 
-        self._model = GCN_LP(
-            node_dict_size=self.config['dataset']['node_dict_size'],
+        self._model = GAT_LP(
+            node_dict_size=self.node_dict_size,
             node_dim=self.config['model']['node_dim'],
             hidden_dim=self.config['model']['hidden_dim'],
             output_dim=self.config['model']['output_dim'],
@@ -125,52 +124,44 @@ class LinkPridiction(YoungerTask):
     def update_learning_rate(self, stage: Literal['Step', 'Epoch'], **kwargs):
         assert stage in {'Step', 'Epoch'}, f'Only Support \'Step\' or \'Epoch\''
         if stage == 'Epoch':
-            self.learning_rate_scheduler.step()
+            # self.learning_rate_scheduler.step()
+            pass
         return
 
     def train(self, minibatch: Any) -> tuple[torch.Tensor, OrderedDict]:
+        minibatch, step = minibatch
         minibatch = minibatch.to(self.device_descriptor)
-        output = self.model(minibatch, minibatch.link.reshape(len(minibatch),-1).transpose(0, 1)).view(-1)
-        # print("output: ", output)
-        # print("minibatch.link_label: ", minibatch.link_label)
-        # print("minibatch.link.reshape: ",minibatch.link.reshape(len(minibatch),-1).transpose(0, 1))
+        output = self.model(minibatch, minibatch.link)
         criterion = torch.nn.BCEWithLogitsLoss()
-        loss = criterion(output, minibatch.link_label)
+        loss = criterion(output.reshape(-1), minibatch.link_label)
         logs = OrderedDict({
             'loss': (loss, lambda x: f'{x:.4f}')
         })
+
         return loss, logs
 
     def eval(self, minibatch: Any) -> tuple[torch.Tensor, torch.Tensor]:
         minibatch = minibatch.to(self.device_descriptor)
         # Return Output & Golden
         link_label = minibatch.link_label
-        output = self.model(minibatch, minibatch.link.reshape(len(minibatch),-1).transpose(0, 1)).view(-1).sigmoid()
+        output = self.model(minibatch, minibatch.link).view(-1).sigmoid()
     
         return output, link_label
 
     def eval_calculate_logs(self, all_outputs: list[torch.Tensor], all_goldens: list[torch.Tensor]) -> OrderedDict:
-        all_outputs = torch.cat(all_outputs).reshape(-1).sigmoid().cpu().numpy()
+
+        all_outputs = torch.cat(all_outputs).reshape(-1).cpu().numpy()
         all_goldens = torch.cat(all_goldens).reshape(-1).cpu().numpy()
-        print("all_outputs : ",all_outputs)
-        print("all_goldens : ",all_goldens)
-        print("shape: ",all_goldens.shape)
+
         pred = (all_outputs > 0.5).astype(int)
         f1 = f1_score(all_goldens, pred)
         ap = average_precision_score(all_goldens, all_outputs)
-        try:
-            auc = roc_auc_score(all_goldens, all_outputs)
-            logs = OrderedDict({
-                'AUC': (auc, lambda x: f'{x:.4f}'),
-                'F1': (f1, lambda x: f'{x:.4f}'),
-                'AP': (ap, lambda x: f'{x:.4f}'),
-            })
-        except Exception as e:
-        
-            logs = OrderedDict({
-                'F1': (f1, lambda x: f'{x:.4f}'),
-                'AP': (ap, lambda x: f'{x:.4f}'),
-            })
+        auc = roc_auc_score(all_goldens, all_outputs)
+        logs = OrderedDict({
+            'AUC': (auc, lambda x: f'{x:.4f}'),
+            'F1': (f1, lambda x: f'{x:.4f}'),
+            'AP': (ap, lambda x: f'{x:.4f}'),
+        })
         
         return logs
 

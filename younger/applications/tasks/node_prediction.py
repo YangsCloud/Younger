@@ -17,12 +17,13 @@ from typing import Any, Literal
 from collections import OrderedDict
 from torch_geometric.data import Batch, Data
 
+from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score
 from younger.commons.logging import Logger
 
 from younger.datasets.modules import Instance, Network
 from younger.datasets.utils.translation import get_complete_attributes_of_node
 
-from younger.applications.models import GLASS
+from younger.applications.models import GCN_NP, GAT_NP, SAGE_NP
 from younger.applications.datasets import NodeDataset
 from younger.applications.tasks.base_task import YoungerTask
 
@@ -47,24 +48,20 @@ class NodePrediction(YoungerTask):
         dataset_config['block_get_number'] = custom_dataset_config.get('block_get_number', 10)
         dataset_config['seed'] = custom_dataset_config.get('seed', None)
         dataset_config['worker_number'] = custom_dataset_config.get('worker_number', 4)
-        dataset_config['node_dict_size'] = custom_dataset_config.get('node_dict_size', None)
 
         # Model
         model_config = dict()
         custom_model_config = custom_config.get('model', dict())
-        model_config['hidden_dim'] = custom_model_config.get('hidden_dim', 64)
-        model_config['output_dim'] = custom_model_config.get('output_dim', 1)
-        model_config['aggr_type'] = custom_model_config.get('aggr_type', 'avg')
-        model_config['pool_type'] = custom_model_config.get('pool_type', 'mean')
-        model_config['dropout'] = custom_model_config.get('dropout', 0.2)
-        model_config['ratio'] = custom_model_config.get('ratio', 0.8)
-        model_config['label'] = custom_model_config.get('label', 'coreness')
+        # model_config[]
+        model_config['node_dim'] = custom_model_config.get('node_dim', 256)
+        model_config['hidden_dim'] = custom_model_config.get('hidden_dim', 128)
+        model_config['dropout'] = custom_model_config.get('dropout', 0.5)
 
         # Optimizer
         optimizer_config = dict()
         custom_optimizer_config = custom_config.get('optimizer', dict())
-        optimizer_config['learning_rate'] = custom_optimizer_config.get('learning_rate', 0.0005)
-        optimizer_config['weight_decay'] = custom_optimizer_config.get('weight_decay', 0)
+        optimizer_config['learning_rate'] = custom_optimizer_config.get('learning_rate', 0.01)
+        optimizer_config['weight_decay'] = custom_optimizer_config.get('weight_decay', 5e-4)
 
         # Scheduler
         scheduler_config = dict()
@@ -91,82 +88,85 @@ class NodePrediction(YoungerTask):
         if self.config['mode'] == 'Train':
             self._train_dataset = NodeDataset(
                 self.config['dataset']['train_dataset_dirpath'],
-                node_dict_size=self.config['dataset']['node_dict_size'],
                 worker_number=self.config['dataset']['worker_number'],
                 block_get_type=self.config['dataset']['block_get_type'],
                 seed=self.config['dataset']['seed']
             )
             self._valid_dataset = NodeDataset(
                 self.config['dataset']['valid_dataset_dirpath'],
-                node_dict_size=self.config['dataset']['node_dict_size'],
                 worker_number=self.config['dataset']['worker_number'],
                 block_get_type=self.config['dataset']['block_get_type'],
                 block_get_number=self.config['dataset']['block_get_number'],
                 seed=self.config['dataset']['seed']
             )
             self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["n2i"])}')
+            self.node_dict_size = len(self.train_dataset.x_dict["n2i"])
 
         if self.config['mode'] == 'Test':
             self._test_dataset = NodeDataset(
                 self.config['dataset']['test_dataset_dirpath'],
-                node_dict_size=self.config['dataset']['node_dict_size'],
                 worker_number=self.config['dataset']['worker_number'],
                 block_get_type=self.config['dataset']['block_get_type'],
                 block_get_number=self.config['dataset']['block_get_number'],
                 seed=self.config['dataset']['seed']
             )
-
-        self._model = GLASS(
-            node_dict=self.train_dataset.x_dict['n2i'],
+            self.node_dict_size = len(self.test_dataset.x_dict["n2i"])
+        
+        self._model = SAGE_NP(
+            node_dict_size=self.node_dict_size,
+            node_dim=self.config['model']['node_dim'],
             hidden_dim=self.config['model']['hidden_dim'],
-            output_dim=self.config['model']['output_dim'],
-            pool_type=self.config['model']['pool_type'],
             dropout=self.config['model']['dropout'],
-            aggr_type=self.config['model']['aggr_type'],
-            ratio=self.config['model']['ratio'],
         )
 
         if self.config['mode'] == 'Train':
             self._optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config['optimizer']['learning_rate'], weight_decay=self.config['optimizer']['weight_decay'])
             self._learning_rate_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, factor=self.config['scheduler']['factor'], min_lr=self.config['scheduler']['min_lr'])
-            label_name_to_id = dict(
-                density = 0,
-                coreness = 1,
-                cut_ratio = 2,
-            )
 
     def update_learning_rate(self, stage: Literal['Step', 'Epoch'], **kwargs):
         assert stage in {'Step', 'Epoch'}, f'Only Support \'Step\' or \'Epoch\''
         if stage == 'Epoch':
-            self._learning_rate_scheduler.step(kwargs['loss'])
+            # self._learning_rate_scheduler.step(kwargs['loss'])
+            pass
         return
 
     def train(self, minibatch: Data) -> tuple[torch.Tensor, OrderedDict]:
         minibatch = minibatch.to(self.device_descriptor)
         output = self.model(minibatch.x, minibatch.edge_index, minibatch.mask_x_position)
-        loss = torch.nn.functional.mse_loss(output, minibatch.mask_x_label)
+        # print("\n_________")
+        # print("output.shape", output.shape)
+        # print("minibatch.mask_x_label.shape", minibatch.mask_x_label.shape)
+        loss = torch.nn.functional.nll_loss(output, minibatch.mask_x_label)
         logs = OrderedDict({
-            'REG-Loss (MSE)': (loss, lambda x: f'{x:.4f}'),
+            'loss': (loss, lambda x: f'{x:.4f}'),
         })
         return loss, logs
 
     def eval(self, minibatch: Data) -> tuple[torch.Tensor, torch.Tensor]:
         minibatch = minibatch.to(self.device_descriptor)
+        output = self.model(minibatch.x, minibatch.edge_index, minibatch.mask_x_position)
         # Return Output & Golden
-        subgraph_label = minibatch.block_labels.reshape(len(minibatch), -1)[:, self.label_id]
-        outputs = self.model(minibatch.x, minibatch.edge_index, minibatch.edge_attr, minibatch.block_mask, minibatch.batch)
-        return outputs.reshape(-1), subgraph_label
+        return output, minibatch.mask_x_label
 
     def eval_calculate_logs(self, all_outputs: list[torch.Tensor], all_goldens: list[torch.Tensor]) -> OrderedDict:
         all_outputs = torch.cat(all_outputs)
         all_goldens = torch.cat(all_goldens)
-        mae = torch.nn.functional.l1_loss(all_outputs, all_goldens, reduction='mean')
-        mse = torch.nn.functional.mse_loss(all_outputs, all_goldens, reduction='mean')
-        rmse = torch.sqrt(mse)
+
+        pred = all_outputs.max(1)[1].cpu().numpy()
+        gold = all_goldens.cpu().numpy()
+
+        acc = accuracy_score(gold, pred)
+        macro_p = precision_score(gold, pred, average='macro')
+        macro_r = recall_score(gold, pred, average='macro')
+        macro_f1 = f1_score(gold, pred, average='macro')
+        micro_f1 = f1_score(gold, pred, average='micro')
+
         logs = OrderedDict({
-            'MAE': (mae, lambda x: f'{x:.4f}'),
-            'MSE': (mse, lambda x: f'{x:.4f}'),
-            'RMSE': (rmse, lambda x: f'{x:.4f}'),
+            'acc': (acc, lambda x: f'{x:.4f}'),
+            'macro_p': (macro_p, lambda x: f'{x:.4f}'),
+            'macro_r': (macro_r, lambda x: f'{x:.4f}'),
+            'macro_f1': (macro_f1, lambda x: f'{x:.4f}'),
+            'micro_f1': (micro_f1, lambda x: f'{x:.4f}'),
         })
         return logs
 
