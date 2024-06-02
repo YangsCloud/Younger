@@ -50,18 +50,25 @@ def exact_eval(
     with torch.no_grad():
         with tqdm.tqdm(total=len(dataloader)) as progress_bar:
             for index, minibatch in enumerate(dataloader, start=1):
-                outputs, goldens = task.eval(minibatch)
+                eval_result = task.eval(minibatch)
+                if eval_result is None:
+                    pass
+                else:
+                    outputs, goldens = eval_result
 
-                all_outputs.append(outputs)
-                all_goldens.append(goldens)
+                    all_outputs.append(outputs)
+                    all_goldens.append(goldens)
                 progress_bar.update(1)
     toc = time.time()
 
     logs = task.eval_calculate_logs(all_outputs, all_goldens)
-    metrics = OrderedDict()
-    for log_key, (log_value, log_format) in logs.items():
-        metrics[log_key] = log_format(float(log_value))
-    task.logger.info(f'-> {split} Finished. Overall Result -{get_logging_metrics_str(metrics)} (Time Cost = {toc-tic:.2f}s)')
+    if logs is None:
+        task.logger.info(f'-> {split} Finished. No User Defined Output')
+    else:
+        metrics = OrderedDict()
+        for log_key, (log_value, log_format) in logs.items():
+            metrics[log_key] = log_format(float(log_value))
+        task.logger.info(f'-> {split} Finished. Overall Result -{get_logging_metrics_str(metrics)} (Time Cost = {toc-tic:.2f}s)')
 
 
 def exact_train(
@@ -114,7 +121,8 @@ def exact_train(
     # Print Dataset
     task.logger.info(f'-> Dataset Split Sizes:')
     task.logger.info(f'   Train - {len(task.train_dataset)}')
-    task.logger.info(f'   Valid - {len(task.valid_dataset)}')
+    if task.valid_dataset:
+        task.logger.info(f'   Valid - {len(task.valid_dataset)}')
 
     # Print Model
     task.logger.info(f'-> Model Specs:')
@@ -142,8 +150,10 @@ def exact_train(
     else:
         train_sampler = RandomSampler(task.train_dataset) if shuffle else None
     train_dataloader = DataLoader(task.train_dataset, batch_size=train_batch_size, sampler=train_sampler)
-    valid_dataloader = DataLoader(task.valid_dataset, batch_size=valid_batch_size, shuffle=False)
-
+    if task.valid_dataset:
+        valid_dataloader = DataLoader(task.valid_dataset, batch_size=valid_batch_size, shuffle=False)
+    else:
+        valid_dataloader = None
     # Init Train Status
     if checkpoint_filepath:
         checkpoint = load_checkpoint(pathlib.Path(checkpoint_filepath), checkpoint_name)
@@ -186,6 +196,7 @@ def exact_train(
         if distribution_flag:
             train_sampler.set_epoch(epoch)
         epoch += 1
+
         tic = time.time()
         for minibatch in train_dataloader:
             step += 1
@@ -229,11 +240,12 @@ def exact_train(
                 if distribution_flag:
                     distributed.barrier()
                 if is_master:
-                    exact_eval(
-                        task,
-                        valid_dataloader, 
-                        'Valid',
-                    )
+                    if valid_dataloader:
+                        exact_eval(
+                            task,
+                            valid_dataloader, 
+                            'Valid',
+                        )
                 if distribution_flag:
                     distributed.barrier()
                 task.model.train()
@@ -411,7 +423,7 @@ def api(
 
     task.logger.info(f'  v Loading Model Weights From Checkpoint [\'{checkpoint_filepath}\']...')
     checkpoint = load_checkpoint(checkpoint_filepath)
-    print(checkpoint)
+    
     task.model.load_state_dict(checkpoint['model_state'], strict=True)
     task.logger.info(f'  ^ Loaded ')
 

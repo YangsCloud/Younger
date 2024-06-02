@@ -10,6 +10,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
+from cProfile import label
 import torch
 import torch.utils.data
 
@@ -43,12 +44,12 @@ class BlockEmbedding(YoungerTask):
         dataset_config['train_dataset_dirpath'] = custom_dataset_config.get('train_dataset_dirpath', None)
         dataset_config['valid_dataset_dirpath'] = custom_dataset_config.get('valid_dataset_dirpath', None)
         dataset_config['test_dataset_dirpath'] = custom_dataset_config.get('test_dataset_dirpath', None)
-        dataset_config['block_get_type'] = custom_dataset_config.get('block_get_type', 'louvain')
+        dataset_config['block_get_type'] = custom_dataset_config.get('block_get_type', None)
         dataset_config['block_get_number'] = custom_dataset_config.get('block_get_number', 10)
+        dataset_config['encode_type'] = custom_dataset_config.get('encode_type', 'node')
         dataset_config['seed'] = custom_dataset_config.get('seed', None)
         dataset_config['worker_number'] = custom_dataset_config.get('worker_number', 4)
         dataset_config['node_dict_size'] = custom_dataset_config.get('node_dict_size', None)
-        dataset_config['task_dict_size'] = custom_dataset_config.get('task_dict_size', None)
 
         # Model
         model_config = dict()
@@ -92,37 +93,38 @@ class BlockEmbedding(YoungerTask):
         if self.config['mode'] == 'Train':
             self._train_dataset = BlockDataset(
                 self.config['dataset']['train_dataset_dirpath'],
-                task_dict_size=self.config['dataset']['task_dict_size'],
                 node_dict_size=self.config['dataset']['node_dict_size'],
                 worker_number=self.config['dataset']['worker_number'],
                 block_get_type=self.config['dataset']['block_get_type'],
+                encode_type=self.config['dataset']['encode_type'],
                 seed=self.config['dataset']['seed']
             )
-            self._valid_dataset = BlockDataset(
-                self.config['dataset']['valid_dataset_dirpath'],
-                task_dict_size=self.config['dataset']['task_dict_size'],
-                node_dict_size=self.config['dataset']['node_dict_size'],
-                worker_number=self.config['dataset']['worker_number'],
-                block_get_type=self.config['dataset']['block_get_type'],
-                block_get_number=self.config['dataset']['block_get_number'],
-                seed=self.config['dataset']['seed']
-            )
-            self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["n2i"])}')
-            self.logger.info(f'    -> Tasks Dict Size: {len(self.train_dataset.y_dict["t2i"])}')
+            if self.config['dataset']['encode_type'] == 'node':
+                self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["n2i"])}')
+                self.node_dict_size = len(self.train_dataset.x_dict["n2i"])
+            elif self.config['dataset']['encode_type'] == 'operator':
+                self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["o2i"])}')
+                self.node_dict_size = len(self.train_dataset.x_dict["o2i"])
 
         if self.config['mode'] == 'Test':
             self._test_dataset = BlockDataset(
                 self.config['dataset']['test_dataset_dirpath'],
-                task_dict_size=self.config['dataset']['task_dict_size'],
                 node_dict_size=self.config['dataset']['node_dict_size'],
                 worker_number=self.config['dataset']['worker_number'],
                 block_get_type=self.config['dataset']['block_get_type'],
+                encode_type=self.config['dataset']['encode_type'],
                 block_get_number=self.config['dataset']['block_get_number'],
                 seed=self.config['dataset']['seed']
             )
+            if self.config['dataset']['encode_type'] == 'node':
+                self.logger.info(f'    -> Nodes Dict Size: {len(self.test_dataset.x_dict["n2i"])}')
+                self.node_dict_size = len(self.test_dataset.x_dict["n2i"])
+            elif self.config['dataset']['encode_type'] == 'operator':
+                self.logger.info(f'    -> Nodes Dict Size: {len(self.test_dataset.x_dict["o2i"])}')
+                self.node_dict_size = len(self.test_dataset.x_dict["o2i"])
 
         self._model = GLASS(
-            node_dict=self.train_dataset.x_dict['n2i'],
+            node_dict_size=self.node_dict_size,
             hidden_dim=self.config['model']['hidden_dim'],
             output_dim=self.config['model']['output_dim'],
             pool_type=self.config['model']['pool_type'],
@@ -137,8 +139,10 @@ class BlockEmbedding(YoungerTask):
             label_name_to_id = dict(
                 density = 0,
                 coreness = 1,
+                dnc = [0, 1],
                 cut_ratio = 2,
             )
+
             self.label_id = label_name_to_id[self.config['model']['label']]
 
     def update_learning_rate(self, stage: Literal['Step', 'Epoch'], **kwargs):
@@ -151,7 +155,7 @@ class BlockEmbedding(YoungerTask):
         minibatch = minibatch.to(self.device_descriptor)
         subgraph_label = minibatch.block_labels.reshape(len(minibatch), -1)[:, self.label_id]
         output = self.model(minibatch.x, minibatch.edge_index, minibatch.edge_attr, minibatch.block_mask, minibatch.batch)
-        loss = torch.nn.functional.mse_loss(output.reshape(-1), subgraph_label)
+        loss = torch.nn.functional.mse_loss(output, subgraph_label)
         logs = OrderedDict({
             'REG-Loss (MSE)': (loss, lambda x: f'{x:.4f}'),
         })
@@ -232,8 +236,8 @@ class BlockEmbedding(YoungerTask):
 
     @property
     def valid_dataset(self):
-        return self._valid_dataset
+        return None
 
     @property
     def test_dataset(self):
-        return self._test_dataset
+        return None

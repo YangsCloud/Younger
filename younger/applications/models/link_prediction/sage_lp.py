@@ -15,6 +15,7 @@ class SAGE_LP(nn.Module):
 
     def encode(self, data):
         x, edge_index = data.x, data.edge_index
+        x = self.node_embedding_layer(x).squeeze(1)
         x = F.relu(self.conv1(x, edge_index))
         x = F.dropout(x, p=0.5, training=self.training)
         x = self.conv2(x, edge_index)
@@ -24,6 +25,8 @@ class SAGE_LP(nn.Module):
     def decode(self, z, edge_label_index):
         src = z[edge_label_index[0]]
         dst = z[edge_label_index[1]]
+        print("edge_label_index[0]:", edge_label_index[0][:5])
+        print("edge_label_index[1]:", edge_label_index[1][:5])
         r = (src * dst).sum(dim=-1)
         return r
 

@@ -13,6 +13,7 @@
 import math
 import tqdm
 import pathlib
+import networkx
 import multiprocessing
 
 from younger.commons.logging import logger
@@ -57,6 +58,14 @@ def purify_instance_with_graph_hash(parameter: tuple[str, int]) -> tuple[Instanc
 
     instance.setup_network(Network(standardized_graph))
     graph_hash = Network.hash(instance.network.graph, node_attr='features')
+
+    # cleansed_graph = networkx.DiGraph()
+    # cleansed_graph.add_nodes_from(instance.network.graph.nodes(data=True))
+    # cleansed_graph.add_edges_from(instance.network.graph.edges(data=True))
+    # for node_index in cleansed_graph.nodes():
+    #     cleansed_graph.nodes[node_index]['operator'] = cleansed_graph.nodes[node_index]['features']['operator']
+    # graph_hash = networkx.weisfeiler_lehman_graph_hash(cleansed_graph, node_attr='operator', iterations=3, digest_size=16)
+
     return (instance, graph_hash)
 
 
