@@ -132,13 +132,16 @@ class Network(object):
             return tobe_saved
 
     @classmethod
-    def get_node_identifier_from_features(cls, node_features: dict[str, dict], mode: Literal['type', 'full'] = 'full') -> str:
+    def get_node_identifier_from_features(cls, node_features: dict[str, dict], mode: Literal['type', 'full'] = 'full', omit_aionnxml_attributes: bool = True) -> str:
         if mode == 'type':
             node_identifier = str((node_features['operator']['op_type'], node_features['operator']['domain']))
 
         if mode == 'full':
             operator_id = str([['op_type', node_features['operator']['op_type']], ['domain', node_features['operator']['domain']]])
-            attributes_id = str(sorted([(attr_name, attr_type, attr_value) for attr_name, (attr_type, attr_value) in node_features['attributes'].items()]))
+            if omit_aionnxml_attributes:
+                attributes_id = str(sorted([(attr_name, attr_type) for attr_name, (attr_type, attr_value) in node_features['attributes'].items()]))
+            else:
+                attributes_id = str(sorted([(attr_name, attr_type, attr_value) for attr_name, (attr_type, attr_value) in node_features['attributes'].items()]))
             node_identifier = operator_id + '-o-a-' + attributes_id
         return node_identifier
 

@@ -108,11 +108,12 @@ def check_instance(instance: Instance) -> tuple[dict[str, int], dict[str, dict[s
 
     for node_index in instance.network.graph.nodes():
         node_features = instance.network.graph.nodes[node_index]['features']
-        node_identifier = Network.get_node_identifier_from_features(node_features, mode='full')
         node_origin = get_operator_origin(node_features['operator']['op_type'], domain=node_features['operator']['domain'])
         if node_origin != 'onnx':
             node_origin = 'others'
 
+        # TODO: All attribute value of operators in domain 'ai.onnx.ml' are omited default. Because its loooong value may stuck the process.
+        node_identifier = Network.get_node_identifier_from_features(node_features, mode='full')
         node_count = instance_nodes[node_origin].get(node_identifier, 0)
         instance_nodes[node_origin][node_identifier] = node_count + 1
 
@@ -334,15 +335,15 @@ def main(
     num_onnx_valid_unknown_operators = len(set(valid_operator_dict['onnx'].keys()) - set(train_operator_dict['onnx'].keys()))
     num_others_valid_unknown_operators = len(set(valid_operator_dict['others'].keys()) - set(train_operator_dict['others'].keys()))
 
-    percent_tasks_valid = num_valid_unknown_tasks / len(valid_task_dict_keys) * 100
+    percent_tasks_valid = num_valid_unknown_tasks / len(valid_task_dict_keys) * 100 if len(valid_task_dict_keys) != 0 else 0
 
-    percent_nodes_valid = num_valid_unknown_nodes / len(valid_node_dict_keys) * 100
-    percent_onnx_nodes_valid = num_onnx_valid_unknown_nodes / len(valid_node_dict_keys) * 100
-    percent_others_nodes_valid = num_others_valid_unknown_nodes / len(valid_node_dict_keys) * 100
+    percent_nodes_valid = num_valid_unknown_nodes / len(valid_node_dict_keys) * 100 if len(valid_node_dict_keys) != 0 else 0
+    percent_onnx_nodes_valid = num_onnx_valid_unknown_nodes / len(valid_node_dict_keys) * 100 if len(valid_node_dict_keys) != 0 else 0
+    percent_others_nodes_valid = num_others_valid_unknown_nodes / len(valid_node_dict_keys) * 100 if len(valid_node_dict_keys) != 0 else 0
 
-    percent_operators_valid = num_valid_unknown_operators / len(valid_operator_dict_keys) * 100
-    percent_onnx_operators_valid = num_onnx_valid_unknown_operators / len(valid_operator_dict_keys) * 100
-    percent_others_operators_valid = num_others_valid_unknown_operators / len(valid_operator_dict_keys) * 100
+    percent_operators_valid = num_valid_unknown_operators / len(valid_operator_dict_keys) * 100 if len(valid_operator_dict_keys) != 0 else 0
+    percent_onnx_operators_valid = num_onnx_valid_unknown_operators / len(valid_operator_dict_keys) * 100 if len(valid_operator_dict_keys) != 0 else 0
+    percent_others_operators_valid = num_others_valid_unknown_operators / len(valid_operator_dict_keys) * 100 if len(valid_operator_dict_keys) != 0 else 0
 
     logger.info(f'Valid Unknown [ Number / Ratio ]:')
     logger.info(f' - Tasks = [ {num_valid_unknown_tasks} & {percent_tasks_valid:.2f}% ]')
@@ -366,15 +367,15 @@ def main(
     num_onnx_test_unknown_operators = len(set(test_operator_dict['onnx'].keys()) - set(train_operator_dict['onnx'].keys()))
     num_others_test_unknown_operators = len(set(test_operator_dict['others'].keys()) - set(train_operator_dict['others'].keys()))
 
-    percent_tasks_test = num_test_unknown_tasks / len(test_task_dict_keys) * 100
+    percent_tasks_test = num_test_unknown_tasks / len(test_task_dict_keys) * 100 if len(test_task_dict_keys) != 0 else 0
 
-    percent_nodes_test = num_test_unknown_nodes / len(test_node_dict_keys) * 100
-    percent_onnx_nodes_test = num_onnx_test_unknown_nodes / len(test_node_dict_keys) * 100
-    percent_others_nodes_test = num_others_test_unknown_nodes / len(test_node_dict_keys) * 100
+    percent_nodes_test = num_test_unknown_nodes / len(test_node_dict_keys) * 100 if len(test_node_dict_keys) != 0 else 0
+    percent_onnx_nodes_test = num_onnx_test_unknown_nodes / len(test_node_dict_keys) * 100 if len(test_node_dict_keys) != 0 else 0
+    percent_others_nodes_test = num_others_test_unknown_nodes / len(test_node_dict_keys) * 100 if len(test_node_dict_keys) != 0 else 0
 
-    percent_operators_test = num_test_unknown_operators / len(test_operator_dict_keys) * 100
-    percent_onnx_operators_test = num_onnx_test_unknown_operators / len(test_operator_dict_keys) * 100
-    percent_others_operators_test = num_others_test_unknown_operators / len(test_operator_dict_keys) * 100
+    percent_operators_test = num_test_unknown_operators / len(test_operator_dict_keys) * 100 if len(test_operator_dict_keys) != 0 else 0
+    percent_onnx_operators_test = num_onnx_test_unknown_operators / len(test_operator_dict_keys) * 100 if len(test_operator_dict_keys) != 0 else 0
+    percent_others_operators_test = num_others_test_unknown_operators / len(test_operator_dict_keys) * 100 if len(test_operator_dict_keys) != 0 else 0
 
     logger.info(f'Test Unknown  [ Number / Ratio ]:')
     logger.info(f' - Tasks = [ {num_test_unknown_tasks} & {percent_tasks_test:.2f}% ]')
