@@ -9,8 +9,8 @@ class GCN_NP(nn.Module):
 
     def __init__(self, node_dict_size, node_dim, hidden_dim, dropout):
         super(GCN_NP, self).__init__()
-        self.dropout = dropout
         self.node_embedding_layer = Embedding(node_dict_size, node_dim)
+        self.dropout = dropout
         self.layer_1 = GCNConv(node_dim, hidden_dim)
         self.layer_2 = GCNConv(hidden_dim, node_dict_size)
         self.initialize_parameters()

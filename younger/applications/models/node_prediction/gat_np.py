@@ -1,5 +1,4 @@
 import torch
-
 from torch import nn
 from torch.nn import Embedding
 from torch.nn import functional as F
@@ -12,15 +11,15 @@ class GAT_NP(nn.Module):
         super(GAT_NP, self).__init__()
         self.node_embedding_layer = Embedding(node_dict_size, node_dim)
         self.dropout = dropout
-        self.layer_1 = GATConv(node_dim, hidden_dim, heads=8, dropout=dropout)
-        self.layer_2 = GATConv(hidden_dim, node_dict_size, heads=8, dropout=dropout)
+        self.layer_1 = GATConv(node_dim, hidden_dim, heads=8, dropout=dropout, concat=False)
+        self.layer_2 = GATConv(hidden_dim, node_dict_size, heads=8, dropout=dropout, concat=False)
         self.initialize_parameters()
 
     def forward(self, x, edge_index, mask_x_position):
         x = self.node_embedding_layer(x).squeeze(1)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = self.layer_1(x, edge_index)
-        x = F.elu(x)
+        x = F.relu(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = self.layer_2(x, edge_index)
         return F.log_softmax(x[mask_x_position], dim=1)

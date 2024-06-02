@@ -16,9 +16,9 @@ import torch
 
 from typing import Literal
 
-from torch.nn import Embedding, ELU, Dropout, Linear
+from torch.nn import Embedding, ELU, ReLU, Dropout, Linear
 
-from torch_geometric.nn import GraphNorm, GraphSizeNorm
+from torch_geometric.nn import GraphNorm, GraphSizeNorm, GCNConv
 from torch_geometric.nn import global_mean_pool, global_add_pool, global_max_pool
 
 
@@ -108,7 +108,7 @@ class GLASSConv(torch.nn.Module):
 class GLASS(torch.nn.Module):
     def __init__(
         self,
-        node_dict: dict,
+        node_dict_size: int,
         hidden_dim: int = 64,
         output_dim: int = 64,
         pool_type: Literal['sum', 'max', 'mean', 'size'] = 'mean',
@@ -118,8 +118,15 @@ class GLASS(torch.nn.Module):
         ratio: float = 0.8,
     ):
         super().__init__()
-        self.node_emb = Embedding(len(node_dict), hidden_dim)
-        self.graph_norm_emb = GraphNorm(hidden_dim)
+        self.node_emb = Embedding(node_dict_size, hidden_dim)
+
+        self.linear_0 = Linear(hidden_dim, hidden_dim)
+        self.relu = ReLU(inplace=True)
+
+        self.glass_conv_0 = GCNConv(hidden_dim, hidden_dim)
+        self.graph_norm_0 = GraphNorm(hidden_dim)
+
+        self.linear_1 = Linear(hidden_dim + hidden_dim, hidden_dim)
 
         self.glass_conv_1 = GLASSConv(input_dim=hidden_dim, output_dim=hidden_dim, aggr_type=aggr_type, ratio=ratio, dropout=dropout)
         self.graph_norm_1 = GraphNorm(hidden_dim)
@@ -143,7 +150,7 @@ class GLASS(torch.nn.Module):
         # [ total_node_number X 1]
         assert x.shape[0] == block_mask.shape[0], f'Wrong shape of input \'x\'({x.shape[0]}) and \'block_mask\'({block_mask.shape[0]})'
         block_mask = block_mask.reshape(block_mask.shape[0], -1)
-
+        
         if edge_weight is None:
             edge_weight = torch.ones(edge_index.shape[1], dtype=torch.float, device=edge_index.device)
 
@@ -151,7 +158,17 @@ class GLASS(torch.nn.Module):
         # [ total_node_number X 1 ]
 
         x = self.node_emb(main_feature)
-        x = self.graph_norm_emb(x)
+        jumping_knowledge = x
+
+        x = self.linear_0(x)
+        x = self.relu(x)
+        x = torch.nn.functional.dropout(x, p=self.dropout, training=self.training)
+
+        x = self.glass_conv_0(x, edge_index)
+        x = self.graph_norm_0(x)
+
+        x = torch.cat([x, jumping_knowledge], dim=-1)
+        x = self.linear_1(x)
         x = torch.nn.functional.dropout(x, p=self.dropout, training=self.training)
 
         block_mask = (block_mask > 0)
@@ -172,7 +189,11 @@ class GLASS(torch.nn.Module):
 
     def reset_parameters(self):
         self.node_emb.reset_parameters()
-        self.graph_norm_emb.reset_parameters()
+        self.linear_0.reset_parameters()
+        self.glass_conv_0.reset_parameters()
+        
+        self.graph_norm_0.reset_parameters()
+        self.linear_1.reset_parameters()
 
         self.glass_conv_1.reset_parameters()
         self.graph_norm_1.reset_parameters()

@@ -18,7 +18,6 @@ class GCN_LP(nn.Module):
         # print("x: ", x , x.shape)
         x = self.node_embedding_layer(x).squeeze(1)
         # print("x: ", x , x.shape)
-        x = x.float()
         x = F.relu(self.conv1(x, edge_index))
         x = F.dropout(x, p=0.5, training=self.training)
         x = self.conv2(x, edge_index)
@@ -26,13 +25,8 @@ class GCN_LP(nn.Module):
         return x
 
     def decode(self, z, edge_label_index):
-        # print(z.shape)
-        # print("edge_label_index[0]: ",edge_label_index[0].shape)
-        # print("edge_label_index[1]: ",edge_label_index[1].shape)
         src = z[edge_label_index[0]]
         dst = z[edge_label_index[1]]
-        # print("src:  ", src.shape)
-        # print("dst:  ", dst.shape)
         r = (src * dst).sum(dim=-1)
         return r
 
