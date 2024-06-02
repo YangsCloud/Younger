@@ -92,13 +92,15 @@ class LinkPridiction(YoungerTask):
             self._train_dataset = LinkDataset(
                 self.config['dataset']['train_dataset_dirpath'],
                 worker_number=self.config['dataset']['worker_number'],
-                seed=self.config['dataset']['seed']
+                seed=self.config['dataset']['seed'],
+                encode_type=self.config['dataset']['encode_type'],
             )
             self._valid_dataset = LinkDataset(
                 self.config['dataset']['valid_dataset_dirpath'],
                 link_get_number=self.config['dataset']['link_get_number'],
                 worker_number=self.config['dataset']['worker_number'],
-                seed=self.config['dataset']['seed']
+                seed=self.config['dataset']['seed'],
+                encode_type=self.config['dataset']['encode_type'],
             )
             if self.config['dataset']['encode_type'] == 'node':
                 self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["n2i"])}')
@@ -111,7 +113,8 @@ class LinkPridiction(YoungerTask):
             self._test_dataset = LinkDataset(
                 self.config['dataset']['test_dataset_dirpath'],
                 link_get_number=self.config['dataset']['link_get_number'],
-                worker_number=self.config['dataset']['worker_number']
+                worker_number=self.config['dataset']['worker_number'],
+                encode_type=self.config['dataset']['encode_type'],
             )
             if self.config['dataset']['encode_type'] == 'node':
                 self.logger.info(f'    -> Nodes Dict Size: {len(self.test_dataset.x_dict["n2i"])}')

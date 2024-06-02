@@ -112,6 +112,7 @@ class BlockEmbedding(YoungerTask):
                 node_dict_size=self.config['dataset']['node_dict_size'],
                 worker_number=self.config['dataset']['worker_number'],
                 block_get_type=self.config['dataset']['block_get_type'],
+                encode_type=self.config['dataset']['encode_type'],
                 block_get_number=self.config['dataset']['block_get_number'],
                 seed=self.config['dataset']['seed']
             )

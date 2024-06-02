@@ -46,7 +46,6 @@ class LinkDataset(Dataset):
         worker_number: int = 4,
     ):
         assert encode_type in {'node', 'operator'}
-
         self.encode_type = encode_type
         self.seed = seed
         self.worker_number = worker_number
