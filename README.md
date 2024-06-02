@@ -1,4 +1,4 @@
-# YoungBench
+# Younger
 
 [Chinese Documentation](./README.ZH.md)
 
