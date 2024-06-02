@@ -9,13 +9,14 @@
 # This source code is licensed under the Apache-2.0 license found in the
 # LICENSE file in the root directory of this source tree.
 
-
+import pathlib
 import torch
 import torch.utils.data
 
 from typing import Any, Literal
 from collections import OrderedDict
 from torch_geometric.data import Batch, Data
+from torch_geometric.nn import GAE, VGAE
 
 from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score
 from younger.commons.logging import Logger
@@ -23,9 +24,10 @@ from younger.commons.logging import Logger
 from younger.datasets.modules import Instance, Network
 from younger.datasets.utils.translation import get_complete_attributes_of_node
 
-from younger.applications.models import GCN_NP, GAT_NP, SAGE_NP
+from younger.applications.models import GCN_NP, GAT_NP, SAGE_NP, Encoder_NP, LinearCls
 from younger.applications.datasets import NodeDataset
 from younger.applications.tasks.base_task import YoungerTask
+from younger.applications.utils.neural_network import load_checkpoint
 
 
 class NodePrediction(YoungerTask):
@@ -44,6 +46,7 @@ class NodePrediction(YoungerTask):
         dataset_config['train_dataset_dirpath'] = custom_dataset_config.get('train_dataset_dirpath', None)
         dataset_config['valid_dataset_dirpath'] = custom_dataset_config.get('valid_dataset_dirpath', None)
         dataset_config['test_dataset_dirpath'] = custom_dataset_config.get('test_dataset_dirpath', None)
+        dataset_config['encode_type'] = custom_dataset_config.get('encode_type', 'node')
         dataset_config['block_get_type'] = custom_dataset_config.get('block_get_type', 'louvain')
         dataset_config['block_get_number'] = custom_dataset_config.get('block_get_number', 10)
         dataset_config['seed'] = custom_dataset_config.get('seed', None)
@@ -52,10 +55,13 @@ class NodePrediction(YoungerTask):
         # Model
         model_config = dict()
         custom_model_config = custom_config.get('model', dict())
-        # model_config[]
-        model_config['node_dim'] = custom_model_config.get('node_dim', 256)
-        model_config['hidden_dim'] = custom_model_config.get('hidden_dim', 128)
+        model_config["model_type"] = custom_model_config.get('model_type', None)
+        model_config['node_dim'] = custom_model_config.get('node_dim', 512)
+        model_config['hidden_dim'] = custom_model_config.get('hidden_dim', 256)
         model_config['dropout'] = custom_model_config.get('dropout', 0.5)
+        model_config['stage'] = custom_model_config.get('stage', None) # This is for VGAE or GAE
+        model_config['ae_type'] = custom_model_config.get('ae_type', 'VGAE') # This is for VGAE or GAE
+        model_config['emb_checkpoint_path'] = custom_model_config.get('emb_checkpoint_path', None) # This is for VGAE or GAE
 
         # Optimizer
         optimizer_config = dict()
@@ -90,17 +96,23 @@ class NodePrediction(YoungerTask):
                 self.config['dataset']['train_dataset_dirpath'],
                 worker_number=self.config['dataset']['worker_number'],
                 block_get_type=self.config['dataset']['block_get_type'],
-                seed=self.config['dataset']['seed']
+                encode_type=self.config['dataset']['encode_type'],
+                seed=self.config['dataset']['seed'],
             )
             self._valid_dataset = NodeDataset(
                 self.config['dataset']['valid_dataset_dirpath'],
                 worker_number=self.config['dataset']['worker_number'],
                 block_get_type=self.config['dataset']['block_get_type'],
                 block_get_number=self.config['dataset']['block_get_number'],
-                seed=self.config['dataset']['seed']
+                encode_type=self.config['dataset']['encode_type'],
+                seed=self.config['dataset']['seed'],
             )
-            self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["n2i"])}')
-            self.node_dict_size = len(self.train_dataset.x_dict["n2i"])
+            if self.config['dataset']['encode_type'] == 'node':
+                self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["n2i"])}')
+                self.node_dict_size = len(self.train_dataset.x_dict["n2i"])
+            elif self.config['dataset']['encode_type'] == 'operator':
+                self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["o2i"])}')
+                self.node_dict_size = len(self.train_dataset.x_dict["o2i"])
 
         if self.config['mode'] == 'Test':
             self._test_dataset = NodeDataset(
@@ -108,16 +120,77 @@ class NodePrediction(YoungerTask):
                 worker_number=self.config['dataset']['worker_number'],
                 block_get_type=self.config['dataset']['block_get_type'],
                 block_get_number=self.config['dataset']['block_get_number'],
-                seed=self.config['dataset']['seed']
+                encode_type=self.config['dataset']['encode_type'],
+                seed=self.config['dataset']['seed'],
             )
-            self.node_dict_size = len(self.test_dataset.x_dict["n2i"])
+            if self.config['dataset']['encode_type'] == 'node':
+                self.logger.info(f'    -> Nodes Dict Size: {len(self.test_dataset.x_dict["n2i"])}')
+                self.node_dict_size = len(self.test_dataset.x_dict["n2i"])
+            elif self.config['dataset']['encode_type'] == 'operator':
+                self.logger.info(f'    -> Nodes Dict Size: {len(self.test_dataset.x_dict["o2i"])}')
+                self.node_dict_size = len(self.test_dataset.x_dict["o2i"])
+
+        self.logger.info(f"    -> Using Model: {self.config['model']['model_type']}")
+        if self.config['model']['model_type'] == 'SAGE_NP':
+            self._model = SAGE_NP(
+                node_dict_size=self.node_dict_size,
+                node_dim=self.config['model']['node_dim'],
+                hidden_dim=self.config['model']['hidden_dim'],
+                dropout=self.config['model']['dropout'],
+            )
+
+        elif self.config['model']['model_type'] == 'VGAE_NP':
+            if self.config['model']['stage'] == 'encoder':
+                self._model = VGAE(Encoder_NP(
+                    node_dict_size=self.node_dict_size,
+                    node_dim=self.config['model']['node_dim'],
+                    hidden_dim=self.config['model']['hidden_dim'],
+                    ae_type=self.config['model']['ae_type'],
+                ))
+            elif self.config['model']['stage'] == 'classification':
+                self._model = LinearCls(
+                    node_dict_size=self.node_dict_size,
+                    hidden_dim=self.config['model']['hidden_dim'],
+                )
+                checkpoint = load_checkpoint(pathlib.Path(self.config['model']['emb_checkpoint_path']))
+                self.vgae_model= VGAE(Encoder_NP(
+                    node_dict_size=self.node_dict_size,
+                    node_dim=self.config['model']['node_dim'],
+                    hidden_dim=self.config['model']['hidden_dim'],
+                    ae_type=self.config['model']['ae_type'],
+                ))
+                self.vgae_model.load_state_dict(checkpoint['model_state'])
+                self.vgae_model.to(self.device_descriptor)
+
+        elif self.config['model']['model_type'] == 'GAE_NP':
+            if self.config['model']['stage'] == 'encoder':
+                self._model = GAE(Encoder_NP(
+                    node_dict_size=self.node_dict_size,
+                    node_dim=self.config['model']['node_dim'],
+                    hidden_dim=self.config['model']['hidden_dim'],
+                    ae_type=self.config['model']['ae_type'],
+                ))
+            elif self.config['model']['stage'] == 'classification':
+                self._model = LinearCls(
+                    node_dict_size=self.node_dict_size,
+                    hidden_dim=self.config['model']['hidden_dim'],
+                )
+            
+        elif self.config['model']['model_type'] == 'GCN_NP':
+            self._model = GCN_NP(
+                node_dict_size=self.node_dict_size,
+                node_dim=self.config['model']['node_dim'],
+                hidden_dim=self.config['model']['hidden_dim'],
+                dropout=self.config['model']['dropout'],
+            )
         
-        self._model = SAGE_NP(
-            node_dict_size=self.node_dict_size,
-            node_dim=self.config['model']['node_dim'],
-            hidden_dim=self.config['model']['hidden_dim'],
-            dropout=self.config['model']['dropout'],
-        )
+        elif self.config['model']['model_type'] == 'GAT_NP':
+            self._model = GAT_NP(
+                node_dict_size=self.node_dict_size,
+                node_dim=self.config['model']['node_dim'],
+                hidden_dim=self.config['model']['hidden_dim'],
+                dropout=self.config['model']['dropout'],
+            )
 
         if self.config['mode'] == 'Train':
             self._optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config['optimizer']['learning_rate'], weight_decay=self.config['optimizer']['weight_decay'])
@@ -132,11 +205,24 @@ class NodePrediction(YoungerTask):
 
     def train(self, minibatch: Data) -> tuple[torch.Tensor, OrderedDict]:
         minibatch = minibatch.to(self.device_descriptor)
-        output = self.model(minibatch.x, minibatch.edge_index, minibatch.mask_x_position)
-        # print("\n_________")
-        # print("output.shape", output.shape)
-        # print("minibatch.mask_x_label.shape", minibatch.mask_x_label.shape)
-        loss = torch.nn.functional.nll_loss(output, minibatch.mask_x_label)
+        # The following code is for VGAE.
+        if self.config['model']['stage'] == 'encoder':
+            z = self.model.encode(minibatch.x, minibatch.edge_index)
+            loss = self.model.recon_loss(z, minibatch.edge_index)
+            if self.config['model']['model_type'] == 'VGAE_NP':
+                loss = loss + 0.001 * self.model.kl_loss()
+
+        elif self.config['model']['stage'] == 'classification':
+            self.vgae_model.eval()
+            embeddings = self.vgae_model.encode(minibatch.x, minibatch.edge_index).detach()
+            output = self.model(embeddings, minibatch.mask_x_position)
+            loss = torch.nn.functional.nll_loss(output, minibatch.mask_x_label)
+
+        # This is for other methods
+        else:      
+            output = self.model(minibatch.x, minibatch.edge_index, minibatch.mask_x_position)
+            loss = torch.nn.functional.nll_loss(output, minibatch.mask_x_label)
+        
         logs = OrderedDict({
             'loss': (loss, lambda x: f'{x:.4f}'),
         })
@@ -144,22 +230,35 @@ class NodePrediction(YoungerTask):
 
     def eval(self, minibatch: Data) -> tuple[torch.Tensor, torch.Tensor]:
         minibatch = minibatch.to(self.device_descriptor)
-        output = self.model(minibatch.x, minibatch.edge_index, minibatch.mask_x_position)
+        if self.config['model']['stage'] == 'encoder':
+            return 
+        if self.config['model']['stage'] == 'classification':
+            self.vgae_model.eval()
+            embeddings = self.vgae_model.encode(minibatch.x, minibatch.edge_index).detach()
+            output = self.model(embeddings, minibatch.mask_x_position)
+        else:
+            output = self.model(minibatch.x, minibatch.edge_index, minibatch.mask_x_position)
         # Return Output & Golden
         return output, minibatch.mask_x_label
 
     def eval_calculate_logs(self, all_outputs: list[torch.Tensor], all_goldens: list[torch.Tensor]) -> OrderedDict:
+        if self.config['model']['stage'] == 'encoder':
+            return 
+            
         all_outputs = torch.cat(all_outputs)
         all_goldens = torch.cat(all_goldens)
 
         pred = all_outputs.max(1)[1].cpu().numpy()
         gold = all_goldens.cpu().numpy()
 
+        print("pred[:5]:", pred[:5])
+        print("gold[:5]:", gold[:5])
+
         acc = accuracy_score(gold, pred)
-        macro_p = precision_score(gold, pred, average='macro')
-        macro_r = recall_score(gold, pred, average='macro')
-        macro_f1 = f1_score(gold, pred, average='macro')
-        micro_f1 = f1_score(gold, pred, average='micro')
+        macro_p = precision_score(gold, pred, average='macro', zero_division=0)
+        macro_r = recall_score(gold, pred, average='macro', zero_division=0)
+        macro_f1 = f1_score(gold, pred, average='macro', zero_division=0)
+        micro_f1 = f1_score(gold, pred, average='micro', zero_division=0)
 
         logs = OrderedDict({
             'acc': (acc, lambda x: f'{x:.4f}'),
