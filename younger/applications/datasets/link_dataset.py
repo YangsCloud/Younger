@@ -252,6 +252,8 @@ class LinkDataset(Dataset):
         
         graph_data = cls.get_graph_data(sample, x_dict, encode_type)
         if link_get_number is not None:
+            link_get_number = min(link_get_number, len(graph_data.edge_label_index[0]))
+            
             pos_links = graph_data.edge_label_index[:, :link_get_number//2]
             neg_loc = graph_data.edge_label_index.shape[1]//2
             neg_links = graph_data.edge_label_index[:, neg_loc:neg_loc+(link_get_number//2)]
