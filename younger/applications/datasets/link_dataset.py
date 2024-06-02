@@ -38,23 +38,25 @@ class LinkDataset(Dataset):
         log: bool = True,
         force_reload: bool = False,
 
-        task_dict_size: int | None = None,
         node_dict_size: int | None = None,
+        operator_dict_size: int | None = None,
+        encode_type: Literal['node', 'operator'] = 'node',
         seed: int | None = None,
         link_get_number: int | None = None,
         worker_number: int = 4,
     ):
+        assert encode_type in {'node', 'operator'}
+
+        self.encode_type = encode_type
         self.seed = seed
         self.worker_number = worker_number
         self.link_get_number = link_get_number
-        # print(self.link_get_number)
 
         meta_filepath = os.path.join(root, 'meta.json')
         assert os.path.isfile(meta_filepath), f'Please Download The \'meta.json\' File Of A Specific Version Of The Younger Dataset From Official Website.'
 
         self.meta = self.__class__.load_meta(meta_filepath)
-        self.x_dict = self.__class__.get_x_dict(self.meta, node_dict_size)
-        self.y_dict = self.__class__.get_y_dict(self.meta, task_dict_size)
+        self.x_dict = self.__class__.get_x_dict(self.meta, node_dict_size, operator_dict_size)
 
         self._link_locations: list[tuple[int, int]] = list()
         self._link_locations_filename = 'link_locations.pt'
@@ -71,12 +73,12 @@ class LinkDataset(Dataset):
 
     @property
     def raw_dir(self) -> str:
-        name = f'younger_raw'
+        name = f'younger_raw_{self.encode_type}'
         return os.path.join(self.root, name)
 
     @property
     def processed_dir(self) -> str:
-        name = f'younger_processed'
+        name = f'younger_processed_{self.encode_type}'
         return os.path.join(self.root, name)
 
     @property
@@ -95,14 +97,10 @@ class LinkDataset(Dataset):
         graph_data: Data = graph_data_with_links['graph_data']
         link: torch.LongTensor = graph_data_with_links['links']
         link_label: int = graph_data_with_links['link_labels']
-        # print(link.shape)
-        # print(link_label.shape)
-        # print("here!____________:", link)
-        # print("here!____________:", link.view(2,1))
-        # print("here!____________:", graph_data.edge_index[:,link_index])
-
-        combined_data: Data = Data(x=graph_data.x, edge_index=graph_data.edge_index, y=graph_data.y, link=link, link_label=link_label)
-        # print("here!-------: ", combined_data)]
+        combined_data: Data = Data(x=graph_data.x, edge_index=graph_data.edge_index, link=link, link_label=link_label)
+        # print("index:", index)
+        # print("graph_data.edge_index[:,:5]:", graph_data.edge_index[:,:5])
+        # print("combined_data: ", combined_data)
         return combined_data
 
     def download(self):
@@ -119,7 +117,6 @@ class LinkDataset(Dataset):
         with multiprocessing.Pool(self.worker_number) as pool:
             with tqdm.tqdm(total=self.meta['size']) as progress_bar:
                 for sample_index, link_number in pool.imap_unordered(self.process_sample, range(self.meta['size'])):
-                    print("link_num: ",link_number)
                     unordered_link_records.append((sample_index, link_number))
                     progress_bar.update()
         sorted_link_records = sorted(unordered_link_records, key=lambda x: x[0])
@@ -132,8 +129,7 @@ class LinkDataset(Dataset):
     def process_sample(self, sample_index: int) -> tuple[int, int]:
         sample_filepath = os.path.join(self.raw_dir, f'sample-{sample_index}.pkl')
         sample: networkx.DiGraph = load_pickle(sample_filepath)
-
-        graph_data_with_links = self.__class__.get_graph_data_with_links(sample, self.x_dict, self.y_dict, self.seed, self.link_get_number)
+        graph_data_with_links = self.__class__.get_graph_data_with_links(sample, self.x_dict, self.encode_type, self.link_get_number)
         if self.pre_filter is not None and not self.pre_filter(graph_data_with_links):
             return
 
@@ -150,6 +146,7 @@ class LinkDataset(Dataset):
         meta['metric_name'] = loaded_meta['metric_name']
         meta['all_tasks'] = loaded_meta['all_tasks']
         meta['all_nodes'] = loaded_meta['all_nodes']
+        meta['all_operators'] = loaded_meta['all_operators']
 
         meta['split'] = loaded_meta['split']
         meta['archive'] = loaded_meta['archive']
@@ -158,36 +155,31 @@ class LinkDataset(Dataset):
         meta['url'] = loaded_meta['url']
 
         return meta
+    
+    @classmethod
+    def get_mapping(cls, graph: networkx.DiGraph) -> dict[str, int]:
+        return dict(zip(sorted(graph.nodes()), range(graph.number_of_nodes())))
 
     @classmethod
-    def get_x_dict(cls, meta: dict[str, Any], node_dict_size: int | None = None) -> dict[str, list[str] | dict[str, int]]:
+    def get_x_dict(cls, meta: dict[str, Any], node_dict_size: int | None = None, operator_dict_size: int | None = None) -> dict[str, list[str] | dict[str, int]]:
         all_nodes = [(node_id, node_count) for node_id, node_count in meta['all_nodes']['onnx'].items()] + [(node_id, node_count) for node_id, node_count in meta['all_nodes']['others'].items()]
         all_nodes = sorted(all_nodes, key=lambda x: x[1])
 
+        all_operators = [(operator_id, operator_count) for operator_id, operator_count in meta['all_operators']['onnx'].items()] + [(operator_id, operator_count) for operator_id, operator_count in meta['all_operators']['others'].items()]
+        all_operators = sorted(all_operators, key=lambda x: x[1])
+
         node_dict_size = len(all_nodes) if node_dict_size is None else node_dict_size
+        operator_dict_size = len(all_operators) if operator_dict_size is None else operator_dict_size
 
         x_dict = dict()
-        x_dict['i2n'] = ['__UNK__'] + [node_id for node_id, node_count in all_nodes[:node_dict_size]]
-
+        x_dict['i2n'] = ['__UNK__'] + ['__MASK__'] + [node_id for node_id, node_count in all_nodes[:node_dict_size]]
         x_dict['n2i'] = {node_id: index for index, node_id in enumerate(x_dict['i2n'])}
+        x_dict['i2o'] = ['__UNK__'] + ['__MASK__'] + [operator_id for operator_id, operator_count in all_operators[:operator_dict_size]]
+        x_dict['o2i'] = {operator_id: index for index, operator_id in enumerate(x_dict['i2o'])}
         return x_dict
 
     @classmethod
-    def get_y_dict(cls, meta: dict[str, Any], task_dict_size: int | None = None) -> dict[str, list[str] | dict[str, int]]:
-        all_tasks = [(task_id, task_count) for task_id, task_count in meta['all_tasks'].items()]
-        all_tasks = sorted(all_tasks, key=lambda x: x[1])
-
-        task_dict_size = len(all_tasks) if task_dict_size is None else task_dict_size
-
-        y_dict = dict()
-        y_dict['i2t'] = ['__UNK__'] + [task_id for task_id, task_count in all_tasks[:task_dict_size]]
-
-        y_dict['t2i'] = {task_id: index for index, task_id in enumerate(y_dict['i2t'])}
-        return y_dict
-
-    @classmethod
-    def get_edge_index(cls, sample: networkx.DiGraph) -> torch.Tensor:
-        mapping = dict(zip(sample.nodes(), range(sample.number_of_nodes())))
+    def get_edge_index(cls, sample: networkx.DiGraph, mapping: dict[str, int]) -> torch.Tensor:
         edge_index = torch.empty((2, sample.number_of_edges()), dtype=torch.long)
         for index, (src, dst) in enumerate(sample.edges()):
             edge_index[0, index] = mapping[src]
@@ -211,71 +203,55 @@ class LinkDataset(Dataset):
         return edge_label, edge_label_index
 
     @classmethod
-    def get_node_feature(cls, node_features: dict, x_dict: dict[str, Any]) -> list:
-        node_identifier: str = Network.get_node_identifier_from_features(node_features)
-        node_feature = list()
-        node_feature.append(x_dict['n2i'].get(node_identifier, x_dict['n2i']['__UNK__']))
-        return node_feature
+    def get_node_class(cls, node_features: dict, x_dict: dict[str, Any], encode_type: Literal['node', 'operator'] = 'node') -> int:
+        if encode_type == 'node':
+            node_identifier: str = Network.get_node_identifier_from_features(node_features, mode='full')
+            node_class = x_dict['n2i'].get(node_identifier, x_dict['n2i']['__UNK__'])
+
+        if encode_type == 'operator':
+            node_identifier: str = Network.get_node_identifier_from_features(node_features, mode='type')
+            node_class = x_dict['o2i'].get(node_identifier, x_dict['o2i']['__UNK__'])
+
+        return node_class
 
     @classmethod
-    def get_x(cls, sample: networkx.DiGraph, x_dict: dict[str, Any]) -> torch.Tensor:
-        node_indices = list(sample.nodes)
+    def get_x(cls, graph: networkx.DiGraph, mapping: dict[str, int], x_dict: dict[str, Any], encode_type: Literal['node', 'operator'] = 'node') -> torch.Tensor:
+        node_indices = sorted(list(graph.nodes), key=lambda x: mapping[x])
+
         node_features = list()
         for node_index in node_indices:
-            node_feature = cls.get_node_feature(sample.nodes[node_index]['features'], x_dict)
+            node_feature = [cls.get_node_class(graph.nodes[node_index]['features'], x_dict, encode_type=encode_type)]
             node_features.append(node_feature)
         node_features = torch.tensor(node_features, dtype=torch.long)
+
         return node_features
-
-    @classmethod
-    def get_graph_feature(cls, graph_labels: dict, y_dict: dict[str, list[str] | dict[str, int]]) -> list:
-
-        downloads: int = graph_labels['downloads']
-        likes: int = graph_labels['likes']
-        tasks: str = graph_labels['tasks']
-        metrics: list[float] = graph_labels['metrics']
-
-        graph_feature = list()
-        task = tasks[numpy.random.randint(len(tasks))] if len(tasks) else None
-        graph_feature.append(y_dict['t2i'].get(task, y_dict['t2i']['__UNK__']))
-        
-        return graph_feature
-
-    @classmethod
-    def get_y(cls, sample: networkx.DiGraph, y_dict: dict[str, Any]) -> torch.Tensor:
-        graph_feature = cls.get_graph_feature(sample.graph, y_dict)
-        if graph_feature is None:
-            graph_feature = None
-        else:
-            graph_feature = torch.tensor(graph_feature, dtype=torch.float32)
-        return graph_feature
 
     @classmethod
     def get_graph_data(
         cls,
         sample: networkx.DiGraph,
-        x_dict: dict[str, Any], y_dict: dict[str, Any]
+        x_dict: dict[str, Any], 
+        encode_type: Literal['node', 'operator'] = 'node',
     ) -> Data:
-        x = cls.get_x(sample, x_dict)
-        edge_index = cls.get_edge_index(sample)
-        y = cls.get_y(sample, y_dict)
+        mapping = cls.get_mapping(sample)
+        x = cls.get_x(sample, mapping, x_dict, encode_type)
+        edge_index = cls.get_edge_index(sample, mapping)
 
         edge_label, edge_label_index = cls.get_label_edge(edge_index, x)
 
-        graph_data = Data(x=x, edge_index=edge_index, y=y, edge_label=edge_label, edge_label_index=edge_label_index)
+        graph_data = Data(x=x, edge_index=edge_index, edge_label=edge_label, edge_label_index=edge_label_index)
         return graph_data
 
     @classmethod
     def get_graph_data_with_links(
         cls,
         sample: networkx.DiGraph,
-        x_dict: dict[str, Any], y_dict: dict[str, Any],
-        seed: int | None = None,
+        x_dict: dict[str, Any],
+        encode_type: Literal['node', 'operator'] = 'node',
         link_get_number: int | None = None
     ) -> dict[str, Data | list[set]]:
-
-        graph_data = cls.get_graph_data(sample, x_dict, y_dict)
-        print("link_get_number: ", link_get_number)
+        
+        graph_data = cls.get_graph_data(sample, x_dict, encode_type)
         if link_get_number is not None:
             pos_links = graph_data.edge_label_index[:, :link_get_number//2]
             neg_loc = graph_data.edge_label_index.shape[1]//2
@@ -285,6 +261,8 @@ class LinkDataset(Dataset):
                 torch.ones(link_get_number//2),
                 torch.zeros(link_get_number//2)
             ], dim=0)
+            print("encode_type: ",encode_type)
+            print("link_get_number: ", link_get_number)
             print("full: " , graph_data.edge_label_index)
             print("pos: ", pos_links)
             print("neg: ", neg_links)

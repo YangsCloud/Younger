@@ -18,7 +18,7 @@ import random
 import networkx
 import multiprocessing
 
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, Mapping
 from torch_geometric.io import fs
 from torch_geometric.data import Data, Dataset, download_url
 
@@ -38,16 +38,20 @@ class BlockDataset(Dataset):
         log: bool = True,
         force_reload: bool = False,
 
-        task_dict_size: int | None = None,
         node_dict_size: int | None = None,
-        block_get_type: Literal['louvain', 'label'] = 'louvain',
+        operator_dict_size: int | None = None,
+        encode_type: Literal['node', 'operator'] = 'node',
+
+        block_get_type: Literal['louvain', 'label', 'asyn_fluidc', 'greedy_modularity_communities'] = 'louvain',
         block_get_number: int | None = None,
 
         seed: int | None = None,
         worker_number: int = 4,
     ):
-        assert block_get_type in {'louvain', 'label'}
+        assert block_get_type in {'louvain', 'label', 'asyn_fluidc', 'greedy_modularity_communities'}
+        assert encode_type in {'node', 'operator'}
 
+        self.encode_type = encode_type
         self.block_get_type = block_get_type
         self.block_get_number = block_get_number
         self.seed = seed
@@ -57,8 +61,7 @@ class BlockDataset(Dataset):
         assert os.path.isfile(meta_filepath), f'Please Download The \'meta.json\' File Of A Specific Version Of The Younger Dataset From Official Website.'
 
         self.meta = self.__class__.load_meta(meta_filepath)
-        self.x_dict = self.__class__.get_x_dict(self.meta, node_dict_size)
-        self.y_dict = self.__class__.get_y_dict(self.meta, task_dict_size)
+        self.x_dict = self.__class__.get_x_dict(self.meta, node_dict_size, operator_dict_size)
 
         self._community_locations: list[tuple[int, int]] = list()
 
@@ -75,12 +78,12 @@ class BlockDataset(Dataset):
 
     @property
     def raw_dir(self) -> str:
-        name = f'younger_raw'
+        name = f'younger_raw_{self.encode_type}'
         return os.path.join(self.root, name)
 
     @property
     def processed_dir(self) -> str:
-        name = f'younger_processed'
+        name = f'younger_raw_{self.encode_type}'
         return os.path.join(self.root, name)
 
     @property
@@ -120,6 +123,7 @@ class BlockDataset(Dataset):
         with multiprocessing.Pool(self.worker_number) as pool:
             with tqdm.tqdm(total=self.meta['size']) as progress_bar:
                 for sample_index, community_number in pool.imap_unordered(self.process_sample, range(self.meta['size'])):
+                    print("sample_index / community_number : ",sample_index, " / ",community_number)
                     unordered_community_records.append((sample_index, community_number))
                     progress_bar.update()
         sorted_community_records = sorted(unordered_community_records, key=lambda x: x[0])
@@ -133,7 +137,7 @@ class BlockDataset(Dataset):
         sample_filepath = os.path.join(self.raw_dir, f'sample-{sample_index}.pkl')
         sample: networkx.DiGraph = load_pickle(sample_filepath)
 
-        graph_data_with_communities = self.__class__.get_graph_data_with_communities(sample, self.x_dict, self.y_dict, self.block_get_type, self.block_get_number, self.seed)
+        graph_data_with_communities = self.__class__.get_graph_data_with_communities(sample, self.x_dict, self.encode_type, self.block_get_type, self.block_get_number, self.seed)
         if self.pre_filter is not None and not self.pre_filter(graph_data_with_communities):
             return
 
@@ -150,6 +154,7 @@ class BlockDataset(Dataset):
         meta['metric_name'] = loaded_meta['metric_name']
         meta['all_tasks'] = loaded_meta['all_tasks']
         meta['all_nodes'] = loaded_meta['all_nodes']
+        meta['all_operators'] = loaded_meta['all_operators']
 
         meta['split'] = loaded_meta['split']
         meta['archive'] = loaded_meta['archive']
@@ -164,30 +169,22 @@ class BlockDataset(Dataset):
         return dict(zip(sorted(sample.nodes()), range(sample.number_of_nodes())))
 
     @classmethod
-    def get_x_dict(cls, meta: dict[str, Any], node_dict_size: int | None = None) -> dict[str, list[str] | dict[str, int]]:
+    def get_x_dict(cls, meta: dict[str, Any], node_dict_size: int | None = None, operator_dict_size: int | None = None) -> dict[str, list[str] | dict[str, int]]:
         all_nodes = [(node_id, node_count) for node_id, node_count in meta['all_nodes']['onnx'].items()] + [(node_id, node_count) for node_id, node_count in meta['all_nodes']['others'].items()]
         all_nodes = sorted(all_nodes, key=lambda x: x[1])
 
+        all_operators = [(operator_id, operator_count) for operator_id, operator_count in meta['all_operators']['onnx'].items()] + [(operator_id, operator_count) for operator_id, operator_count in meta['all_operators']['others'].items()]
+        all_operators = sorted(all_operators, key=lambda x: x[1])
+
         node_dict_size = len(all_nodes) if node_dict_size is None else node_dict_size
+        operator_dict_size = len(all_operators) if operator_dict_size is None else operator_dict_size
 
         x_dict = dict()
-        x_dict['i2n'] = ['__UNK__'] + [node_id for node_id, node_count in all_nodes[:node_dict_size]]
-
+        x_dict['i2n'] = ['__UNK__'] + ['__MASK__'] + [node_id for node_id, node_count in all_nodes[:node_dict_size]]
         x_dict['n2i'] = {node_id: index for index, node_id in enumerate(x_dict['i2n'])}
+        x_dict['i2o'] = ['__UNK__'] + ['__MASK__'] + [operator_id for operator_id, operator_count in all_operators[:operator_dict_size]]
+        x_dict['o2i'] = {operator_id: index for index, operator_id in enumerate(x_dict['i2o'])}
         return x_dict
-
-    @classmethod
-    def get_y_dict(cls, meta: dict[str, Any], task_dict_size: int | None = None) -> dict[str, list[str] | dict[str, int]]:
-        all_tasks = [(task_id, task_count) for task_id, task_count in meta['all_tasks'].items()]
-        all_tasks = sorted(all_tasks, key=lambda x: x[1])
-
-        task_dict_size = len(all_tasks) if task_dict_size is None else task_dict_size
-
-        y_dict = dict()
-        y_dict['i2t'] = ['__UNK__'] + [task_id for task_id, task_count in all_tasks[:task_dict_size]]
-
-        y_dict['t2i'] = {task_id: index for index, task_id in enumerate(y_dict['i2t'])}
-        return y_dict
 
     @classmethod
     def get_edge_index(cls, sample: networkx.DiGraph) -> torch.Tensor:
@@ -199,61 +196,60 @@ class BlockDataset(Dataset):
         return edge_index
 
     @classmethod
-    def get_node_feature(cls, node_features: dict, x_dict: dict[str, Any]) -> list:
+    def get_node_class(cls, node_features: dict, x_dict: dict[str, Any], encode_type: Literal['node', 'operator'] = 'node') -> list:
         node_identifier: str = Network.get_node_identifier_from_features(node_features)
         node_feature = list()
         node_feature.append(x_dict['n2i'].get(node_identifier, x_dict['n2i']['__UNK__']))
-        return node_feature
+        if encode_type == 'node':
+            node_identifier: str = Network.get_node_identifier_from_features(node_features, mode='full')
+            node_class = x_dict['n2i'].get(node_identifier, x_dict['n2i']['__UNK__'])
+
+        if encode_type == 'operator':
+            node_identifier: str = Network.get_node_identifier_from_features(node_features, mode='type')
+            node_class = x_dict['o2i'].get(node_identifier, x_dict['o2i']['__UNK__'])
+
+        return node_class
 
     @classmethod
-    def get_x(cls, sample: networkx.DiGraph, x_dict: dict[str, Any]) -> torch.Tensor:
-        node_indices = list(sample.nodes)
+    def get_x(cls, graph: networkx.DiGraph, mapping: dict[str, int],  x_dict: dict[str, Any], encode_type: Literal['node', 'operator'] = 'node') -> torch.Tensor:
+        node_indices = sorted(list(graph.nodes), key=lambda x: mapping[x])
+
         node_features = list()
         for node_index in node_indices:
-            node_feature = cls.get_node_feature(sample.nodes[node_index]['features'], x_dict)
+            node_feature = [cls.get_node_class(graph.nodes[node_index]['features'], x_dict, encode_type=encode_type)]
             node_features.append(node_feature)
         node_features = torch.tensor(node_features, dtype=torch.long)
+
         return node_features
-
-    @classmethod
-    def get_graph_feature(cls, graph_labels: dict, y_dict: dict[str, list[str] | dict[str, int]]) -> list:
-
-        downloads: int = graph_labels['downloads']
-        likes: int = graph_labels['likes']
-        tasks: str = graph_labels['tasks']
-        metrics: list[float] = graph_labels['metrics']
-
-        graph_feature = list()
-        task = tasks[numpy.random.randint(len(tasks))] if len(tasks) else None
-        graph_feature.append(y_dict['t2i'].get(task, y_dict['t2i']['__UNK__']))
-
-        return graph_feature
-
-    @classmethod
-    def get_y(cls, sample: networkx.DiGraph, y_dict: dict[str, Any]) -> torch.Tensor:
-        graph_feature = cls.get_graph_feature(sample.graph, y_dict)
-        if graph_feature is None:
-            graph_feature = None
-        else:
-            graph_feature = torch.tensor(graph_feature, dtype=torch.float32)
-        return graph_feature
 
     @classmethod
     def get_graph_data(
         cls,
         sample: networkx.DiGraph,
-        x_dict: dict[str, Any], y_dict: dict[str, Any],
+        x_dict: dict[str, Any],
+        encode_type: Literal['node', 'operator'] = 'node',
     ) -> Data:
-        x = cls.get_x(sample, x_dict)
+        mapping = cls.get_mapping(sample)
+        x = cls.get_x(sample, mapping, x_dict, encode_type)
         edge_index = cls.get_edge_index(sample)
-        y = cls.get_y(sample, y_dict)
 
-        graph_data = Data(x=x, edge_index=edge_index, y=y)
+        graph_data = Data(x=x, edge_index=edge_index)
         return graph_data
 
     @classmethod
-    def get_communities(cls, sample: networkx.DiGraph, block_get_type: Literal['louvain', 'label'], block_get_number: int | None = None, **kwargs) -> list[tuple[set, tuple]]:
+    def get_communities(cls, sample: networkx.DiGraph, block_get_type: Literal['louvain', 'label', 'asyn_fluidc', 'greedy_modularity_communities'], block_get_number: int | None = None, **kwargs) -> list[tuple[set, tuple]]:
         mapping = cls.get_mapping(sample)
+        if block_get_type == 'greedy_modularity_communities':
+            seed = kwargs.get('seed', None)
+            resolution = kwargs.get('resolution', 1)
+            cutoff = kwargs.get('cutoff', 1)
+            communities = list(networkx.community.greedy_modularity_communities(sample, resolution=resolution, cutoff=cutoff))
+
+        if block_get_type == 'asyn_fluidc':
+            seed = kwargs.get('seed', None)
+            k = len(sample.nodes())//20 if len(sample.nodes()) >= 20 else 1
+            communities = list(networkx.community.asyn_fluidc(sample, k=k, seed=seed))
+
         if block_get_type == 'louvain':
             seed = kwargs.get('seed', None)
             resolution = kwargs.get('resolution', 1)
@@ -269,28 +265,37 @@ class BlockDataset(Dataset):
             communities = random.sample(communities, min(block_get_number, len(communities)))
         community_with_labels = list()
         for community in communities:
+            if len(community) == 0:
+                continue
             block: networkx.DiGraph = networkx.subgraph(sample, community).copy()
 
             # Labels
             density = networkx.density(block)
             coreness = numpy.average(list(networkx.core_number(block).values()))
-            cut_ratio = len(list(networkx.edge_boundary(sample, block.nodes))) / (block.number_of_nodes() * (sample.number_of_nodes() - block.number_of_nodes()))
+            if len(community) == sample.number_of_nodes():
+                cut_ratio = 0
+            else:
+                cut_ratio = len(list(networkx.edge_boundary(sample, block.nodes))) / (block.number_of_nodes() * (sample.number_of_nodes() - block.number_of_nodes()))
 
             community = set([mapping[node] for node in community])
             community_with_labels.append((community, (density, coreness, cut_ratio)))
+        print('block_get_type: ', block_get_type)
+        print('block_get_number, len(communities): ',block_get_number, len(communities))
+        print("block_get_number/len(all_community_with_boundary): ", block_get_number, len(community_with_labels))
         return community_with_labels
 
     @classmethod
     def get_graph_data_with_communities(
         cls,
         sample: networkx.DiGraph,
-        x_dict: dict[str, Any], y_dict: dict[str, Any],
-        block_get_type: Literal['louvain', 'label'],
+        x_dict: dict[str, Any],
+        encode_type: Literal['node', 'operator'] = 'node',
+        block_get_type: Literal['louvain', 'label', 'asyn_fluidc', 'greedy_modularity_communities'] = 'louvain',
         block_get_number: int | None = None,
         seed: int | None = None,
     ) -> dict[str, Data | list[set]]:
 
-        graph_data = cls.get_graph_data(sample, x_dict, y_dict)
+        graph_data = cls.get_graph_data(sample, x_dict, encode_type)
         communities: list[set] = list()
         for community in cls.get_communities(sample, block_get_type, block_get_number=block_get_number, seed=seed):
             communities.append(community)

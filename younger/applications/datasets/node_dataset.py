@@ -22,7 +22,6 @@ from torch_geometric.io import fs
 from torch_geometric.data import Data, Dataset, download_url
 from torch_geometric.utils import is_sparse
 
-from sklearn.metrics import f1_score
 from younger.commons.io import load_json, load_pickle, tar_extract
 
 from younger.datasets.modules import Network
@@ -70,13 +69,14 @@ class NodeDataset(Dataset):
         node_dict_size: int | None = None,
         operator_dict_size: int | None = None,
         encode_type: Literal['node', 'operator'] = 'node',
-        block_get_type: Literal['louvain', 'label'] = 'louvain',
+        
+        block_get_type: Literal['louvain', 'label', 'greedy_modularity_communities'] = 'louvain',
         block_get_number: int | None = None,
 
         seed: int | None = None,
         worker_number: int = 4,
     ):
-        assert block_get_type in {'louvain', 'label'}
+        assert block_get_type in {'louvain', 'label', 'greedy_modularity_communities'}
         assert encode_type in {'node', 'operator'}
 
         self.encode_type = encode_type
@@ -106,12 +106,12 @@ class NodeDataset(Dataset):
     
     @property
     def raw_dir(self) -> str:
-        name = f'younger_raw'
+        name = f'younger_raw_{self.encode_type}'
         return os.path.join(self.root, name)
 
     @property
     def processed_dir(self) -> str:
-        name = f'younger_processed'
+        name = f'younger_processed_{self.encode_type}'
         return os.path.join(self.root, name)
 
     @property
@@ -128,7 +128,8 @@ class NodeDataset(Dataset):
     def get(self, index: int) -> NodeData:
         sample_index, block_index = self._block_locations[index]
         block_data_list: dict[str, NodeData | list[set]] = torch.load(os.path.join(self.processed_dir, f'sample-{sample_index}.pth'))
-
+        # print("block_data_list: ", block_data_list)
+        # print("len(block_data_list)",len(block_data_list))
         block_data = block_data_list[block_index]
         return block_data
 
@@ -158,7 +159,6 @@ class NodeDataset(Dataset):
     def process_sample(self, sample_index: int) -> tuple[int, int]:
         sample_filepath = os.path.join(self.raw_dir, f'sample-{sample_index}.pkl')
         sample: networkx.DiGraph = load_pickle(sample_filepath)
-
         block_data_list = self.__class__.get_block_data_list(sample, self.x_dict, self.encode_type, self.block_get_type, self.block_get_number, self.seed)
         if self.pre_filter is not None and not self.pre_filter(block_data_list):
             return
@@ -175,6 +175,7 @@ class NodeDataset(Dataset):
 
         meta['metric_name'] = loaded_meta['metric_name']
         meta['all_nodes'] = loaded_meta['all_nodes']
+        meta['all_operators'] = loaded_meta['all_operators']
 
         meta['split'] = loaded_meta['split']
         meta['archive'] = loaded_meta['archive']
@@ -229,8 +230,6 @@ class NodeDataset(Dataset):
     @classmethod
     def get_x(cls, graph: networkx.DiGraph, mapping: dict[str, int], boundary: set[str], x_dict: dict[str, Any], encode_type: Literal['node', 'operator'] = 'node') -> torch.Tensor:
         node_indices = sorted(list(graph.nodes), key=lambda x: mapping[x])
-        print(node_indices)
-        print([mapping[node_index] for node_index in node_indices])
 
         if encode_type == 'node':
             dict_key = 'n2i'
@@ -258,8 +257,8 @@ class NodeDataset(Dataset):
         encode_type: Literal['node', 'operator'] = 'node',
     ) -> NodeData:
         subgraph: networkx.DiGraph = networkx.subgraph(sample, community | boundary).copy()
-        mapping = cls.get_mapping(subgraph) # dict(zip(sorted(G.nodes()), range(G.number_of_nodes())))
-                                            # e.g.
+        mapping = cls.get_mapping(subgraph) # e.g.
+                                            # dict(zip(sorted(G.nodes()), range(G.number_of_nodes())))
                                             # >>> print(node_mapping)
                                             # {2: 0, 3: 1, 5: 2, 10: 3}
                                             # >>> print(G.nodes())
@@ -276,7 +275,14 @@ class NodeDataset(Dataset):
         return block_data
 
     @classmethod
-    def get_all_community_with_boundary(cls, sample: networkx.DiGraph, block_get_type: Literal['louvain', 'label'] = 'louvain', block_get_number: int | None = None, **kwargs) -> list[tuple[set, set]]:
+    def get_all_community_with_boundary(cls, sample: networkx.DiGraph, block_get_type: Literal['louvain', 'label', 'greedy_modularity_communities'] = 'louvain', block_get_number: int | None = None, **kwargs) -> list[tuple[set, set]]:
+        
+        if block_get_type == 'greedy_modularity_communities':
+            seed = kwargs.get('seed', None)
+            resolution = kwargs.get('resolution', 1)
+            cutoff = kwargs.get('cutoff', 1)
+            communities = list(networkx.community.greedy_modularity_communities(sample, resolution=resolution, cutoff=cutoff))
+
         if block_get_type == 'louvain':
             seed = kwargs.get('seed', None)
             resolution = kwargs.get('resolution', 1)
@@ -294,7 +300,12 @@ class NodeDataset(Dataset):
         all_community_with_boundary = list()
         for community in communities:
             boundary = networkx.node_boundary(sample, community)
+            if len(boundary) == 0:
+                continue
             all_community_with_boundary.append((community, boundary))
+        print('block_get_type: ', block_get_type)
+        print('block_get_number, len(communities): ',block_get_number, len(communities))
+        print("block_get_number/len(all_community_with_boundary): ", block_get_number, len(all_community_with_boundary))
         return all_community_with_boundary
 
     @classmethod
@@ -303,7 +314,7 @@ class NodeDataset(Dataset):
         sample: networkx.DiGraph,
         x_dict: dict[str, Any],
         encode_type: Literal['node', 'operator'] = 'node',
-        block_get_type: Literal['louvain', 'label'] = 'louvain',
+        block_get_type: Literal['louvain', 'label', 'greedy_modularity_communities'] = 'louvain',
         block_get_number: int | None = None,
         seed: int | None = None,
     ) -> dict[str, NodeData | list[set]]:
@@ -311,7 +322,9 @@ class NodeDataset(Dataset):
         block_data_list = list()
         all_community_with_boundary = cls.get_all_community_with_boundary(sample, encode_type=encode_type, block_get_type=block_get_type, block_get_number=block_get_number, seed=seed)
         for (community, boundary) in all_community_with_boundary:
-            block_data = cls.get_block_data(sample, community, boundary, x_dict)
+            block_data = cls.get_block_data(sample, community, boundary, x_dict, encode_type)
+            if block_data.edge_index.shape[1] == 0:
+                continue
             block_data_list.append(block_data)
 
         return block_data_list
