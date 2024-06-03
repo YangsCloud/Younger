@@ -106,12 +106,12 @@ class NodeDataset(Dataset):
     
     @property
     def raw_dir(self) -> str:
-        name = f'younger_raw_{self.encode_type}'
+        name = f'younger_raw_{self.encode_type}_np'
         return os.path.join(self.root, name)
 
     @property
     def processed_dir(self) -> str:
-        name = f'younger_processed_{self.encode_type}'
+        name = f'younger_processed_{self.encode_type}_np'
         return os.path.join(self.root, name)
 
     @property

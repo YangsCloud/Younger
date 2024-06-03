@@ -78,12 +78,12 @@ class BlockDataset(Dataset):
 
     @property
     def raw_dir(self) -> str:
-        name = f'younger_raw_{self.encode_type}'
+        name = f'younger_raw_{self.encode_type}_bk'
         return os.path.join(self.root, name)
 
     @property
     def processed_dir(self) -> str:
-        name = f'younger_raw_{self.encode_type}'
+        name = f'younger_raw_{self.encode_type}_bk'
         return os.path.join(self.root, name)
 
     @property

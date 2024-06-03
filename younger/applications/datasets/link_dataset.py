@@ -72,12 +72,12 @@ class LinkDataset(Dataset):
 
     @property
     def raw_dir(self) -> str:
-        name = f'younger_raw_{self.encode_type}'
+        name = f'younger_raw_{self.encode_type}_lp'
         return os.path.join(self.root, name)
 
     @property
     def processed_dir(self) -> str:
-        name = f'younger_processed_{self.encode_type}'
+        name = f'younger_processed_{self.encode_type}_lp'
         return os.path.join(self.root, name)
 
     @property
@@ -264,11 +264,11 @@ class LinkDataset(Dataset):
             ], dim=0)
             print("encode_type: ",encode_type)
             print("link_get_number: ", link_get_number)
-            print("full: " , graph_data.edge_label_index)
-            print("pos: ", pos_links)
-            print("neg: ", neg_links)
-            print("links: ", links)
-            print("label: ", link_labels)
+            print("full: " , graph_data.edge_label_index.shape)
+            print("pos: ", pos_links.shape)
+            print("neg: ", neg_links.shape)
+            print("links: ", links.shape)
+            print("label: ", link_labels.shape)
         else:
             links = graph_data.edge_label_index
             link_labels = graph_data.edge_label
