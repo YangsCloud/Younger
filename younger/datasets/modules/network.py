@@ -139,7 +139,13 @@ class Network(object):
         if mode == 'full':
             operator_id = str([['op_type', node_features['operator']['op_type']], ['domain', node_features['operator']['domain']]])
             if omit_aionnxml_attributes:
-                attributes_id = str(sorted([(attr_name, attr_type) for attr_name, (attr_type, attr_value) in node_features['attributes'].items()]))
+                attr_items = list()
+                for attr_name, (attr_type, attr_value) in node_features['attributes'].items():
+                    if node_features['operator']['domain'] == 'ai.onnx.ml':
+                        attr_items.append((attr_name, attr_type))
+                    else:
+                        attr_items.append((attr_name, attr_type, attr_value))
+                attributes_id = str(sorted(attr_items))
             else:
                 attributes_id = str(sorted([(attr_name, attr_type, attr_value) for attr_name, (attr_type, attr_value) in node_features['attributes'].items()]))
             node_identifier = operator_id + '-o-a-' + attributes_id
