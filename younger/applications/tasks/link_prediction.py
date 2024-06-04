@@ -241,6 +241,10 @@ class LinkPridiction(YoungerTask):
     @property
     def model(self):
         return self._model
+    
+    @model.setter
+    def model(self, model):
+        self._model = model
 
     @property
     def optimizer(self):
