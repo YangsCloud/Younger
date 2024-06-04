@@ -31,7 +31,7 @@ from younger.applications.utils.neural_network import load_checkpoint
 
 
 class NodePrediction(YoungerTask):
-    def __init__(self, custom_config: dict, device_descriptor: torch.device) -> None:
+    def __init__(self, custom_config: dict, device_descriptor: torch.device = None) -> None:
         super().__init__(custom_config, device_descriptor)
         self.build_config(custom_config)
 

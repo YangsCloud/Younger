@@ -29,7 +29,7 @@ from younger.applications.tasks.base_task import YoungerTask
 
 
 class BlockEmbedding(YoungerTask):
-    def __init__(self, custom_config: dict, device_descriptor: torch.device) -> None:
+    def __init__(self, custom_config: dict, device_descriptor: torch.device = None) -> None:
         super().__init__(custom_config, device_descriptor)
         self.build_config(custom_config)
 
