@@ -35,10 +35,9 @@ def infer_cluster_num(dataset: ArchitectureDataset) -> int:
 
 
 class NodeEmbedding(YoungerTask):
-    def __init__(self, logger: Logger, custom_config: dict) -> None:
-        super().__init__(logger)
+    def __init__(self, custom_config: dict) -> None:
+        super().__init__(custom_config)
         self.build_config(custom_config)
-        self.build()
 
     def build_config(self, custom_config: dict):
         # Dataset
@@ -79,58 +78,98 @@ class NodeEmbedding(YoungerTask):
         config['api'] = api_config
         self.config = config
 
-    def build(self):
-        if self.config['dataset']['train_dataset_dirpath']:
-            self.train_dataset = ArchitectureDataset(
-                self.config['dataset']['train_dataset_dirpath'],
-                task_dict_size=self.config['dataset']['task_dict_size'],
-                node_dict_size=self.config['dataset']['node_dict_size'],
-                worker_number=self.config['dataset']['worker_number']
-            )
+    @property
+    def train_dataset(self):
+        if self._train_dataset:
+            train_dataset = self._train_dataset
         else:
-            self.train_dataset = None
-        if self.config['dataset']['valid_dataset_dirpath']:
-            self.valid_dataset = ArchitectureDataset(
-                self.config['dataset']['valid_dataset_dirpath'],
-                task_dict_size=self.config['dataset']['task_dict_size'],
-                node_dict_size=self.config['dataset']['node_dict_size'],
-                worker_number=self.config['dataset']['worker_number']
-            )
-        else:
-            self.valid_dataset = None
-        if self.config['dataset']['test_dataset_dirpath']:
-            self.test_dataset = ArchitectureDataset(
-                self.config['dataset']['test_dataset_dirpath'],
-                task_dict_size=self.config['dataset']['task_dict_size'],
-                node_dict_size=self.config['dataset']['node_dict_size'],
-                worker_number=self.config['dataset']['worker_number']
-            )
-        else:
-            self.test_dataset = None
+            if self.config['dataset']['train_dataset_dirpath']:
+                self._train_dataset = ArchitectureDataset(
+                    self.config['dataset']['train_dataset_dirpath'],
+                    task_dict_size=self.config['dataset']['task_dict_size'],
+                    node_dict_size=self.config['dataset']['node_dict_size'],
+                    worker_number=self.config['dataset']['worker_number']
+                )
+                if self.train_dataset:
+                    self.logger.info(f'    -> Nodes Dict Size: {len(self._train_dataset.x_dict["n2i"])}')
+                    self.logger.info(f'    -> Tasks Dict Size: {len(self._train_dataset.y_dict["t2i"])}')
+            else:
+                self._train_dataset = None
+            train_dataset = self._train_dataset
+        return train_dataset
 
-        if self.train_dataset:
-            self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["n2i"])}')
-            self.logger.info(f'    -> Tasks Dict Size: {len(self.train_dataset.y_dict["t2i"])}')
-
-        if self.config['model']['cluster_num'] is None:
-            self.config['model']['cluster_num'] = infer_cluster_num(self.train_dataset)
-            self.logger.info(f'  Cluster Number Not Specified! Infered Number: {self.config["model"]["cluster_num"]}')
+    @property
+    def valid_dataset(self):
+        if self._valid_dataset:
+            valid_dataset = self._valid_dataset
         else:
-            self.logger.info(f'  Cluster Number: {self.config["model"]["cluster_num"]}')
+            if self.config['dataset']['valid_dataset_dirpath']:
+                self._valid_dataset = ArchitectureDataset(
+                    self.config['dataset']['valid_dataset_dirpath'],
+                    task_dict_size=self.config['dataset']['task_dict_size'],
+                    node_dict_size=self.config['dataset']['node_dict_size'],
+                    worker_number=self.config['dataset']['worker_number']
+                )
+            else:
+                self._valid_dataset = None
+            valid_dataset = self._valid_dataset
+        return valid_dataset
 
-        self.model = NAPPGATVaryV1(
-            node_dict=self.train_dataset.x_dict['n2i'],
-            task_dict=self.train_dataset.y_dict['t2i'],
-            node_dim=self.config['model']['node_dim'],
-            task_dim=self.config['model']['task_dim'],
-            hidden_dim=self.config['model']['hidden_dim'],
-            readout_dim=self.config['model']['readout_dim'],
-            cluster_num=self.config['model']['cluster_num'],
-        )
-        if 'optimizer' in self.config:
-            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config['optimizer']['learning_rate'], weight_decay=self.config['optimizer']['weight_decay'])
+    @property
+    def test_dataset(self):
+        if self._test_dataset:
+            test_dataset = self._test_dataset
         else:
-            self.optimizer = None
+            if self.config['dataset']['test_dataset_dirpath']:
+                self._test_dataset = ArchitectureDataset(
+                    self.config['dataset']['test_dataset_dirpath'],
+                    task_dict_size=self.config['dataset']['task_dict_size'],
+                    node_dict_size=self.config['dataset']['node_dict_size'],
+                    worker_number=self.config['dataset']['worker_number']
+                )
+            else:
+                self._test_dataset = None
+            test_dataset = self._test_dataset
+        return test_dataset
+
+    @property
+    def model(self):
+        if self._model:
+            model = self._model
+        else:
+            if self.config['model']['cluster_num'] is None:
+                self.config['model']['cluster_num'] = infer_cluster_num(self.train_dataset)
+                self.logger.info(f'  Cluster Number Not Specified! Infered Number: {self.config["model"]["cluster_num"]}')
+            else:
+                self.logger.info(f'  Cluster Number: {self.config["model"]["cluster_num"]}')
+
+            self._model = NAPPGATVaryV1(
+                node_dict=self.train_dataset.x_dict['n2i'],
+                task_dict=self.train_dataset.y_dict['t2i'],
+                node_dim=self.config['model']['node_dim'],
+                task_dim=self.config['model']['task_dim'],
+                hidden_dim=self.config['model']['hidden_dim'],
+                readout_dim=self.config['model']['readout_dim'],
+                cluster_num=self.config['model']['cluster_num'],
+            )
+            model = self._model
+        return model
+
+    @model.setter
+    def model(self, model):
+        self._model = model
+
+    @property
+    def optimizer(self):
+        if self._optimizer:
+            optimizer = self._optimizer
+        else:
+            if 'optimizer' in self.config:
+                self._optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config['optimizer']['learning_rate'], weight_decay=self.config['optimizer']['weight_decay'])
+            else:
+                self._optimizer = None
+            optimizer = self._optimizer
+        return optimizer
 
     def train(self, minibatch: Any) -> tuple[torch.Tensor, OrderedDict]:
         y = minibatch.y.reshape(len(minibatch), -1)

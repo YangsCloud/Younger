@@ -32,10 +32,14 @@ from younger.applications.tasks.base_task import YoungerTask
 
 
 class LinkPridiction(YoungerTask):
-    def __init__(self, custom_config: dict, device_descriptor: torch.device) -> None:
-        super().__init__(custom_config, device_descriptor)
+    def __init__(self, custom_config: dict) -> None:
+        super().__init__(custom_config)
         self.build_config(custom_config)
-        self.build()
+        self._model = None
+        self._optimizer = None
+        self._train_dataset = None
+        self._valid_dataset = None
+        self._test_dataset = None
 
     def build_config(self, custom_config: dict):
         mode = custom_config.get('mode', 'Train')
@@ -87,70 +91,120 @@ class LinkPridiction(YoungerTask):
         config['mode'] = mode
         self.config = config
 
-    def build(self):
-        if self.config['mode'] == 'Train':
-            self._train_dataset = LinkDataset(
-                self.config['dataset']['train_dataset_dirpath'],
-                worker_number=self.config['dataset']['worker_number'],
-                seed=self.config['dataset']['seed'],
-                encode_type=self.config['dataset']['encode_type'],
-            )
-            self._valid_dataset = LinkDataset(
-                self.config['dataset']['valid_dataset_dirpath'],
-                link_get_number=self.config['dataset']['link_get_number'],
-                worker_number=self.config['dataset']['worker_number'],
-                seed=self.config['dataset']['seed'],
-                encode_type=self.config['dataset']['encode_type'],
-            )
-            if self.config['dataset']['encode_type'] == 'node':
-                self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["n2i"])}')
-                self.node_dict_size = len(self.train_dataset.x_dict["n2i"])
-            elif self.config['dataset']['encode_type'] == 'operator':
-                self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["o2i"])}')
-                self.node_dict_size = len(self.train_dataset.x_dict["o2i"])
+    @property
+    def train_dataset(self):
+        if self._train_dataset:
+            train_dataset = self._train_dataset
+        else:
+            if self.config['mode'] == 'Train':
+                self._train_dataset = LinkDataset(
+                    self.config['dataset']['train_dataset_dirpath'],
+                    worker_number=self.config['dataset']['worker_number'],
+                    seed=self.config['dataset']['seed'],
+                    encode_type=self.config['dataset']['encode_type'],
+                )
+                if self.config['dataset']['encode_type'] == 'node':
+                    self.logger.info(f'    -> Nodes Dict Size: {len(self._train_dataset.x_dict["n2i"])}')
+                    self.node_dict_size = len(self._train_dataset.x_dict["n2i"])
+                elif self.config['dataset']['encode_type'] == 'operator':
+                    self.logger.info(f'    -> Nodes Dict Size: {len(self._train_dataset.x_dict["o2i"])}')
+                    self.node_dict_size = len(self._train_dataset.x_dict["o2i"])
+            else:
+                self._train_dataset = None
+            train_dataset = self._train_dataset
+        return train_dataset
 
-        if self.config['mode'] == 'Test':
-            self._test_dataset = LinkDataset(
-                self.config['dataset']['test_dataset_dirpath'],
-                link_get_number=self.config['dataset']['link_get_number'],
-                worker_number=self.config['dataset']['worker_number'],
-                encode_type=self.config['dataset']['encode_type'],
-            )
-            if self.config['dataset']['encode_type'] == 'node':
-                self.logger.info(f'    -> Nodes Dict Size: {len(self.test_dataset.x_dict["n2i"])}')
-                self.node_dict_size = len(self.test_dataset.x_dict["n2i"])
-            elif self.config['dataset']['encode_type'] == 'operator':
-                self.logger.info(f'    -> Nodes Dict Size: {len(self.test_dataset.x_dict["o2i"])}')
-                self.node_dict_size = len(self.test_dataset.x_dict["o2i"])
+    @property
+    def valid_dataset(self):
+        if self._valid_dataset:
+            valid_dataset = self._valid_dataset
+        else:
+            if self.config['mode'] == 'Train':
+                self._valid_dataset = LinkDataset(
+                    self.config['dataset']['valid_dataset_dirpath'],
+                    link_get_number=self.config['dataset']['link_get_number'],
+                    worker_number=self.config['dataset']['worker_number'],
+                    seed=self.config['dataset']['seed'],
+                    encode_type=self.config['dataset']['encode_type'],
+                )
+            else:
+                self._valid_dataset = None
+            valid_dataset = self._valid_dataset
+        return valid_dataset
 
-        if self.config['model']['model_type'] == 'GCN_LP':
-            self._model = GCN_LP(
-                node_dict_size=self.node_dict_size,
-                node_dim=self.config['model']['node_dim'],
-                hidden_dim=self.config['model']['hidden_dim'],
-                output_dim=self.config['model']['output_dim'],
-            )
+    @property
+    def test_dataset(self):
+        if self._test_dataset:
+            test_dataset = self._test_dataset
+        else:
+            if self.config['mode'] == 'Test':
+                self._test_dataset = LinkDataset(
+                    self.config['dataset']['test_dataset_dirpath'],
+                    link_get_number=self.config['dataset']['link_get_number'],
+                    worker_number=self.config['dataset']['worker_number'],
+                    encode_type=self.config['dataset']['encode_type'],
+                )
+                if self.config['dataset']['encode_type'] == 'node':
+                    self.logger.info(f'    -> Nodes Dict Size: {len(self._test_dataset.x_dict["n2i"])}')
+                    self.node_dict_size = len(self._test_dataset.x_dict["n2i"])
+                elif self.config['dataset']['encode_type'] == 'operator':
+                    self.logger.info(f'    -> Nodes Dict Size: {len(self._test_dataset.x_dict["o2i"])}')
+                    self.node_dict_size = len(self._test_dataset.x_dict["o2i"])
+            else:
+                self._test_dataset = None
+            test_dataset = self._test_dataset
+        return test_dataset
 
-        elif self.config['model']['model_type'] == 'GAT_LP':
-            self._model = GAT_LP(
-                node_dict_size=self.node_dict_size,
-                node_dim=self.config['model']['node_dim'],
-                hidden_dim=self.config['model']['hidden_dim'],
-                output_dim=self.config['model']['output_dim'],
-            )
 
-        elif self.config['model']['model_type'] == 'SAGE_LP':
-            print("self.node_dict_size",self.node_dict_size)
-            self._model = SAGE_LP(
-                node_dict_size=self.node_dict_size,
-                node_dim=self.config['model']['node_dim'],
-                hidden_dim=self.config['model']['hidden_dim'],
-                output_dim=self.config['model']['output_dim'],
-            )
+    @property
+    def model(self):
+        if self._model:
+            model = self._model
+        else:
+            if self.config['model']['model_type'] == 'GCN_LP':
+                self._model = GCN_LP(
+                    node_dict_size=self.node_dict_size,
+                    node_dim=self.config['model']['node_dim'],
+                    hidden_dim=self.config['model']['hidden_dim'],
+                    output_dim=self.config['model']['output_dim'],
+                )
 
-        self._optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config['optimizer']['learning_rate'], weight_decay=self.config['optimizer']['weight_decay'])
-        self.learning_rate_scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size = self.config['scheduler']['step_size'], gamma=self.config['scheduler']['gamma'])
-        # self.learning_rate_scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, factor=self.config['scheduler']['factor'], min_lr=self.config['scheduler']['min_lr'])
+            elif self.config['model']['model_type'] == 'GAT_LP':
+                self._model = GAT_LP(
+                    node_dict_size=self.node_dict_size,
+                    node_dim=self.config['model']['node_dim'],
+                    hidden_dim=self.config['model']['hidden_dim'],
+                    output_dim=self.config['model']['output_dim'],
+                )
+
+            elif self.config['model']['model_type'] == 'SAGE_LP':
+                print("self.node_dict_size",self.node_dict_size)
+                self._model = SAGE_LP(
+                    node_dict_size=self.node_dict_size,
+                    node_dim=self.config['model']['node_dim'],
+                    hidden_dim=self.config['model']['hidden_dim'],
+                    output_dim=self.config['model']['output_dim'],
+                )
+            model = self._model
+        return model
+
+    @model.setter
+    def model(self, model):
+        self._model = model
+
+    @property
+    def optimizer(self):
+        if self._optimizer:
+            optimizer = self._optimizer
+        else:
+            if self.config['mode'] == 'Train':
+                self._optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config['optimizer']['learning_rate'], weight_decay=self.config['optimizer']['weight_decay'])
+                self.learning_rate_scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size = self.config['scheduler']['step_size'], gamma=self.config['scheduler']['gamma'])
+                # self.learning_rate_scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, factor=self.config['scheduler']['factor'], min_lr=self.config['scheduler']['min_lr'])
+            else:
+                self._optimizer = None
+            optimizer = self._optimizer
+        return optimizer
     
     def update_learning_rate(self, stage: Literal['Step', 'Epoch'], **kwargs):
         assert stage in {'Step', 'Epoch'}, f'Only Support \'Step\' or \'Epoch\''
@@ -236,6 +290,7 @@ class LinkPridiction(YoungerTask):
             output, _ = self.model(minibatch.x, minibatch.edge_index, minibatch.batch)
 
             for onnx_model_filename, output_value in zip(onnx_model_filenames, output):
+<<<<<<< HEAD
                 self.logger.info(f'  -> Result - {onnx_model_filename}: {output_value}')
 
     @property
@@ -261,3 +316,6 @@ class LinkPridiction(YoungerTask):
     @property
     def test_dataset(self):
         return self._test_dataset
+=======
+                self.logger.info(f'  -> Result - {onnx_model_filename}: {output_value}')
+>>>>>>> upstream/main

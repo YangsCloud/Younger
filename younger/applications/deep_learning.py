@@ -77,7 +77,7 @@ def exact_train(
     master_rank: int,
     world_size: int,
     seed: int, make_deterministic: bool,
-    task_name: YoungerTask, config_filepath: pathlib.Path,
+    task: YoungerTask, config_filepath: pathlib.Path,
 
     checkpoint_dirpath: pathlib.Path, checkpoint_name: str, keep_number: int,
 
@@ -89,13 +89,9 @@ def exact_train(
 
     device: Literal['CPU', 'GPU'],
 ):
-    assert task_name in task_builders, f'Task ({task_name}) is not Defined'
     device_descriptor = get_device_descriptor(device, rank)
 
-    custom_config = load_toml(config_filepath)
-    task: YoungerTask = task_builders[task_name](custom_config, device_descriptor)
-    task.logger.info(f'Configuration Loaded From {config_filepath}')
-
+    task.to(device_descriptor)
     task.model.to(device_descriptor)
     task.logger.info(f'Model Moved to Device \'{device_descriptor}\'')
 
@@ -111,18 +107,12 @@ def exact_train(
 
     task.logger.info(f'Using Device: {device};')
     task.logger.info(f'Distribution: {distribution_flag}; {f"(Total {world_size} GPU)" if distribution_flag else ""}')
-    task.logger.info(f'Task: \'{task_name}\'')
 
     create_dir(checkpoint_dirpath)
     task.logger.info(f'Checkpoint will saved into: \'{checkpoint_dirpath}\'')
 
-    # Build Task
-    task.logger.info(f'Preparing Task: Model & Dataset ...')
-    # Print Dataset
-    task.logger.info(f'-> Dataset Split Sizes:')
-    task.logger.info(f'   Train - {len(task.train_dataset)}')
-    if task.valid_dataset:
-        task.logger.info(f'   Valid - {len(task.valid_dataset)}')
+    # Build Model
+    task.logger.info(f'Preparing Model ...')
 
     # Print Model
     task.logger.info(f'-> Model Specs:')
@@ -276,6 +266,21 @@ def train(
     world_size: int = 1, master_addr: str = 'localhost', master_port: str = '16161', master_rank: int = 0,
     seed: int = 1234, make_deterministic: bool = False,
 ):
+    assert task_name in task_builders, f'Task ({task_name}) is not Defined'
+
+    custom_config = load_toml(config_filepath)
+    task: YoungerTask = task_builders[task_name](custom_config)
+    task.logger.info(f'Configuration Loaded From {config_filepath}')
+
+    task.logger.info(f'Task: \'{task_name}\'')
+
+    task.logger.info(f'Preparing Datasets ...')
+    # Print Dataset
+    task.logger.info(f'Dataset Split Sizes:')
+    task.logger.info(f' Train - {len(task.train_dataset)}')
+    if task.valid_dataset:
+        task.logger.info(f' Valid - {len(task.valid_dataset)}')
+
     assert device in {'CPU', 'GPU'}
     if device == 'CPU':
         distribution_flag = False
@@ -295,7 +300,7 @@ def train(
                 world_size,
                 seed, make_deterministic,
 
-                task_name, config_filepath,
+                task, config_filepath,
 
                 checkpoint_dirpath, checkpoint_name, keep_number,
 
@@ -317,7 +322,7 @@ def train(
             world_size,
             seed, make_deterministic,
 
-            task_name, config_filepath,
+            task, config_filepath,
 
             checkpoint_dirpath, checkpoint_name, keep_number,
 
@@ -345,7 +350,7 @@ def test(
 
     # Build Task
     custom_config = load_toml(config_filepath)
-    task: YoungerTask = task_builders[task_name](custom_config, device_descriptor)
+    task: YoungerTask = task_builders[task_name](custom_config)
     task.logger.info(f'Configuration Loaded From {config_filepath}')
 
     task.logger.info(f'Using Device: {device};')
@@ -401,7 +406,7 @@ def api(
 
     # Build Task
     custom_config = load_toml(config_filepath)
-    task: YoungerTask = task_builders[task_name](custom_config, device_descriptor)
+    task: YoungerTask = task_builders[task_name](custom_config)
     task.logger.info(f'Configuration Loaded From {config_filepath}')
 
     task.logger.info(f'Using Device: {device};')
