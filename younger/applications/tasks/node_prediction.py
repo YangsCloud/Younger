@@ -48,7 +48,7 @@ class NodePrediction(YoungerTask):
         dataset_config['test_dataset_dirpath'] = custom_dataset_config.get('test_dataset_dirpath', None)
         dataset_config['encode_type'] = custom_dataset_config.get('encode_type', 'node')
         dataset_config['block_get_type'] = custom_dataset_config.get('block_get_type', 'louvain')
-        dataset_config['block_get_number'] = custom_dataset_config.get('block_get_number', 10)
+        dataset_config['block_get_number'] = custom_dataset_config.get('block_get_number', None)
         dataset_config['seed'] = custom_dataset_config.get('seed', None)
         dataset_config['worker_number'] = custom_dataset_config.get('worker_number', 4)
 
