@@ -87,7 +87,7 @@ class LinkPridiction(YoungerTask):
         config['mode'] = mode
         self.config = config
 
-    def build(self):
+    def train_dataset(self):
         if self.config['mode'] == 'Train':
             self._train_dataset = LinkDataset(
                 self.config['dataset']['train_dataset_dirpath'],

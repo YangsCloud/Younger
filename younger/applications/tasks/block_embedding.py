@@ -32,7 +32,6 @@ class BlockEmbedding(YoungerTask):
     def __init__(self, custom_config: dict, device_descriptor: torch.device) -> None:
         super().__init__(custom_config, device_descriptor)
         self.build_config(custom_config)
-        self.build()
 
     def build_config(self, custom_config: dict):
         mode = custom_config.get('mode', 'Train')
@@ -89,61 +88,107 @@ class BlockEmbedding(YoungerTask):
         config['mode'] = mode
         self.config = config
 
-    def build(self):
-        if self.config['mode'] == 'Train':
-            self._train_dataset = BlockDataset(
-                self.config['dataset']['train_dataset_dirpath'],
-                node_dict_size=self.config['dataset']['node_dict_size'],
-                worker_number=self.config['dataset']['worker_number'],
-                block_get_type=self.config['dataset']['block_get_type'],
-                encode_type=self.config['dataset']['encode_type'],
-                seed=self.config['dataset']['seed']
+    @property
+    def train_dataset(self):
+        if self._train_dataset:
+            train_dataset = self._train_dataset
+        else:
+            if self.config['mode'] == 'Train':
+                self._train_dataset = BlockDataset(
+                    self.config['dataset']['train_dataset_dirpath'],
+                    node_dict_size=self.config['dataset']['node_dict_size'],
+                    worker_number=self.config['dataset']['worker_number'],
+                    block_get_type=self.config['dataset']['block_get_type'],
+                    encode_type=self.config['dataset']['encode_type'],
+                    seed=self.config['dataset']['seed']
+                )
+                if self.config['dataset']['encode_type'] == 'node':
+                    self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["n2i"])}')
+                    self.node_dict_size = len(self.train_dataset.x_dict["n2i"])
+                elif self.config['dataset']['encode_type'] == 'operator':
+                    self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["o2i"])}')
+                    self.node_dict_size = len(self.train_dataset.x_dict["o2i"])
+            else:
+                self._train_dataset = None
+            train_dataset = self._train_dataset
+        return train_dataset
+
+    @property
+    def valid_dataset(self):
+        if self._valid_dataset:
+            valid_dataset = self._valid_dataset
+        else:
+            self._valid_dataset = None
+            valid_dataset = self._valid_dataset
+        return valid_dataset
+
+    @property
+    def test_dataset(self):
+        if self._test_dataset:
+            test_dataset = self._test_dataset
+        else:
+            if self.config['mode'] == 'Test':
+                self._test_dataset = BlockDataset(
+                    self.config['dataset']['test_dataset_dirpath'],
+                    node_dict_size=self.config['dataset']['node_dict_size'],
+                    worker_number=self.config['dataset']['worker_number'],
+                    block_get_type=self.config['dataset']['block_get_type'],
+                    encode_type=self.config['dataset']['encode_type'],
+                    block_get_number=self.config['dataset']['block_get_number'],
+                    seed=self.config['dataset']['seed']
+                )
+                if self.config['dataset']['encode_type'] == 'node':
+                    self.logger.info(f'    -> Nodes Dict Size: {len(self.test_dataset.x_dict["n2i"])}')
+                    self.node_dict_size = len(self.test_dataset.x_dict["n2i"])
+                elif self.config['dataset']['encode_type'] == 'operator':
+                    self.logger.info(f'    -> Nodes Dict Size: {len(self.test_dataset.x_dict["o2i"])}')
+                    self.node_dict_size = len(self.test_dataset.x_dict["o2i"])
+            else:
+                self._test_dataset = None
+            test_dataset = self._test_dataset
+        return test_dataset
+
+    @property
+    def model(self):
+        if self._model:
+            model = self._model
+        else:
+            self._model = GLASS(
+                node_dict_size=self.node_dict_size,
+                hidden_dim=self.config['model']['hidden_dim'],
+                output_dim=self.config['model']['output_dim'],
+                pool_type=self.config['model']['pool_type'],
+                dropout=self.config['model']['dropout'],
+                aggr_type=self.config['model']['aggr_type'],
+                ratio=self.config['model']['ratio'],
             )
-            if self.config['dataset']['encode_type'] == 'node':
-                self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["n2i"])}')
-                self.node_dict_size = len(self.train_dataset.x_dict["n2i"])
-            elif self.config['dataset']['encode_type'] == 'operator':
-                self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["o2i"])}')
-                self.node_dict_size = len(self.train_dataset.x_dict["o2i"])
+            model = self._model
+        return model
 
-        if self.config['mode'] == 'Test':
-            self._test_dataset = BlockDataset(
-                self.config['dataset']['test_dataset_dirpath'],
-                node_dict_size=self.config['dataset']['node_dict_size'],
-                worker_number=self.config['dataset']['worker_number'],
-                block_get_type=self.config['dataset']['block_get_type'],
-                encode_type=self.config['dataset']['encode_type'],
-                block_get_number=self.config['dataset']['block_get_number'],
-                seed=self.config['dataset']['seed']
-            )
-            if self.config['dataset']['encode_type'] == 'node':
-                self.logger.info(f'    -> Nodes Dict Size: {len(self.test_dataset.x_dict["n2i"])}')
-                self.node_dict_size = len(self.test_dataset.x_dict["n2i"])
-            elif self.config['dataset']['encode_type'] == 'operator':
-                self.logger.info(f'    -> Nodes Dict Size: {len(self.test_dataset.x_dict["o2i"])}')
-                self.node_dict_size = len(self.test_dataset.x_dict["o2i"])
+    @model.setter
+    def model(self, model):
+        self._model = model
 
-        self._model = GLASS(
-            node_dict_size=self.node_dict_size,
-            hidden_dim=self.config['model']['hidden_dim'],
-            output_dim=self.config['model']['output_dim'],
-            pool_type=self.config['model']['pool_type'],
-            dropout=self.config['model']['dropout'],
-            aggr_type=self.config['model']['aggr_type'],
-            ratio=self.config['model']['ratio'],
-        )
+    @property
+    def optimizer(self):
+        if self._optimizer:
+            optimizer = self._optimizer
+        else:
+            if self.config['mode'] == 'Train':
+                self._optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config['optimizer']['learning_rate'], weight_decay=self.config['optimizer']['weight_decay'])
+                self._learning_rate_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, factor=self.config['scheduler']['factor'], min_lr=self.config['scheduler']['min_lr'])
+                label_name_to_id = dict(
+                    density = 0,
+                    coreness = 1,
+                    dnc = [0, 1],
+                    cut_ratio = 2,
+                )
 
-        if self.config['mode'] == 'Train':
-            self._optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config['optimizer']['learning_rate'], weight_decay=self.config['optimizer']['weight_decay'])
-            self._learning_rate_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, factor=self.config['scheduler']['factor'], min_lr=self.config['scheduler']['min_lr'])
-            label_name_to_id = dict(
-                density = 0,
-                coreness = 1,
-                dnc = [0, 1],
-                cut_ratio = 2,
-            )
-
-            self.label_id = label_name_to_id[self.config['model']['label']]
+                self.label_id = label_name_to_id[self.config['model']['label']]
+            else:
+                self._optimizer = None
+            optimizer = self._optimizer
+        return optimizer
 
     def update_learning_rate(self, stage: Literal['Step', 'Epoch'], **kwargs):
         assert stage in {'Step', 'Epoch'}, f'Only Support \'Step\' or \'Epoch\''
@@ -221,27 +266,3 @@ class BlockEmbedding(YoungerTask):
 
             for onnx_model_filename, output_value in zip(onnx_model_filenames, output):
                 self.logger.info(f'  -> Result - {onnx_model_filename}: {output_value}')
-
-    @property
-    def model(self):
-        return self._model
-
-    @model.setter
-    def model(self, model):
-        self._model = model
-
-    @property
-    def optimizer(self):
-        return self._optimizer
-
-    @property
-    def train_dataset(self):
-        return self._train_dataset
-
-    @property
-    def valid_dataset(self):
-        return None
-
-    @property
-    def test_dataset(self):
-        return None

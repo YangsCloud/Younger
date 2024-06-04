@@ -22,16 +22,29 @@ from younger.commons.constants import YoungerHandle
 
 
 class YoungerTask(object):
-    def __init__(self, custom_config: dict, device_descriptor: torch.device) -> None:
+    def __init__(self, custom_config: dict, device_descriptor: torch.device = None) -> None:
         logging_config = dict()
         custom_logging_config = custom_config.get('logging', dict())
         logging_config['name'] = custom_logging_config.get('name', YoungerHandle.ApplicationsName + '-Task-' + 'Default')
         logging_config['mode'] = custom_logging_config.get('mode', 'console')
         logging_config['level'] = custom_logging_config.get('level', 'INFO')
         logging_config['filepath'] = custom_logging_config.get('filepath', None)
-        self.logging_config = logging_config
-        self.logger = set_logger(logging_config['name'], mode=logging_config['mode'], level=logging_config['level'], logging_filepath=logging_config['filepath'])
-        self.device_descriptor = device_descriptor
+        self._logging_config = logging_config
+        self._device_descriptor = device_descriptor
+        self._logger = None
+
+    @property
+    def logger(self):
+        if self._logger:
+            logger = self._logger
+        else:
+            self.logger = set_logger(self.logging_config['name'], mode=self.logging_config['mode'], level=self.logging_config['level'], logging_filepath=self.logging_config['filepath'])
+            logger = self._logger
+        return logger
+
+    @property
+    def device_descriptor(self):
+        return self._device_descriptor
 
     def update_learning_rate(self, stage: Literal['Step', 'Epoch'], **kwargs):
         assert stage in {'Step', 'Epoch'}, f'Only Support \'Step\' or \'Epoch\''
@@ -39,6 +52,10 @@ class YoungerTask(object):
 
     @property
     def model(self):
+        raise NotImplementedError
+
+    @model.setter
+    def model(self, model):
         raise NotImplementedError
 
     @property
