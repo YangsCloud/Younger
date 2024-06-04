@@ -51,9 +51,6 @@ class NodePrediction(YoungerTask):
         dataset_config['valid_dataset_dirpath'] = custom_dataset_config.get('valid_dataset_dirpath', None)
         dataset_config['test_dataset_dirpath'] = custom_dataset_config.get('test_dataset_dirpath', None)
         dataset_config['encode_type'] = custom_dataset_config.get('encode_type', 'node')
-        dataset_config['block_get_type'] = custom_dataset_config.get('block_get_type', 'louvain')
-        dataset_config['block_get_number'] = custom_dataset_config.get('block_get_number', None)
-        dataset_config['seed'] = custom_dataset_config.get('seed', None)
         dataset_config['worker_number'] = custom_dataset_config.get('worker_number', 4)
 
         # Model
@@ -103,9 +100,7 @@ class NodePrediction(YoungerTask):
                 self._train_dataset = NodeDataset(
                     self.config['dataset']['train_dataset_dirpath'],
                     worker_number=self.config['dataset']['worker_number'],
-                    block_get_type=self.config['dataset']['block_get_type'],
                     encode_type=self.config['dataset']['encode_type'],
-                    seed=self.config['dataset']['seed'],
                 )
 
                 if self.config['dataset']['encode_type'] == 'node':
@@ -128,10 +123,7 @@ class NodePrediction(YoungerTask):
                 self._valid_dataset = NodeDataset(
                     self.config['dataset']['valid_dataset_dirpath'],
                     worker_number=self.config['dataset']['worker_number'],
-                    block_get_type=self.config['dataset']['block_get_type'],
-                    block_get_number=self.config['dataset']['block_get_number'],
                     encode_type=self.config['dataset']['encode_type'],
-                    seed=self.config['dataset']['seed'],
                 )
             else:
                 self._valid_dataset = None
@@ -147,10 +139,7 @@ class NodePrediction(YoungerTask):
                 self._test_dataset = NodeDataset(
                     self.config['dataset']['test_dataset_dirpath'],
                     worker_number=self.config['dataset']['worker_number'],
-                    block_get_type=self.config['dataset']['block_get_type'],
-                    block_get_number=self.config['dataset']['block_get_number'],
                     encode_type=self.config['dataset']['encode_type'],
-                    seed=self.config['dataset']['seed'],
                 )
                 if self.config['dataset']['encode_type'] == 'node':
                     self.logger.info(f'    -> Nodes Dict Size: {len(self._test_dataset.x_dict["n2i"])}')
