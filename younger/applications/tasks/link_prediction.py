@@ -35,6 +35,11 @@ class LinkPridiction(YoungerTask):
     def __init__(self, custom_config: dict, device_descriptor: torch.device = None) -> None:
         super().__init__(custom_config, device_descriptor)
         self.build_config(custom_config)
+        self._model = None
+        self._optimizer = None
+        self._train_dataset = None
+        self._valid_dataset = None
+        self._test_dataset = None
 
     def build_config(self, custom_config: dict):
         mode = custom_config.get('mode', 'Train')
