@@ -56,20 +56,34 @@ def split_run(arguments):
     dataset_dirpath = pathlib.Path(arguments.dataset_dirpath)
     save_dirpath = pathlib.Path(arguments.save_dirpath)
 
-    from younger.datasets.constructors.official import split
+    if arguments.community:
+        from younger.datasets.constructors.official import community_split
+        community_split.main(
+            tasks_filepath, dataset_dirpath, save_dirpath,
+            arguments.version,
+            arguments.silly,
+            arguments.node_size_lbound, arguments.node_size_ubound,
+            arguments.edge_size_lbound, arguments.edge_size_ubound,
+            arguments.train_proportion, arguments.valid_proportion, arguments.test_proportion,
+            arguments.partition_number,
+            arguments.worker_number,
+            arguments.seed
+        )
+    else:
+        from younger.datasets.constructors.official import split
 
-    split.main(
-        tasks_filepath, dataset_dirpath, save_dirpath,
-        arguments.version,
-        arguments.silly,
-        arguments.metric_name,
-        arguments.node_size_lbound, arguments.node_size_ubound,
-        arguments.edge_size_lbound, arguments.edge_size_ubound,
-        arguments.train_proportion, arguments.valid_proportion, arguments.test_proportion,
-        arguments.partition_number,
-        arguments.worker_number,
-        arguments.seed
-    )
+        split.main(
+            tasks_filepath, dataset_dirpath, save_dirpath,
+            arguments.version,
+            arguments.silly,
+            arguments.metric_name,
+            arguments.node_size_lbound, arguments.node_size_ubound,
+            arguments.edge_size_lbound, arguments.edge_size_ubound,
+            arguments.train_proportion, arguments.valid_proportion, arguments.test_proportion,
+            arguments.partition_number,
+            arguments.worker_number,
+            arguments.seed
+        )
 
 
 def statistics_run(arguments):
@@ -254,6 +268,7 @@ def set_datasets_split_arguments(parser: argparse.ArgumentParser):
 
     parser.add_argument('--version', type=str, required=True)
     parser.add_argument('--silly', action='store_true')
+    parser.add_argument('--community', action='store_true')
     parser.add_argument('--metric-name', type=str, default=None)
 
     parser.add_argument('--node-size-lbound', type=int, default=None)

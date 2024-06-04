@@ -49,6 +49,10 @@ class YoungerTask(object):
     def to(self, device_descriptor):
         self._device_descriptor = device_descriptor
 
+    def reset(self):
+        self._device_descriptor = None
+        self._logger = None
+
     def update_learning_rate(self, stage: Literal['Step', 'Epoch'], **kwargs):
         assert stage in {'Step', 'Epoch'}, f'Only Support \'Step\' or \'Epoch\''
         return

@@ -91,6 +91,7 @@ def exact_train(
 ):
     device_descriptor = get_device_descriptor(device, rank)
 
+    task.reset()
     task.to(device_descriptor)
     task.model.to(device_descriptor)
     task.logger.info(f'Model Moved to Device \'{device_descriptor}\'')

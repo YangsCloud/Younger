@@ -69,20 +69,12 @@ class NodeDataset(Dataset):
         node_dict_size: int | None = None,
         operator_dict_size: int | None = None,
         encode_type: Literal['node', 'operator'] = 'node',
-        
-        block_get_type: Literal['louvain', 'label', 'greedy_modularity_communities'] = 'louvain',
-        block_get_number: int | None = None,
 
-        seed: int | None = None,
         worker_number: int = 4,
     ):
-        assert block_get_type in {'louvain', 'label', 'greedy_modularity_communities'}
         assert encode_type in {'node', 'operator'}
 
         self.encode_type = encode_type
-        self.block_get_type = block_get_type
-        self.block_get_number = block_get_number
-        self.seed = seed
         self.worker_number = worker_number
 
         meta_filepath = os.path.join(root, 'meta.json')
@@ -91,19 +83,8 @@ class NodeDataset(Dataset):
         self.meta = self.__class__.load_meta(meta_filepath)
         self.x_dict = self.__class__.get_x_dict(self.meta, node_dict_size, operator_dict_size)
 
-        self._block_locations: list[tuple[int, int]] = list()
-
-        self._block_locations_filename = 'block_locations.pt'
-
         super().__init__(root, transform, pre_transform, pre_filter, log, force_reload)
 
-        try:
-            _block_locations_filepath = os.path.join(self.processed_dir, self._block_locations_filename)
-            self._block_locations = torch.load(_block_locations_filepath)
-        except FileNotFoundError as error:
-            print(f'There is no block locations file \'{self._block_locations_filename}\', please remove the processed data directory: {self.processed_dir} and re-run the command.')
-            raise error
-    
     @property
     def raw_dir(self) -> str:
         name = f'younger_raw_{self.encode_type}_np'
@@ -126,11 +107,9 @@ class NodeDataset(Dataset):
         return len(self._block_locations)
 
     def get(self, index: int) -> NodeData:
-        sample_index, block_index = self._block_locations[index]
-        block_data_list: dict[str, NodeData | list[set]] = torch.load(os.path.join(self.processed_dir, f'sample-{sample_index}.pth'))
+        block_data = torch.load(os.path.join(self.processed_dir, f'sample-{index}.pth'))
         # print("block_data_list: ", block_data_list)
         # print("len(block_data_list)",len(block_data_list))
-        block_data = block_data_list[block_index]
         return block_data
 
     def download(self):
@@ -143,37 +122,28 @@ class NodeDataset(Dataset):
             assert fs.exists(os.path.join(self.raw_dir, f'sample-{sample_index}.pkl'))
 
     def process(self):
-        unordered_block_records = list()
         with multiprocessing.Pool(self.worker_number) as pool:
             with tqdm.tqdm(total=self.meta['size']) as progress_bar:
-                for sample_index, block_number in pool.imap_unordered(self.process_sample, range(self.meta['size'])):
-                    unordered_block_records.append((sample_index, block_number))
+                for sample_index, _ in pool.imap_unordered(self.process_sample, range(self.meta['size'])):
                     progress_bar.update()
-        sorted_block_records = sorted(unordered_block_records, key=lambda x: x[0])
-        for sample_index, block_number in sorted_block_records:
-            block_location = [(sample_index, block_index) for block_index in range(block_number)]
-            self._block_locations.extend(block_location)
-        _block_locations_filepath = os.path.join(self.processed_dir, self._block_locations_filename)
-        torch.save(self._block_locations, _block_locations_filepath)
 
     def process_sample(self, sample_index: int) -> tuple[int, int]:
         sample_filepath = os.path.join(self.raw_dir, f'sample-{sample_index}.pkl')
-        sample: networkx.DiGraph = load_pickle(sample_filepath)
-        block_data_list = self.__class__.get_block_data_list(sample, self.x_dict, self.encode_type, self.block_get_type, self.block_get_number, self.seed)
-        if self.pre_filter is not None and not self.pre_filter(block_data_list):
+        sample: tuple[str, networkx.DiGraph, tuple] = load_pickle(sample_filepath)
+        block_data = self.__class__.get_block_data(sample, self.x_dict, self.encode_type)
+        if self.pre_filter is not None and not self.pre_filter(block_data):
             return
 
         if self.pre_transform is not None:
-            block_data_list = self.pre_transform(block_data_list)
-        torch.save(block_data_list, os.path.join(self.processed_dir, f'sample-{sample_index}.pth'))
-        return (sample_index, len(block_data_list))
+            block_data = self.pre_transform(block_data)
+        torch.save(block_data, os.path.join(self.processed_dir, f'sample-{sample_index}.pth'))
+        return (sample_index, len(block_data))
 
     @classmethod
     def load_meta(cls, meta_filepath: str) -> dict[str, Any]:
         loaded_meta: dict[str, Any] = load_json(meta_filepath)
         meta: dict[str, Any] = dict()
 
-        meta['metric_name'] = loaded_meta['metric_name']
         meta['all_nodes'] = loaded_meta['all_nodes']
         meta['all_operators'] = loaded_meta['all_operators']
 
@@ -250,14 +220,12 @@ class NodeDataset(Dataset):
     @classmethod
     def get_block_data(
         cls,
-        sample: networkx.DiGraph,
-        community: set[str],
-        boundary: set[str],
+        sample: tuple[str, networkx.DiGraph, tuple],
         x_dict: dict[str, Any],
         encode_type: Literal['node', 'operator'] = 'node',
     ) -> NodeData:
-        subgraph: networkx.DiGraph = networkx.subgraph(sample, community | boundary).copy()
-        mapping = cls.get_mapping(subgraph) # e.g.
+        subgraph_hash, subgraph, (density, coreness, cut_ratio, boundary) = sample
+        mapping = cls.get_mapping(sample) # e.g.
                                             # dict(zip(sorted(G.nodes()), range(G.number_of_nodes())))
                                             # >>> print(node_mapping)
                                             # {2: 0, 3: 1, 5: 2, 10: 3}
@@ -273,58 +241,3 @@ class NodeDataset(Dataset):
 
         block_data = NodeData(x=x, edge_index=edge_index, mask_x_label=mask_x_label, mask_x_position=mask_x_position)
         return block_data
-
-    @classmethod
-    def get_all_community_with_boundary(cls, sample: networkx.DiGraph, block_get_type: Literal['louvain', 'label', 'greedy_modularity_communities'] = 'louvain', block_get_number: int | None = None, **kwargs) -> list[tuple[set, set]]:
-        
-        if block_get_type == 'greedy_modularity_communities':
-            seed = kwargs.get('seed', None)
-            resolution = kwargs.get('resolution', 1)
-            cutoff = kwargs.get('cutoff', 1)
-            communities = list(networkx.community.greedy_modularity_communities(sample, resolution=resolution, cutoff=cutoff))
-
-        if block_get_type == 'louvain':
-            seed = kwargs.get('seed', None)
-            resolution = kwargs.get('resolution', 1)
-            communities: list[set] = list(networkx.community.louvain_communities(sample, resolution=resolution, seed=seed))
-
-        if block_get_type == 'label':
-            seed = kwargs.get('seed', None)
-            communities: list[set] = list(networkx.community.asyn_lpa_communities(sample, resolution=resolution, seed=seed))
-
-        if block_get_number is None:
-            pass
-        else:
-            communities: list[set] = random.sample(communities, min(block_get_number, len(communities)))
-
-        all_community_with_boundary = list()
-        for community in communities:
-            boundary = networkx.node_boundary(sample, community)
-            if len(boundary) == 0:
-                continue
-            all_community_with_boundary.append((community, boundary))
-        print('block_get_type: ', block_get_type)
-        print('block_get_number, len(communities): ',block_get_number, len(communities))
-        print("block_get_number/len(all_community_with_boundary): ", block_get_number, len(all_community_with_boundary))
-        return all_community_with_boundary
-
-    @classmethod
-    def get_block_data_list(
-        cls,
-        sample: networkx.DiGraph,
-        x_dict: dict[str, Any],
-        encode_type: Literal['node', 'operator'] = 'node',
-        block_get_type: Literal['louvain', 'label', 'greedy_modularity_communities'] = 'louvain',
-        block_get_number: int | None = None,
-        seed: int | None = None,
-    ) -> dict[str, NodeData | list[set]]:
-
-        block_data_list = list()
-        all_community_with_boundary = cls.get_all_community_with_boundary(sample, encode_type=encode_type, block_get_type=block_get_type, block_get_number=block_get_number, seed=seed)
-        for (community, boundary) in all_community_with_boundary:
-            block_data = cls.get_block_data(sample, community, boundary, x_dict, encode_type)
-            if block_data.edge_index.shape[1] == 0:
-                continue
-            block_data_list.append(block_data)
-
-        return block_data_list
