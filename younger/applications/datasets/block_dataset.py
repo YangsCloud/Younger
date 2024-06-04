@@ -43,6 +43,7 @@ class BlockDataset(Dataset):
         encode_type: Literal['node', 'operator'] = 'node',
 
         block_get_type: Literal['louvain', 'label', 'asyn_fluidc', 'greedy_modularity_communities'] = 'greedy_modularity_communities',
+
         block_get_number: int | None = None,
 
         seed: int | None = None,
@@ -79,11 +80,13 @@ class BlockDataset(Dataset):
     @property
     def raw_dir(self) -> str:
         name = f'younger_raw_{self.encode_type}_bk'
+
         return os.path.join(self.root, name)
 
     @property
     def processed_dir(self) -> str:
         name = f'younger_processed_{self.encode_type}_bk'
+
         return os.path.join(self.root, name)
 
     @property
@@ -198,6 +201,7 @@ class BlockDataset(Dataset):
     @classmethod
     def get_node_class(cls, node_features: dict, x_dict: dict[str, Any], encode_type: Literal['node', 'operator'] = 'node') -> list:
         node_identifier: str = Network.get_node_identifier_from_features(node_features)
+
         if encode_type == 'node':
             node_identifier: str = Network.get_node_identifier_from_features(node_features, mode='full')
             node_class = x_dict['n2i'].get(node_identifier, x_dict['n2i']['__UNK__'])
@@ -277,9 +281,11 @@ class BlockDataset(Dataset):
 
             community = set([mapping[node] for node in community])
             community_with_labels.append((community, (density, coreness, cut_ratio)))
+
         # print('block_get_type: ', block_get_type)
         # print('block_get_number, len(communities): ',block_get_number, len(communities))
         # print("block_get_number/len(all_community_with_boundary): ", block_get_number, len(community_with_labels))
+
         return community_with_labels
 
     @classmethod

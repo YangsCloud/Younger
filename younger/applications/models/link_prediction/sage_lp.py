@@ -25,6 +25,8 @@ class SAGE_LP(nn.Module):
     def decode(self, z, edge_label_index):
         src = z[edge_label_index[0]]
         dst = z[edge_label_index[1]]
+        print("edge_label_index[0]:", edge_label_index[0][:5])
+        print("edge_label_index[1]:", edge_label_index[1][:5])
         r = (src * dst).sum(dim=-1)
         return r
 
