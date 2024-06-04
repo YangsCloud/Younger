@@ -67,19 +67,19 @@ def save_split(meta: dict[str, Any], selected_subgraph_with_labels: list[tuple[s
     logger.info(f'Saved.')
 
 
-def clean_split(split: list[tuple[str, tuple[networkx.DiGraph, set]]], node_dict: dict[str, dict[str, int]], operator_dict: dict[str, dict[str, int]]):
+def clean_split(split: list[tuple[str, networkx.DiGraph, set]], node_dict: dict[str, dict[str, int]], operator_dict: dict[str, dict[str, int]]):
     node_dict_keys = set(node_dict['onnx'].keys()) | set(node_dict['others'].keys())
     operator_dict_keys = set(operator_dict['onnx'].keys()) | set(operator_dict['others'].keys())
     cleaned_split = []
     with tqdm.tqdm(total=len(split), desc='Cleaning') as progress_bar:
-        for index, (subgraph_hash, (subgraph, boundary)) in enumerate(split, start=1):
-            subgraph_nodes, subgraph_operators = check_subgraph(subgraph)
+        for index, item in enumerate(split, start=1):
+            subgraph_nodes, subgraph_operators = check_subgraph(item)
             subgraph_node_keys = set(subgraph_nodes['onnx'].keys()) | set(subgraph_nodes['others'].keys())
             subgraph_operator_keys = set(subgraph_operators['onnx'].keys()) | set(subgraph_operators['others'].keys())
             if len(subgraph_node_keys - node_dict_keys) != 0 or len(subgraph_operator_keys - operator_dict_keys) != 0:
                 pass
             else:
-                cleaned_split.append((subgraph_hash, (subgraph, boundary)))
+                cleaned_split.append(item)
             progress_bar.update(1)
             progress_bar.set_postfix({f'Current Cleaned': f'{len(cleaned_split)}'})
     return cleaned_split
@@ -93,8 +93,8 @@ def update_dict_count(origin_dict: dict[str, int], other_dict: dict[str, int]) -
     return origin_dict
 
 
-def check_subgraph(parameter: tuple[str, tuple[networkx.DiGraph, set]]) -> tuple[dict[str, dict[str, int]], dict[str, dict[str, int]]]:
-    subgraph_hash, (subgraph, boundary) = parameter
+def check_subgraph(parameter: tuple[str, networkx.DiGraph, set]) -> tuple[dict[str, dict[str, int]], dict[str, dict[str, int]]]:
+    subgraph_hash, subgraph, boundary = parameter
     subgraph_nodes: dict[str, dict[str, int]] = dict()
     subgraph_nodes['onnx'] = dict()
     subgraph_nodes['others'] = dict()
@@ -121,7 +121,7 @@ def check_subgraph(parameter: tuple[str, tuple[networkx.DiGraph, set]]) -> tuple
     return subgraph_nodes, subgraph_operators
 
 
-def extract_dict(split: list[tuple[str, tuple[networkx.DiGraph, set]]], worker_number: int) -> tuple[dict[str, dict[str, int]], dict[str, dict[str, int]]]:
+def extract_dict(split: list[tuple[str, networkx.DiGraph, set]], worker_number: int) -> tuple[dict[str, dict[str, int]], dict[str, dict[str, int]]]:
     all_nodes: dict[str, dict[str, int]] = dict()
     all_nodes['onnx'] = dict()
     all_nodes['others'] = dict()
@@ -217,6 +217,7 @@ def select_subgraphs(parameter: tuple[pathlib.Path, set[str], str]) -> tuple[Ins
 
     all_subgraph_with_boundary = get_communities(instance.network.graph)
 
+    valid_all_subgraph_with_boundary = list()
     for subgraph_with_boundary in all_subgraph_with_boundary:
         subgraph = subgraph_with_boundary[0]
         subgraph_size = (subgraph.number_of_nodes(), subgraph.number_of_edges())
@@ -226,9 +227,10 @@ def select_subgraphs(parameter: tuple[pathlib.Path, set[str], str]) -> tuple[Ins
         edge_size_lbound = subgraph_size[1] if edge_size_lbound is None else edge_size_lbound
         edge_size_ubound = subgraph_size[1] if edge_size_ubound is None else edge_size_ubound
         if subgraph_size[0] < node_size_lbound or node_size_ubound < subgraph_size[0] or subgraph_size[1] < edge_size_lbound or edge_size_ubound < subgraph_size[1]:
-            return None
+            continue
+        valid_all_subgraph_with_boundary.append(subgraph_with_boundary)
 
-    return all_subgraph_with_boundary
+    return valid_all_subgraph_with_boundary
 
 
 def main(
@@ -285,7 +287,7 @@ def main(
     subgraph_sizes = list()
     selected_subgraph_with_boundary = list()
     for subgraph_hash, (subgraph, boundary) in unique_subgraph_with_boundary.items():
-        selected_subgraph_with_boundary.append((subgraph_hash, (subgraph, boundary)))
+        selected_subgraph_with_boundary.append((subgraph_hash, subgraph, boundary))
         subgraph_sizes.append((subgraph.number_of_nodes(), subgraph.number_of_edges()))
     sorted_indices = sorted(range(len(selected_subgraph_with_boundary)), key=lambda index: selected_subgraph_with_boundary[index][0])
     selected_subgraph_with_boundary = [selected_subgraph_with_boundary[index] for index in sorted_indices]
