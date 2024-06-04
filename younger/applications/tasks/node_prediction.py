@@ -34,6 +34,11 @@ class NodePrediction(YoungerTask):
     def __init__(self, custom_config: dict, device_descriptor: torch.device = None) -> None:
         super().__init__(custom_config, device_descriptor)
         self.build_config(custom_config)
+        self._model = None
+        self._optimizer = None
+        self._train_dataset = None
+        self._valid_dataset = None
+        self._test_dataset = None
 
     def build_config(self, custom_config: dict):
         mode = custom_config.get('mode', 'Train')
@@ -104,11 +109,11 @@ class NodePrediction(YoungerTask):
                 )
 
                 if self.config['dataset']['encode_type'] == 'node':
-                    self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["n2i"])}')
-                    self.node_dict_size = len(self.train_dataset.x_dict["n2i"])
+                    self.logger.info(f'    -> Nodes Dict Size: {len(self._train_dataset.x_dict["n2i"])}')
+                    self.node_dict_size = len(self._train_dataset.x_dict["n2i"])
                 elif self.config['dataset']['encode_type'] == 'operator':
-                    self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["o2i"])}')
-                    self.node_dict_size = len(self.train_dataset.x_dict["o2i"])
+                    self.logger.info(f'    -> Nodes Dict Size: {len(self._train_dataset.x_dict["o2i"])}')
+                    self.node_dict_size = len(self._train_dataset.x_dict["o2i"])
             else:
                 self._train_dataset = None
             train_dataset = self._train_dataset
@@ -148,11 +153,11 @@ class NodePrediction(YoungerTask):
                     seed=self.config['dataset']['seed'],
                 )
                 if self.config['dataset']['encode_type'] == 'node':
-                    self.logger.info(f'    -> Nodes Dict Size: {len(self.test_dataset.x_dict["n2i"])}')
-                    self.node_dict_size = len(self.test_dataset.x_dict["n2i"])
+                    self.logger.info(f'    -> Nodes Dict Size: {len(self._test_dataset.x_dict["n2i"])}')
+                    self.node_dict_size = len(self._test_dataset.x_dict["n2i"])
                 elif self.config['dataset']['encode_type'] == 'operator':
-                    self.logger.info(f'    -> Nodes Dict Size: {len(self.test_dataset.x_dict["o2i"])}')
-                    self.node_dict_size = len(self.test_dataset.x_dict["o2i"])
+                    self.logger.info(f'    -> Nodes Dict Size: {len(self._test_dataset.x_dict["o2i"])}')
+                    self.node_dict_size = len(self._test_dataset.x_dict["o2i"])
             else:
                 self._test_dataset = None
             test_dataset = self._test_dataset

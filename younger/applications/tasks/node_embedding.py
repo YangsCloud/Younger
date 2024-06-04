@@ -91,8 +91,8 @@ class NodeEmbedding(YoungerTask):
                     worker_number=self.config['dataset']['worker_number']
                 )
                 if self.train_dataset:
-                    self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["n2i"])}')
-                    self.logger.info(f'    -> Tasks Dict Size: {len(self.train_dataset.y_dict["t2i"])}')
+                    self.logger.info(f'    -> Nodes Dict Size: {len(self._train_dataset.x_dict["n2i"])}')
+                    self.logger.info(f'    -> Tasks Dict Size: {len(self._train_dataset.y_dict["t2i"])}')
             else:
                 self._train_dataset = None
             train_dataset = self._train_dataset
