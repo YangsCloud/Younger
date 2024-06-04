@@ -290,32 +290,4 @@ class LinkPridiction(YoungerTask):
             output, _ = self.model(minibatch.x, minibatch.edge_index, minibatch.batch)
 
             for onnx_model_filename, output_value in zip(onnx_model_filenames, output):
-<<<<<<< HEAD
                 self.logger.info(f'  -> Result - {onnx_model_filename}: {output_value}')
-
-    @property
-    def model(self):
-        return self._model
-    
-    @model.setter
-    def model(self, model):
-        self._model = model
-
-    @property
-    def optimizer(self):
-        return self._optimizer
-
-    @property
-    def train_dataset(self):
-        return self._train_dataset
-
-    @property
-    def valid_dataset(self):
-        return self._valid_dataset
-
-    @property
-    def test_dataset(self):
-        return self._test_dataset
-=======
-                self.logger.info(f'  -> Result - {onnx_model_filename}: {output_value}')
->>>>>>> upstream/main
