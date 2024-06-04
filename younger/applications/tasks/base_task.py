@@ -38,7 +38,7 @@ class YoungerTask(object):
         if self._logger:
             logger = self._logger
         else:
-            self.logger = set_logger(self.logging_config['name'], mode=self.logging_config['mode'], level=self.logging_config['level'], logging_filepath=self.logging_config['filepath'])
+            self._logger = set_logger(self._logging_config['name'], mode=self._logging_config['mode'], level=self._logging_config['level'], logging_filepath=self._logging_config['filepath'])
             logger = self._logger
         return logger
 
