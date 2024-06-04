@@ -225,7 +225,7 @@ class NodeDataset(Dataset):
         encode_type: Literal['node', 'operator'] = 'node',
     ) -> NodeData:
         subgraph_hash, (subgraph, boundary) = sample
-        mapping = cls.get_mapping(sample) # e.g.
+        mapping = cls.get_mapping(subgraph) # e.g.
                                             # dict(zip(sorted(G.nodes()), range(G.number_of_nodes())))
                                             # >>> print(node_mapping)
                                             # {2: 0, 3: 1, 5: 2, 10: 3}
