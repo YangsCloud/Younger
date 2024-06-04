@@ -91,6 +91,7 @@ def exact_train(
 ):
     device_descriptor = get_device_descriptor(device, rank)
 
+    task.to(device_descriptor)
     task.model.to(device_descriptor)
     task.logger.info(f'Model Moved to Device \'{device_descriptor}\'')
 
@@ -349,7 +350,7 @@ def test(
 
     # Build Task
     custom_config = load_toml(config_filepath)
-    task: YoungerTask = task_builders[task_name](custom_config, device_descriptor)
+    task: YoungerTask = task_builders[task_name](custom_config)
     task.logger.info(f'Configuration Loaded From {config_filepath}')
 
     task.logger.info(f'Using Device: {device};')
@@ -405,7 +406,7 @@ def api(
 
     # Build Task
     custom_config = load_toml(config_filepath)
-    task: YoungerTask = task_builders[task_name](custom_config, device_descriptor)
+    task: YoungerTask = task_builders[task_name](custom_config)
     task.logger.info(f'Configuration Loaded From {config_filepath}')
 
     task.logger.info(f'Using Device: {device};')

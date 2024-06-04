@@ -35,8 +35,8 @@ def infer_cluster_num(dataset: ArchitectureDataset) -> int:
 
 
 class NodeEmbedding(YoungerTask):
-    def __init__(self, custom_config: dict, device_descriptor: torch.device = None) -> None:
-        super().__init__(custom_config, device_descriptor)
+    def __init__(self, custom_config: dict) -> None:
+        super().__init__(custom_config)
         self.build_config(custom_config)
 
     def build_config(self, custom_config: dict):

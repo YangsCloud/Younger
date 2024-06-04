@@ -22,7 +22,7 @@ from younger.commons.constants import YoungerHandle
 
 
 class YoungerTask(object):
-    def __init__(self, custom_config: dict, device_descriptor: torch.device = None) -> None:
+    def __init__(self, custom_config: dict) -> None:
         logging_config = dict()
         custom_logging_config = custom_config.get('logging', dict())
         logging_config['name'] = custom_logging_config.get('name', YoungerHandle.ApplicationsName + '-Task-' + 'Default')
@@ -30,8 +30,12 @@ class YoungerTask(object):
         logging_config['level'] = custom_logging_config.get('level', 'INFO')
         logging_config['filepath'] = custom_logging_config.get('filepath', None)
         self._logging_config = logging_config
-        self._device_descriptor = device_descriptor
+        self._device_descriptor = None
         self._logger = None
+
+    @property
+    def device_descriptor(self):
+        return self._device_descriptor
 
     @property
     def logger(self):
@@ -42,9 +46,8 @@ class YoungerTask(object):
             logger = self._logger
         return logger
 
-    @property
-    def device_descriptor(self):
-        return self._device_descriptor
+    def to(self, device_descriptor):
+        self._device_descriptor = device_descriptor
 
     def update_learning_rate(self, stage: Literal['Step', 'Epoch'], **kwargs):
         assert stage in {'Step', 'Epoch'}, f'Only Support \'Step\' or \'Epoch\''
