@@ -52,10 +52,10 @@ def save_split(meta: dict[str, Any], instances: list[Instance], save_dirpath: pa
             instance,
         ) for i, instance in enumerate(instances)
     ]
-    with multiprocessing.Pool(worker_number) as pool:
-        with tqdm.tqdm(total=len(parameters), desc='Saving') as progress_bar:
-            for index, _ in enumerate(pool.imap_unordered(save_graph, parameters), start=1):
-                progress_bar.update(1)
+    with tqdm.tqdm(total=len(parameters), desc='Saving') as progress_bar:
+        for index, parameter in enumerate((parameters), start=1):
+            save_graph(parameter)
+            progress_bar.update(1)
     logger.info(f'Saved.')
 
     logger.info(f'Saving \'{split}\' Split Tar {archive_filepath.absolute()} ... ')
@@ -222,7 +222,7 @@ def select_instance(parameter: tuple[pathlib.Path, set[str], str]) -> tuple[Inst
     edge_size_ubound = instance_size[1] if edge_size_ubound is None else edge_size_ubound
     if instance_size[0] < node_size_lbound or node_size_ubound < instance_size[0] or instance_size[1] < edge_size_lbound or edge_size_ubound < instance_size[1]:
         return None
-    
+
     instance_tasks = list(instance_tasks & tasks)
     instance_metrics = eval_metrics.get(metric_name, list())
     instance.setup_labels(dict(downloads=instance_downloads, likes=instance_likes, tasks=instance_tasks, metrics=instance_metrics, hash=instance_hash))
