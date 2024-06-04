@@ -99,11 +99,11 @@ class LinkPridiction(YoungerTask):
                     encode_type=self.config['dataset']['encode_type'],
                 )
                 if self.config['dataset']['encode_type'] == 'node':
-                    self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["n2i"])}')
-                    self.node_dict_size = len(self.train_dataset.x_dict["n2i"])
+                    self.logger.info(f'    -> Nodes Dict Size: {len(self._train_dataset.x_dict["n2i"])}')
+                    self.node_dict_size = len(self._train_dataset.x_dict["n2i"])
                 elif self.config['dataset']['encode_type'] == 'operator':
-                    self.logger.info(f'    -> Nodes Dict Size: {len(self.train_dataset.x_dict["o2i"])}')
-                    self.node_dict_size = len(self.train_dataset.x_dict["o2i"])
+                    self.logger.info(f'    -> Nodes Dict Size: {len(self._train_dataset.x_dict["o2i"])}')
+                    self.node_dict_size = len(self._train_dataset.x_dict["o2i"])
             else:
                 self._train_dataset = None
             train_dataset = self._train_dataset
@@ -140,11 +140,11 @@ class LinkPridiction(YoungerTask):
                     encode_type=self.config['dataset']['encode_type'],
                 )
                 if self.config['dataset']['encode_type'] == 'node':
-                    self.logger.info(f'    -> Nodes Dict Size: {len(self.test_dataset.x_dict["n2i"])}')
-                    self.node_dict_size = len(self.test_dataset.x_dict["n2i"])
+                    self.logger.info(f'    -> Nodes Dict Size: {len(self._test_dataset.x_dict["n2i"])}')
+                    self.node_dict_size = len(self._test_dataset.x_dict["n2i"])
                 elif self.config['dataset']['encode_type'] == 'operator':
-                    self.logger.info(f'    -> Nodes Dict Size: {len(self.test_dataset.x_dict["o2i"])}')
-                    self.node_dict_size = len(self.test_dataset.x_dict["o2i"])
+                    self.logger.info(f'    -> Nodes Dict Size: {len(self._test_dataset.x_dict["o2i"])}')
+                    self.node_dict_size = len(self._test_dataset.x_dict["o2i"])
             else:
                 self._test_dataset = None
             test_dataset = self._test_dataset
