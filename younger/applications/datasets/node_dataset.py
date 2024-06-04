@@ -104,7 +104,7 @@ class NodeDataset(Dataset):
         return [f'sample-{index}.pth' for index in range(self.meta['size'])]
 
     def len(self) -> int:
-        return len(self.meta['size'])
+        return self.meta['size']
 
     def get(self, index: int) -> NodeData:
         block_data = torch.load(os.path.join(self.processed_dir, f'sample-{index}.pth'))
