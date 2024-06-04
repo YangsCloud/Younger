@@ -178,7 +178,6 @@ class LinkPridiction(YoungerTask):
         # Return Output & Golden
         link_label = minibatch.link_label
         output = self.model(minibatch, minibatch.link).view(-1).sigmoid()
-    
         return output, link_label
 
     def eval_calculate_logs(self, all_outputs: list[torch.Tensor], all_goldens: list[torch.Tensor]) -> OrderedDict:
@@ -242,6 +241,10 @@ class LinkPridiction(YoungerTask):
     @property
     def model(self):
         return self._model
+    
+    @model.setter
+    def model(self, model):
+        self._model = model
 
     @property
     def optimizer(self):
