@@ -195,12 +195,12 @@ def get_communities(graph: networkx.DiGraph) -> list[tuple[networkx.DiGraph, set
 
         subgraph_hash = Network.hash(subgraph, node_attr='features')
 
-        cleansed_subgraph = networkx.DiGraph()
-        cleansed_subgraph.add_nodes_from(subgraph.nodes(data=True))
-        cleansed_subgraph.add_edges_from(subgraph.edges(data=True))
-        for node_index in cleansed_subgraph.nodes():
-            cleansed_subgraph.nodes[node_index]['operator'] = cleansed_subgraph.nodes[node_index]['features']['operator']
-        subgraph_hash = Network.hash(cleansed_subgraph, node_attr='operator')
+        # cleansed_subgraph = networkx.DiGraph()
+        # cleansed_subgraph.add_nodes_from(subgraph.nodes(data=True))
+        # cleansed_subgraph.add_edges_from(subgraph.edges(data=True))
+        # for node_index in cleansed_subgraph.nodes():
+        #     cleansed_subgraph.nodes[node_index]['operator'] = cleansed_subgraph.nodes[node_index]['features']['operator']
+        # subgraph_hash = Network.hash(cleansed_subgraph, node_attr='operator')
 
         all_subgraph_with_labels.append((subgraph, boundary, subgraph_hash))
     return all_subgraph_with_labels

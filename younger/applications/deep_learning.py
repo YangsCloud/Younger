@@ -354,6 +354,8 @@ def test(
     task: YoungerTask = task_builders[task_name](custom_config)
     task.logger.info(f'Configuration Loaded From {config_filepath}')
 
+    task.reset()
+    task.to(device_descriptor)
     task.logger.info(f'Using Device: {device};')
 
     task.logger.info(f'Preparing Task: Model & Dataset ...')
