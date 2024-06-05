@@ -180,14 +180,14 @@ class NodePrediction(YoungerTask):
                         hidden_dim=self.config['model']['hidden_dim'],
                     )
                     checkpoint = load_checkpoint(pathlib.Path(self.config['model']['emb_checkpoint_path']))
-                    self.vgae_model= VGAE(Encoder_NP(
+                    self.ae_model= VGAE(Encoder_NP(
                         node_dict_size=self.node_dict_size,
                         node_dim=self.config['model']['node_dim'],
                         hidden_dim=self.config['model']['hidden_dim'],
                         ae_type=self.config['model']['ae_type'],
                     ))
-                    self.vgae_model.load_state_dict(checkpoint['model_state'])
-                    self.vgae_model.to(self.device_descriptor)
+                    self.ae_model.load_state_dict(checkpoint['model_state'])
+                    self.ae_model.to(self.device_descriptor)
 
             elif self.config['model']['model_type'] == 'GAE_NP':
                 if self.config['model']['stage'] == 'encoder':
@@ -202,6 +202,14 @@ class NodePrediction(YoungerTask):
                         node_dict_size=self.node_dict_size,
                         hidden_dim=self.config['model']['hidden_dim'],
                     )
+                    self.ae_model= GAE(Encoder_NP(
+                        node_dict_size=self.node_dict_size,
+                        node_dim=self.config['model']['node_dim'],
+                        hidden_dim=self.config['model']['hidden_dim'],
+                        ae_type=self.config['model']['ae_type'],
+                    ))
+                    self.ae_model.load_state_dict(checkpoint['model_state'])
+                    self.ae_model.to(self.device_descriptor)
                 
             elif self.config['model']['model_type'] == 'GCN_NP':
                 self._model = GCN_NP(
@@ -255,8 +263,8 @@ class NodePrediction(YoungerTask):
                 loss = loss + 0.001 * self.model.kl_loss()
 
         elif self.config['model']['stage'] == 'classification':
-            self.vgae_model.eval()
-            embeddings = self.vgae_model.encode(minibatch.x, minibatch.edge_index).detach()
+            self.ae_model.eval()
+            embeddings = self.ae_model.encode(minibatch.x, minibatch.edge_index).detach()
             output = self.model(embeddings, minibatch.mask_x_position)
             loss = torch.nn.functional.nll_loss(output, minibatch.mask_x_label)
 
@@ -275,8 +283,8 @@ class NodePrediction(YoungerTask):
         if self.config['model']['stage'] == 'encoder':
             return 
         if self.config['model']['stage'] == 'classification':
-            self.vgae_model.eval()
-            embeddings = self.vgae_model.encode(minibatch.x, minibatch.edge_index).detach()
+            self.ae_model.eval()
+            embeddings = self.ae_model.encode(minibatch.x, minibatch.edge_index).detach()
             output = self.model(embeddings, minibatch.mask_x_position)
         else:
             output = self.model(minibatch.x, minibatch.edge_index, minibatch.mask_x_position)
