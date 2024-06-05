@@ -249,14 +249,14 @@ class NodePrediction(YoungerTask):
         minibatch = minibatch.to(self.device_descriptor)
         # The following code is for VGAE.
         if self.config['model']['stage'] == 'encoder':
-            z = self.model(minibatch.x, minibatch.edge_index)
+            z = self.model.encode(minibatch.x, minibatch.edge_index)
             loss = self.model.recon_loss(z, minibatch.edge_index)
             if self.config['model']['model_type'] == 'VGAE_NP':
                 loss = loss + 0.001 * self.model.kl_loss()
 
         elif self.config['model']['stage'] == 'classification':
             self.vgae_model.eval()
-            embeddings = self.vgae_model(minibatch.x, minibatch.edge_index).detach()
+            embeddings = self.vgae_model.encode(minibatch.x, minibatch.edge_index).detach()
             output = self.model(embeddings, minibatch.mask_x_position)
             loss = torch.nn.functional.nll_loss(output, minibatch.mask_x_label)
 
@@ -276,7 +276,7 @@ class NodePrediction(YoungerTask):
             return 
         if self.config['model']['stage'] == 'classification':
             self.vgae_model.eval()
-            embeddings = self.vgae_model(minibatch.x, minibatch.edge_index).detach()
+            embeddings = self.vgae_model.encode(minibatch.x, minibatch.edge_index).detach()
             output = self.model(embeddings, minibatch.mask_x_position)
         else:
             output = self.model(minibatch.x, minibatch.edge_index, minibatch.mask_x_position)
