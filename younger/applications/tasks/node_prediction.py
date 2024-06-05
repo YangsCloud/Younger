@@ -202,6 +202,7 @@ class NodePrediction(YoungerTask):
                         node_dict_size=self.node_dict_size,
                         hidden_dim=self.config['model']['hidden_dim'],
                     )
+                    checkpoint = load_checkpoint(pathlib.Path(self.config['model']['emb_checkpoint_path']))
                     self.ae_model= GAE(Encoder_NP(
                         node_dict_size=self.node_dict_size,
                         node_dim=self.config['model']['node_dim'],
