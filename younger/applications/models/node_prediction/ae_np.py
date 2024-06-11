@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Embedding
@@ -33,10 +34,13 @@ class Encoder_NP(nn.Module):
 
 class LinearCls(nn.Module):
 
-    def __init__(self, hidden_dim, node_dict_size):
+    def __init__(self, hidden_dim, node_dict_size, output_embedding = False):
         super(LinearCls, self).__init__()
+        self.output_embedding = output_embedding
         self.linear = nn.Linear(hidden_dim, node_dict_size)
 
     def forward(self, x, mask_x_position):
         x = self.linear(x)
+        if self.output_embedding:
+            return torch.mean(x, dim=0).unsqueeze(0)
         return F.log_softmax(x[mask_x_position], dim=1)
