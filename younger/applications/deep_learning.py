@@ -91,14 +91,15 @@ def exact_train(
 ):
     device_descriptor = get_device_descriptor(device, rank)
 
+    fix_random_procedure(seed)
+    set_deterministic(make_deterministic)
+    
     task.reset()
     task.to(device_descriptor)
     task.model.to(device_descriptor)
     task.logger.info(f'Model Moved to Device \'{device_descriptor}\'')
 
     is_master = rank == master_rank
-    fix_random_procedure(seed)
-    set_deterministic(make_deterministic)
     torch.autograd.set_detect_anomaly(True)
 
     if is_master:
