@@ -1,3 +1,4 @@
+import os
 import json
 import tqdm
 import pathlib
@@ -49,6 +50,8 @@ def get_model(baseline_model: str, encode_type: str):
 
 def main(dataset_dir: pathlib.Path, save_dir: pathlib.Path, baseline_model: str, encode_type: str, checkpoint_filepath: pathlib.Path):
     save_dir = pathlib.Path(save_dir.joinpath(baseline_model).joinpath(encode_type))
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
     model = get_model(baseline_model, encode_type)
     checkpoint = load_checkpoint(checkpoint_filepath)
     model.eval()
@@ -74,13 +77,14 @@ def main(dataset_dir: pathlib.Path, save_dir: pathlib.Path, baseline_model: str,
     valid_dataloader = DataLoader(valid_dataset, batch_size=1, shuffle=False)
     test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
-    train_raw_dir = dataset_dir.joinpath(encode_type).joinpath('train/younger_raw_operator_np')
-    valid_raw_dir = dataset_dir.joinpath(encode_type).joinpath('valid/younger_raw_operator_np')
-    test_raw_dir = dataset_dir.joinpath(encode_type).joinpath('test/younger_raw_operator_np')
+    train_raw_dir = dataset_dir.joinpath(encode_type).joinpath(f'train/younger_raw_{encode_type}_np')
+    valid_raw_dir = dataset_dir.joinpath(encode_type).joinpath(f'valid/younger_raw_{encode_type}_np')
+    test_raw_dir = dataset_dir.joinpath(encode_type).joinpath(f'test/younger_raw_{encode_type}_np')
 
     total_num = 0
     hash2embedding = dict()
 
+    print(f'now processing {baseline_model}-{encode_type}')
     with torch.no_grad():
         with tqdm.tqdm(total=len(train_dataloader)) as progress_bar:
             for index, minibatch in enumerate(train_dataloader, start=0):
