@@ -15,9 +15,7 @@ class GCN_LP(nn.Module):
 
     def encode(self, data):
         x, edge_index = data.x, data.edge_index
-        # print("x: ", x , x.shape)
         x = self.node_embedding_layer(x).squeeze(1)
-        # print("x: ", x , x.shape)
         x = F.relu(self.conv1(x, edge_index))
         x = F.dropout(x, p=0.5, training=self.training)
         x = self.conv2(x, edge_index)
