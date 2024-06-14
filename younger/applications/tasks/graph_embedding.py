@@ -81,7 +81,7 @@ def generate_graph_embeddings(subgraph_embedding_dir: pathlib.Path, graph_dir: p
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="To generate graph embedding from subgraph embeddings")
     parser.add_argument("--subgraph-dir", type=str, help="The folder contains saved subgraph embeddings")
-    parser.add_argument("--graph-dir", type=str, help="The folder to load graph")
+    parser.add_argument("--graph-dir", type=str, help="The folder to load graphs")
     parser.add_argument("--save-dir", type=str, help="The folder to save graph embeddings")
     parser.add_argument("--embedding-model", type=str, default="gcn", help="The model to generater subgraph embedding")
     parser.add_argument("--encode-type", type=str, default="operator", help="The encoder-type: node or operator")

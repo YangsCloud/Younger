@@ -132,12 +132,12 @@ def main(dataset_dir: pathlib.Path, save_dir: pathlib.Path, baseline_model: str,
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="")
-    parser.add_argument('--dataset-dir', type=str, required=True, help='The folder contains spilited subgraph')
+    parser = argparse.ArgumentParser(description="To generate subgraph embeddings")
+    parser.add_argument('--dataset-dir', type=str, required=True, help='The folder contains spilited subgraphs (used to train under the operator design paradigm)')
     parser.add_argument('--save-dir', type=str, required=True, help='The folder to save subgraph embeddings')
-    parser.add_argument('--baseline-model', type=str, required=True, help='node or operator')
+    parser.add_argument('--baseline-model', type=str, required=True, help='The baseline models to calculate embeddings')
     parser.add_argument('--encode-type', type=str, required=True, help='node or operator')
-    parser.add_argument('--checkpoint-filepath', type=str, required=True, help='The checkpoint of chosen baseline')
+    parser.add_argument('--checkpoint-filepath', type=str, required=True, help='The checkpoint of selected baseline model')
     args = parser.parse_args()
     
     dataset_dir = pathlib.Path(args.dataset_dir)
