@@ -195,6 +195,7 @@ def select_instance(parameter: tuple[pathlib.Path, set[str], str]) -> tuple[Inst
     instance = Instance()
     instance.load(path)
     instance_downloads = instance.labels['downloads']
+    instance_model_names = instance.labels['model_name']
     instance_likes = instance.labels['likes']
     instance_tasks = set(instance.labels['tags'])
 
@@ -225,7 +226,7 @@ def select_instance(parameter: tuple[pathlib.Path, set[str], str]) -> tuple[Inst
 
     instance_tasks = list(instance_tasks & tasks)
     instance_metrics = eval_metrics.get(metric_name, list())
-    instance.setup_labels(dict(downloads=instance_downloads, likes=instance_likes, tasks=instance_tasks, metrics=instance_metrics, hash=instance_hash))
+    instance.setup_labels(dict(model_names = instance_model_names, downloads=instance_downloads, likes=instance_likes, tasks=instance_tasks, metrics=instance_metrics, hash=instance_hash))
 
     return instance, instance_size
 

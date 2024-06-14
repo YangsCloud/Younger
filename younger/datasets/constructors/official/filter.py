@@ -24,11 +24,13 @@ from younger.datasets.utils.translation import get_complete_attributes_of_node, 
 
 def update_unique_instance(unique_instance: Instance, purified_instance: Instance):
     new_model_sources = [] if purified_instance.labels['model_source'] is None else [purified_instance.labels['model_source']]
+    new_model_name = [] if purified_instance.labels['model_name'] is None else [purified_instance.labels['model_name']]
     new_downloads = [] if purified_instance.labels['download'] is None else [purified_instance.labels['download']]
     new_likes = [] if purified_instance.labels['like'] is None else [purified_instance.labels['like']]
     new_tags = [] if purified_instance.labels['tag'] is None else purified_instance.labels['tag']
 
     unique_instance.labels['model_sources'] = list(set(unique_instance.labels['model_sources'] + new_model_sources))
+    unique_instance.labels['model_name'] = list(set(unique_instance.labels['model_name'] + new_model_name))
     unique_instance.labels['downloads'] = list(set(unique_instance.labels['downloads'] + new_downloads))
     unique_instance.labels['likes'] = list(set(unique_instance.labels['likes'] + new_likes))
     unique_instance.labels['tags'] = list(set(unique_instance.labels['tags'] + new_tags))
@@ -95,7 +97,7 @@ def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, worker_numbe
                 else:
                     unique_instance = purified_instance.copy()
                     unique_instance.clean_labels()
-                    unique_instance.setup_labels(dict(model_sources=[], downloads=[], likes=[], tags=[], evaluations=[], hash=graph_hash))
+                    unique_instance.setup_labels(dict(model_sources=[], model_name=[], downloads=[], likes=[], tags=[], evaluations=[], hash=graph_hash))
                 update_unique_instance(unique_instance, purified_instance)
                 unique_instances[graph_hash] = unique_instance
                 progress_bar.update(1)

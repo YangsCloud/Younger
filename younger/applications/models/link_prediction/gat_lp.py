@@ -23,8 +23,6 @@ class GAT_LP(nn.Module):
         return x
 
     def decode(self, z, edge_label_index):
-        print("edge_label_index[0]: ", edge_label_index[0][:5])
-        print("edge_label_index[1]: ", edge_label_index[1][:5])
         src = z[edge_label_index[0]]
         dst = z[edge_label_index[1]]
         r = (src * dst).sum(dim=-1)
