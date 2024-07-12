@@ -18,9 +18,11 @@ class SeriesFilterItem(Schema):
         instance_hash: str | None = None,
         node_number: int | None = None,
         edge_number: int | None = None,
-        since_version: str | None = None,
         with_attributes: bool | None = None,
+        since_version: str | None = None,
+        paper: bool | None = None,
         status: str | None = None,
+        instance_meta: str | None = None,
         instance_tgz: str | None = None,
         **kwargs,
     ):
@@ -33,12 +35,16 @@ class SeriesFilterItem(Schema):
         if edge_number is not None:
             self.edge_number = edge_number
 
-        if since_version is not None:
-            self.since_version = since_version
         if with_attributes is not None:
             self.with_attributes = with_attributes
+        if since_version is not None:
+            self.since_version = since_version
+        if paper is not None:
+            self.paper = paper
         if status is not None:
             self.status = status
 
+        if instance_meta is not None:
+            self.instance_meta = instance_meta
         if instance_tgz is not None:
             self.instance_tgz = instance_tgz

@@ -22,6 +22,7 @@ class SeriesCompleteItem(Schema):
         node_number: int | None = None,
         edge_number: int | None = None,
         since_version: str | None = None,
+        paper: str | None = None,
         status: str | None = None,
         instance_tgz: str | None = None,
         **kwargs,
@@ -43,6 +44,8 @@ class SeriesCompleteItem(Schema):
 
         if since_version is not None:
             self.since_version = since_version
+        if paper is not None:
+            self.paper = paper
         if status is not None:
             self.status = status
 

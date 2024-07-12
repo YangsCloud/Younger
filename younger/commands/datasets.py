@@ -189,6 +189,8 @@ def api_run(arguments):
         handle_complete.main(
             dataset_dirpath, cache_dirpath,
             arguments.worker_number,
+            arguments.since_version,
+            arguments.paper,
             arguments.token,
         )
 
@@ -200,6 +202,8 @@ def api_run(arguments):
             arguments.worker_number,
             arguments.meta,
             arguments.with_attributes,
+            arguments.since_version,
+            arguments.paper,
             arguments.token,
         )
 
@@ -338,6 +342,8 @@ def set_datasets_api_arguments(parser: argparse.ArgumentParser):
     parser.add_argument('--cache-dirpath', type=str, default='.')
     parser.add_argument('--meta', action='store_true')
     parser.add_argument('--with-attributes', action='store_true')
+    parser.add_argument('--since-version', type=str, default='0.0.0')
+    parser.add_argument('--paper', action='store_true')
     parser.add_argument('--token', type=str, default=None)
 
     parser.add_argument('--worker-number', type=int, default=4)

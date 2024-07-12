@@ -10,11 +10,13 @@
 # LICENSE file in the root directory of this source tree.
 
 import tqdm
+import json
 import pathlib
 import requests
 import multiprocessing
 
-from younger.commons.io import tar_archive, create_dir, delete_dir
+from typing import Generator, Literal
+from younger.commons.io import tar_archive, create_dir, delete_dir, save_json
 from younger.commons.hash import hash_string
 from younger.commons.logging import logger
 
@@ -34,15 +36,41 @@ def get_headers(token: str):
     }
 
 
-def create_series_filter_items(series_filter_items: list[SeriesFilterItem], token: str) -> list[SeriesFilterItem]:
+def read_series_filter_count(token: str) -> int:
     headers = get_headers(token)
-    items = [series_filter_item.dict() for series_filter_item in series_filter_items]
-    response = requests.post(SERIES_FILTER_PREFIX, headers=headers, json=items)
+    response = requests.get(SERIES_FILTER_PREFIX + '?aggregate[count]=*', headers=headers)
     data = response.json()
-    success_items = list()
-    for success_item in data['data']:
-        success_items.append(SeriesFilterItem(**success_item))
-    return success_items
+    return data['data'][0]['count']
+
+
+def read_series_filter_items(token: str, limit: int = 100) -> Generator[str, None, None]:
+    headers = get_headers(token)
+
+    count = read_series_filter_count(token)
+    logger.info(f'Find Total {count} Instances')
+
+    limit = 100
+    quotient, remainder = divmod(count, limit)
+    pages = quotient + (remainder > 0)
+
+    with tqdm.tqdm(total=count, desc='Retrieving') as progress_bar:
+        for page in range(1, pages+1):
+            response = requests.get(SERIES_FILTER_PREFIX + f'?limit={limit}&page={page}&fields[]=instance_hash&sort[]=id', headers=headers)
+            data = response.json()
+            for item in data['data']:
+                yield item['instance_hash']
+                progress_bar.update(1)
+
+
+def create_series_filter_item(series_filter_item: SeriesFilterItem, token: str) -> tuple[str, str]:
+    headers = get_headers(token)
+    response = requests.post(SERIES_FILTER_PREFIX, headers=headers, json=[series_filter_item.dict()])
+    data = response.json()
+    if 'data' in data:
+        flag = (data['data'][0]['instance_hash'], 'succ')
+    else:
+        flag = (f'{series_filter_item.instance_hash}: {str(data)}', 'fail')
+    return flag
 
 
 def generate_instance_meta(instance_dirpath: pathlib.Path, meta_filepath: pathlib.Path, save: bool = False) -> dict:
@@ -61,9 +89,10 @@ def generate_instance_meta(instance_dirpath: pathlib.Path, meta_filepath: pathli
 
 
 def upload_instance(parameter: tuple[pathlib.Path, pathlib.Path, str]):
-    (instance_dirpath, cache_dirpath, meta, with_attributes, token) = parameter
+    (instance_dirpath, cache_dirpath, meta, with_attributes, since_version, paper, token) = parameter
 
-    instance_filename = instance_dirpath.name
+    instance_filename = hash_string(instance_dirpath.name + f'-Paper:{paper}-With_Attributes:{with_attributes}', hash_algorithm='blake2b', digest_size=16)
+    # instance_filename = instance_dirpath.name
 
     meta_filepath = cache_dirpath.joinpath(instance_filename + '.json')
     instance_meta = generate_instance_meta(instance_dirpath, meta_filepath, save=meta)
@@ -95,24 +124,32 @@ def upload_instance(parameter: tuple[pathlib.Path, pathlib.Path, str]):
             ('file', (archive_filepath.name, archive_file, 'application/gzip')),
         )
         response = requests.post(FILES_PREFIX, headers=headers, data=payload, files=files)
-        data = response.json()
+        try:
+            data = response.json()
+        except:
+            print(response)
+            print(response.text)
+            import sys
+            sys.exit(1)
         instance_tgz_id = data['data']['id']
 
     series_filter_item = SeriesFilterItem(
         instance_hash=instance_filename,
         node_number=instance_meta['node_number'],
         edge_number=instance_meta['edge_number'],
-        since_version='paper',
         with_attributes=with_attributes,
+        since_version=since_version,
+        paper=paper,
         status='access',
         instance_meta=instance_meta_id if meta else None,
         instance_tgz=instance_tgz_id
     )
 
-    create_series_filter_items(series_filter_items=[series_filter_item], token=token)
+    flag = create_series_filter_item(series_filter_item=series_filter_item, token=token)
+    return flag
 
 
-def main(dataset_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, worker_number: int = 4, meta: bool = False, with_attributes: bool = False, token: str = None):
+def main(dataset_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, worker_number: int = 4, meta: bool = False, with_attributes: bool = False, since_version: str = '0.0.0', paper: bool = False, token: str = None):
     logger.info(f'Checking Cache Directory Path: {cache_dirpath}')
     if cache_dirpath.is_dir():
         cache_content = [path for path in cache_dirpath.iterdir()]
@@ -120,15 +157,25 @@ def main(dataset_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, worker_numb
     else:
         create_dir(cache_dirpath)
 
+    logger.info(f'Retrieving Already Inserted Instances...')
+    exist_instances = list(read_series_filter_items(token))
+    logger.info(f'Retrieved Total {len(exist_instances)}.')
+
     logger.info(f'Scanning Dataset Directory Path: {dataset_dirpath}')
     parameters: list[tuple[pathlib.Path, pathlib.Path]] = list()
     for path in dataset_dirpath.iterdir():
         if path.is_dir():
-            parameters.append((path, cache_dirpath, meta, with_attributes, token))
+            if path.name not in exist_instances:
+                parameters.append((path, cache_dirpath, meta, with_attributes, since_version, paper, token))
 
     logger.info(f'Total Instances To Be Uploaded: {len(parameters)}')
 
     with multiprocessing.Pool(worker_number) as pool:
         with tqdm.tqdm(total=len(parameters), desc='Uploading') as progress_bar:
-            for index, _ in enumerate(pool.imap_unordered(upload_instance, parameters), start=1):
+            for index, flag in enumerate(pool.imap_unordered(upload_instance, parameters), start=1):
+                if flag[1] == 'fail':
+                    logger.error(f'FAIL: {flag[0]}')
+                    break
                 progress_bar.update(1)
+    
+    delete_dir(cache_dirpath, only_clean=True)
