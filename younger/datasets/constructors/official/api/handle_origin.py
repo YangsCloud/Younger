@@ -17,7 +17,7 @@ from typing import Generator
 
 from younger.datasets.utils.constants import YoungerAPI
 
-from younger.datasets.constructors.official.schema import Model
+from younger.datasets.constructors.official.api.schema import Model
 
 
 ORIGIN_PREFIX = YoungerAPI.API_ADDRESS + YoungerAPI.ORIGIN_POINT

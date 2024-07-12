@@ -27,6 +27,12 @@ def convert_bytes(size_in_bytes: int) -> str:
     return f'{s} {size_name[i]}'
 
 
+def get_instance_name_parts(instance_name: str) -> tuple[str, str, str]:
+    model_name, instance_name_left = tuple(instance_name.split('--MN_YD_MS--'))
+    model_source, onnx_model_filestem = tuple(instance_name_left.split('--MS_YD_ON--'))
+    return (model_name, model_source, onnx_model_filestem)
+
+
 def get_instance_dirname(model_name: str, model_source: str, onnx_model_filestem: str) -> str:
     return model_name + '--MN_YD_MS--' + model_source + '--MS_YD_ON--' + onnx_model_filestem
 

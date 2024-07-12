@@ -13,3 +13,5 @@
 from younger.datasets.constructors.official.api.schema.schema import *
 from younger.datasets.constructors.official.api.schema.origin import *
 from younger.datasets.constructors.official.api.schema.dataset import *
+from younger.datasets.constructors.official.api.schema.series_complete import *
+from younger.datasets.constructors.official.api.schema.series_filter import *
