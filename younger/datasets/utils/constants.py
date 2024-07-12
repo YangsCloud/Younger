@@ -127,9 +127,9 @@ READMEPattern.freeze()
 
 class YOUNGER_API(Constant):
     def initialize(self) -> None:
-        self.API_ADDRESS = 'https://api.yangs.cloud/'
-        self.ORIGIN_POINT = 'items/Younger_Origin'
-        self.DATASET_POINT = 'items/Younger_Dataset'
+        self.API_ADDRESS = 'https://datasets.yangs.cloud/public/'
+        self.SERIES_COMPLETE_POINT = 'items/YoungerSeriesComplete'
+        self.SERIES_FILTER_POINT = 'items/YoungerSeriesFilter'
 
 YoungerAPI = YOUNGER_API()
 YoungerAPI.initialize()

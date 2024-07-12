@@ -178,6 +178,32 @@ def retrieve_torchvision_run(arguments):
     retrieve.main(arguments.mode, save_dirpath, cache_dirpath, arguments.min_json, **kwargs)
 
 
+def api_run(arguments):
+    update_logger(arguments)
+    dataset_dirpath = pathlib.Path(arguments.dataset_dirpath)
+    cache_dirpath = pathlib.Path(arguments.cache_dirpath)
+
+    if arguments.type == 'handle_complete':
+        from younger.datasets.constructors.official.api import handle_complete
+
+        handle_complete.main(
+            dataset_dirpath, cache_dirpath,
+            arguments.worker_number,
+            arguments.token,
+        )
+
+    if arguments.type == 'handle_filter':
+        from younger.datasets.constructors.official.api import handle_filter
+
+        handle_filter.main(
+            dataset_dirpath, cache_dirpath,
+            arguments.worker_number,
+            arguments.meta,
+            arguments.with_attributes,
+            arguments.token,
+        )
+
+
 def set_datasets_convert_arguments(parser: argparse.ArgumentParser):
     subparser = parser.add_subparsers()
 
@@ -306,6 +332,20 @@ def set_datasets_statistics_arguments(parser: argparse.ArgumentParser):
     parser.set_defaults(run=statistics_run)
 
 
+def set_datasets_api_arguments(parser: argparse.ArgumentParser):
+    parser.add_argument('--type', type=str, required=True)
+    parser.add_argument('--dataset-dirpath', type=str, required=True)
+    parser.add_argument('--cache-dirpath', type=str, default='.')
+    parser.add_argument('--meta', action='store_true')
+    parser.add_argument('--with-attributes', action='store_true')
+    parser.add_argument('--token', type=str, default=None)
+
+    parser.add_argument('--worker-number', type=int, default=4)
+
+    parser.add_argument('--logging-filepath', type=str, default=None)
+    parser.set_defaults(run=api_run)
+
+
 def set_datasets_arguments(parser: argparse.ArgumentParser):
     subparser = parser.add_subparsers()
 
@@ -314,11 +354,13 @@ def set_datasets_arguments(parser: argparse.ArgumentParser):
     filter_parser = subparser.add_parser('filter')
     split_parser = subparser.add_parser('split')
     statistics_parser = subparser.add_parser('statistics')
+    api_parser = subparser.add_parser('api')
 
     set_datasets_convert_arguments(convert_parser)
     set_datasets_retrieve_arguments(retrieve_parser)
     set_datasets_filter_arguments(filter_parser)
     set_datasets_split_arguments(split_parser)
     set_datasets_statistics_arguments(statistics_parser)
+    set_datasets_api_arguments(api_parser)
 
     parser.set_defaults(run=run)
