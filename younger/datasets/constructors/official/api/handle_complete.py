@@ -27,6 +27,7 @@ from younger.datasets.constructors.official.api.schema import SeriesCompleteItem
 
 FILES_PREFIX = YoungerAPI.API_ADDRESS + 'files'
 SERIES_COMPLETE_PREFIX = YoungerAPI.API_ADDRESS + YoungerAPI.SERIES_COMPLETE_POINT
+requests.DEFAULT_RETRIES = 5
 
 
 def get_headers(token: str):
@@ -66,12 +67,11 @@ def create_series_complete_item(series_complete_item: SeriesCompleteItem, token:
     response = requests.post(SERIES_COMPLETE_PREFIX, headers=headers, json=[series_complete_item.dict()])
     data = response.json()
     if 'data' in data:
-        succ = True
-        flag = data['data'][0]['instance_name']
+        # flag = data['data'][0]['instance_hash']
+        return None
     else:
-        succ = False
-        flag = f'{series_complete_item.instance_name}: {str(data)}'
-    return succ, flag
+        # flag = f'{series_filter_item.instance_name}: {str(data)}'
+        return f'{series_complete_item.instance_name}'
 
 
 def generate_instance_meta(instance_dirpath: pathlib.Path, meta_filepath: pathlib.Path, save: bool = False) -> dict:
@@ -95,7 +95,21 @@ def insert_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str,
     instance_filename = hash_string(instance_dirpath.name + f'-Paper:{paper}', hash_algorithm='blake2b', digest_size=16)
 
     if instance_filename in exist_instances:
-        return False, None
+        return None
+
+    headers = get_headers(token)
+
+    try:
+        response = requests.get(SERIES_COMPLETE_PREFIX+ f'?fields[]=instance_name&filter[instance_name][_eq]={instance_filename}', headers)
+        data = response.json()
+        assert len(data['data']) in {0, 1}
+        if len(data['data']) == 1:
+            return instance_filename
+    except Exception as error:
+        if response:
+            print(response)
+            print(response.text)
+        raise error
 
     meta_filepath = cache_dirpath.joinpath(instance_filename + '.json')
     instance_meta = generate_instance_meta(instance_dirpath, meta_filepath)
@@ -126,22 +140,36 @@ def insert_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str,
         instance_tgz=maps[instance_filename]
     )
 
-    flag = create_series_complete_item(series_complete_item=series_complete_item, token=token)
-    return flag
+    instance_filename = create_series_complete_item(series_complete_item=series_complete_item, token=token)
+    return instance_filename
 
 
 def upload_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str, dict[str, str]]):
+    sess = requests.session()
+    sess.keep_alive = False
     (instance_dirpath, cache_dirpath, since_version, paper, token, exist_instances) = parameter
 
     instance_filename = hash_string(instance_dirpath.name + f'-Paper:{paper}', hash_algorithm='blake2b', digest_size=16)
 
     if instance_filename in exist_instances:
-        return False, None, None
+        return None, None
+
+    headers = get_headers(token)
+
+    try:
+        response = requests.get(FILES_PREFIX + f'?fields[]=id&filter[title][_eq]={instance_filename + ".tgz"}&filter[folder][_eq]=6ba43f7f-8cf1-49bb-894f-0ac75e3b5b0f', headers)
+        data = response.json()
+        assert len(data['data']) in {0, 1}
+        if len(data['data']) == 1:
+            return data['data'][0]['id'], instance_filename
+    except Exception as error:
+        if response:
+            print(response)
+            print(response.text)
+        raise error
 
     archive_filepath = cache_dirpath.joinpath(instance_filename + '.tgz')
     tar_archive(instance_dirpath, archive_filepath, compress=True)
-
-    headers = get_headers(token)
 
     with open(archive_filepath, 'rb') as archive_file:
         payload = dict()
@@ -162,7 +190,7 @@ def upload_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str,
             raise error
         instance_tgz_id = data['data']['id']
 
-    return True, instance_tgz_id, instance_filename
+    return instance_tgz_id, instance_filename
 
 
 def main(dataset_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, memory_dirpath: pathlib.Path, worker_number: int = 4, since_version: str = '0.0.0', paper: bool = False, token: str = None):
@@ -198,8 +226,8 @@ def main(dataset_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, memory_dirp
 
     with multiprocessing.Pool(worker_number) as pool:
         with tqdm.tqdm(total=len(parameters), desc='Uploading') as progress_bar:
-            for index, (succ, file_id, instance_filename) in enumerate(pool.imap_unordered(upload_instance, parameters), start=1):
-                if succ:
+            for index, (file_id, instance_filename) in enumerate(pool.imap_unordered(upload_instance, parameters), start=1):
+                if file_id is not None and instance_filename is not None:
                     with open(upload_fp, 'a') as upload_file:
                         upload_file.write(f'{file_id}--S--{instance_filename}\n')
                 progress_bar.update(1)
@@ -227,8 +255,8 @@ def main(dataset_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, memory_dirp
 
     with multiprocessing.Pool(worker_number) as pool:
         with tqdm.tqdm(total=len(parameters), desc='Inserting') as progress_bar:
-            for index, (succ, instance_filename) in enumerate(pool.imap_unordered(insert_instance, parameters), start=1):
-                if succ:
+            for index, instance_filename in enumerate(pool.imap_unordered(insert_instance, parameters), start=1):
+                if instance_filename is not None:
                     with open(insert_fp, 'a') as insert_file:
                         insert_file.write(f'{instance_filename}\n')
                 progress_bar.update(1)
