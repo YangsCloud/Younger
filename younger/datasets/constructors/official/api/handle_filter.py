@@ -28,7 +28,7 @@ from younger.datasets.constructors.official.api.schema import SeriesFilterItem
 
 FILES_PREFIX = YoungerAPI.API_ADDRESS + 'files'
 SERIES_FILTER_PREFIX = YoungerAPI.API_ADDRESS + YoungerAPI.SERIES_FILTER_POINT
-requests.DEFAULT_RETRIES = 5
+requests.DEFAULT_RETRIES = 15
 
 
 def get_headers(token: str):
@@ -100,16 +100,26 @@ def read_series_filter_items(token: str, limit: int = 100) -> Generator[str, Non
                 progress_bar.update(1)
 
 
-def create_series_filter_item(series_filter_item: SeriesFilterItem, token: str) -> tuple[str, str]:
+def create_series_filter_item(series_filter_item: SeriesFilterItem, token: str, proxies: dict) -> tuple[str, str]:
     headers = get_headers(token)
-    response = requests.post(SERIES_FILTER_PREFIX, headers=headers, json=[series_filter_item.dict()])
-    data = response.json()
-    if 'data' in data:
-        # flag = data['data'][0]['instance_hash']
-        return None
-    else:
-        # flag = f'{series_filter_item.instance_name}: {str(data)}'
-        return f'{series_filter_item.instance_name}'
+    response = None
+    try:
+        if proxies is None:
+            response = requests.post(SERIES_FILTER_PREFIX, headers=headers, json=[series_filter_item.dict()], timeout=15)
+        else:
+            response = requests.post(SERIES_FILTER_PREFIX, headers=headers, json=[series_filter_item.dict()], timeout=15, proxies=proxies)
+        data = response.json()
+        if 'data' in data:
+            # flag = data['data'][0]['instance_hash']
+            return f'{series_filter_item.instance_hash}'
+        else:
+            # flag = f'{series_filter_item.instance_name}: {str(data)}'
+            return None
+    except Exception as error:
+        if response is not None:
+            print(response)
+            print(response.text)
+        raise error
 
 
 def generate_instance_meta(instance_dirpath: pathlib.Path, meta_filepath: pathlib.Path, save: bool = False) -> dict:
@@ -128,7 +138,16 @@ def generate_instance_meta(instance_dirpath: pathlib.Path, meta_filepath: pathli
 
 
 def insert_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str, set[str], dict[str, str]]):
-    (instance_dirpath, cache_dirpath, meta, with_attributes, since_version, paper, token, exist_instances, maps) = parameter
+    sess = requests.session()
+    sess.keep_alive = False
+    (instance_dirpath, cache_dirpath, meta, with_attributes, since_version, paper, token, exist_instances, maps, proxy) = parameter
+    if proxy is None:
+        proxies = None
+    else:
+        proxies = {
+            'http': proxy,
+            'https': proxy
+        }
 
     instance_filename = hash_string(instance_dirpath.name + f'-Paper:{paper}-With_Attributes:{with_attributes}', hash_algorithm='blake2b', digest_size=16)
 
@@ -137,14 +156,18 @@ def insert_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str,
 
     headers = get_headers(token)
 
+    response = None
     try:
-        response = requests.get(SERIES_FILTER_PREFIX+ f'?fields[]=instance_hash&filter[instance_hash][_eq]={instance_filename}', headers)
+        if proxies is None:
+            response = requests.get(SERIES_FILTER_PREFIX+ f'?fields[]=instance_hash&filter[instance_hash][_eq]={instance_filename}', headers, timeout=15)
+        else:
+            response = requests.get(SERIES_FILTER_PREFIX+ f'?fields[]=instance_hash&filter[instance_hash][_eq]={instance_filename}', headers, timeout=15, proxies=proxies)
         data = response.json()
         assert len(data['data']) in {0, 1}
         if len(data['data']) == 1:
             return instance_filename
     except Exception as error:
-        if response:
+        if response is not None:
             print(response)
             print(response.text)
         raise error
@@ -164,14 +187,21 @@ def insert_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str,
         instance_tgz=maps[instance_filename]
     )
 
-    instance_filename = create_series_filter_item(series_filter_item=series_filter_item, token=token)
+    instance_filename = create_series_filter_item(series_filter_item=series_filter_item, token=token, proxies=proxies)
     return instance_filename
 
 
 def upload_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str, dict[str, str]]):
+    (instance_dirpath, cache_dirpath, meta, with_attributes, since_version, paper, token, exist_instances, proxy) = parameter
     sess = requests.session()
     sess.keep_alive = False
-    (instance_dirpath, cache_dirpath, meta, with_attributes, since_version, paper, token, exist_instances) = parameter
+    if proxy is None:
+        proxies = None
+    else:
+        proxies = {
+            'http': proxy,
+            'https': proxy
+        }
 
     instance_filename = hash_string(instance_dirpath.name + f'-Paper:{paper}-With_Attributes:{with_attributes}', hash_algorithm='blake2b', digest_size=16)
 
@@ -180,6 +210,7 @@ def upload_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str,
 
     headers = get_headers(token)
 
+    response = None
     try:
         response = requests.get(FILES_PREFIX + f'?fields[]=id&filter[title][_eq]={instance_filename + ".tgz"}&filter[folder][_eq]=ce8c9263-e584-409b-bd99-ebf2453c6d38', headers)
         data = response.json()
@@ -187,7 +218,7 @@ def upload_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str,
         if len(data['data']) == 1:
             return data['data'][0]['id'], instance_filename
     except Exception as error:
-        if response:
+        if response is not None:
             print(response)
             print(response.text)
         raise error
@@ -205,10 +236,13 @@ def upload_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str,
         )
         response = None
         try:
-            response = requests.post(FILES_PREFIX, headers=headers, data=payload, files=files)
+            if proxies is None:
+                response = requests.post(FILES_PREFIX, headers=headers, data=payload, files=files, timeout=150)
+            else:
+                response = requests.post(FILES_PREFIX, headers=headers, data=payload, files=files, timeout=150, proxies=proxies)
             data = response.json()
         except Exception as error:
-            if response:
+            if response is not None:
                 print(response)
                 print(response.text)
             raise error
@@ -217,7 +251,7 @@ def upload_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str,
     return instance_tgz_id, instance_filename
 
 
-def main(dataset_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, memory_dirpath: pathlib.Path, worker_number: int = 4, meta: bool = False, with_attributes: bool = False, since_version: str = '0.0.0', paper: bool = False, token: str = None):
+def main(dataset_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, memory_dirpath: pathlib.Path, worker_number: int = 4, meta: bool = False, with_attributes: bool = False, since_version: str = '0.0.0', paper: bool = False, token: str = None, proxy: str = None):
     logger.info(f'Checking Cache Directory Path: {cache_dirpath}')
     if cache_dirpath.is_dir():
         cache_content = [path for path in cache_dirpath.iterdir()]
@@ -241,7 +275,7 @@ def main(dataset_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, memory_dirp
     parameters: list[tuple[pathlib.Path, pathlib.Path]] = list()
     for path in sorted(list(dataset_dirpath.iterdir())):
         if path.is_dir():
-            parameters.append((path, cache_dirpath, meta, with_attributes, since_version, paper, token, exist_instances))
+            parameters.append((path, cache_dirpath, meta, with_attributes, since_version, paper, token, exist_instances, proxy))
 
     logger.info(f'Total Instances To Be Uploaded: {len(parameters)}')
 
@@ -265,14 +299,14 @@ def main(dataset_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, memory_dirp
     if insert_fp.is_file():
         with open(insert_fp, 'r') as insert_file:
             for index, line in enumerate(insert_file):
-                exist_instances.add(line)
+                exist_instances.add(line.strip())
     logger.info(f'Already Inserted {len(exist_instances)}.')
 
     logger.info(f'Scanning Dataset Directory Path: {dataset_dirpath}')
     parameters: list[tuple[pathlib.Path, pathlib.Path]] = list()
     for path in sorted(list(dataset_dirpath.iterdir())):
         if path.is_dir():
-            parameters.append((path, cache_dirpath, meta, with_attributes, since_version, paper, token, exist_instances, maps))
+            parameters.append((path, cache_dirpath, meta, with_attributes, since_version, paper, token, exist_instances, maps, proxy))
 
     with multiprocessing.Pool(worker_number) as pool:
         with tqdm.tqdm(total=len(parameters), desc='Inserting') as progress_bar:

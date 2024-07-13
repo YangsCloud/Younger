@@ -193,6 +193,7 @@ def api_run(arguments):
             arguments.since_version,
             arguments.paper,
             arguments.token,
+            arguments.proxy,
         )
 
     if arguments.type == 'handle_filter':
@@ -206,6 +207,7 @@ def api_run(arguments):
             arguments.since_version,
             arguments.paper,
             arguments.token,
+            arguments.proxy,
         )
 
 
@@ -347,6 +349,7 @@ def set_datasets_api_arguments(parser: argparse.ArgumentParser):
     parser.add_argument('--since-version', type=str, default='0.0.0')
     parser.add_argument('--paper', action='store_true')
     parser.add_argument('--token', type=str, default=None)
+    parser.add_argument('--proxy', type=str, default=None)
 
     parser.add_argument('--worker-number', type=int, default=4)
 
