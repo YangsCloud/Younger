@@ -182,12 +182,13 @@ def api_run(arguments):
     update_logger(arguments)
     dataset_dirpath = pathlib.Path(arguments.dataset_dirpath)
     cache_dirpath = pathlib.Path(arguments.cache_dirpath)
+    memory_dirpath = pathlib.Path(arguments.memory_dirpath)
 
     if arguments.type == 'handle_complete':
         from younger.datasets.constructors.official.api import handle_complete
 
         handle_complete.main(
-            dataset_dirpath, cache_dirpath,
+            dataset_dirpath, cache_dirpath, memory_dirpath,
             arguments.worker_number,
             arguments.since_version,
             arguments.paper,
@@ -198,7 +199,7 @@ def api_run(arguments):
         from younger.datasets.constructors.official.api import handle_filter
 
         handle_filter.main(
-            dataset_dirpath, cache_dirpath,
+            dataset_dirpath, cache_dirpath, memory_dirpath,
             arguments.worker_number,
             arguments.meta,
             arguments.with_attributes,
@@ -340,6 +341,7 @@ def set_datasets_api_arguments(parser: argparse.ArgumentParser):
     parser.add_argument('--type', type=str, required=True)
     parser.add_argument('--dataset-dirpath', type=str, required=True)
     parser.add_argument('--cache-dirpath', type=str, default='.')
+    parser.add_argument('--memory-dirpath', type=str, default='./memory')
     parser.add_argument('--meta', action='store_true')
     parser.add_argument('--with-attributes', action='store_true')
     parser.add_argument('--since-version', type=str, default='0.0.0')

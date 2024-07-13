@@ -61,15 +61,17 @@ def read_series_complete_items(token: str, limit: int = 100) -> Generator[str, N
                 progress_bar.update(1)
 
 
-def create_series_complete_item(series_complete_item: SeriesCompleteItem, token: str) -> tuple[str, str]:
+def create_series_complete_item(series_complete_item: SeriesCompleteItem, token: str) -> tuple[bool, str]:
     headers = get_headers(token)
     response = requests.post(SERIES_COMPLETE_PREFIX, headers=headers, json=[series_complete_item.dict()])
     data = response.json()
     if 'data' in data:
-        flag = (data['data'][0]['instance_name'], 'succ')
+        succ = True
+        flag = data['data'][0]['instance_name']
     else:
-        flag = (f'{series_complete_item.instance_name}: {str(data)}', 'fail')
-    return flag
+        succ = False
+        flag = f'{series_complete_item.instance_name}: {str(data)}'
+    return succ, flag
 
 
 def generate_instance_meta(instance_dirpath: pathlib.Path, meta_filepath: pathlib.Path, save: bool = False) -> dict:
@@ -87,17 +89,16 @@ def generate_instance_meta(instance_dirpath: pathlib.Path, meta_filepath: pathli
     return instance_meta
 
 
-def upload_instance(parameter: tuple[pathlib.Path, pathlib.Path, str]):
-    (instance_dirpath, cache_dirpath, since_version, paper, token) = parameter
+def insert_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str, set[str], dict[str, str]]):
+    (instance_dirpath, cache_dirpath, since_version, paper, token, exist_instances, maps) = parameter
 
     instance_filename = hash_string(instance_dirpath.name + f'-Paper:{paper}', hash_algorithm='blake2b', digest_size=16)
-    # instance_filename = instance_dirpath.name
+
+    if instance_filename in exist_instances:
+        return False, None
 
     meta_filepath = cache_dirpath.joinpath(instance_filename + '.json')
     instance_meta = generate_instance_meta(instance_dirpath, meta_filepath)
-
-    archive_filepath = cache_dirpath.joinpath(instance_filename + '.tgz')
-    tar_archive(instance_dirpath, archive_filepath, compress=True)
 
     model_name, model_source, model_part = get_instance_name_parts(instance_dirpath.name)
     if model_source == 'HuggingFace':
@@ -112,26 +113,6 @@ def upload_instance(parameter: tuple[pathlib.Path, pathlib.Path, str]):
     else:
         raise ValueError('Not A Valid Directory Path Name.')
 
-    headers = get_headers(token)
-
-    with open(archive_filepath, 'rb') as archive_file:
-        payload = dict()
-        payload['storage'] = 'vultr'
-        payload['folder'] = '6ba43f7f-8cf1-49bb-894f-0ac75e3b5b0f'
-        payload['title'] = archive_filepath.name
-        files = (
-            ('file', (archive_filepath.name, archive_file, 'application/gzip')),
-        )
-        response = requests.post(FILES_PREFIX, headers=headers, data=payload, files=files)
-        try:
-            data = response.json()
-        except:
-            print(response)
-            print(response.text)
-            import sys
-            sys.exit(1)
-        instance_tgz_id = data['data']['id']
-
     series_complete_item = SeriesCompleteItem(
         instance_name=instance_filename,
         model_name=model_name,
@@ -142,14 +123,49 @@ def upload_instance(parameter: tuple[pathlib.Path, pathlib.Path, str]):
         since_version=since_version,
         paper=paper,
         status='access',
-        instance_tgz=instance_tgz_id
+        instance_tgz=maps[instance_filename]
     )
 
     flag = create_series_complete_item(series_complete_item=series_complete_item, token=token)
     return flag
 
 
-def main(dataset_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, worker_number: int = 4, since_version: str = '0.0.0', paper: bool = False, token: str = None):
+def upload_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str, dict[str, str]]):
+    (instance_dirpath, cache_dirpath, since_version, paper, token, exist_instances) = parameter
+
+    instance_filename = hash_string(instance_dirpath.name + f'-Paper:{paper}', hash_algorithm='blake2b', digest_size=16)
+
+    if instance_filename in exist_instances:
+        return False, None, None
+
+    archive_filepath = cache_dirpath.joinpath(instance_filename + '.tgz')
+    tar_archive(instance_dirpath, archive_filepath, compress=True)
+
+    headers = get_headers(token)
+
+    with open(archive_filepath, 'rb') as archive_file:
+        payload = dict()
+        payload['storage'] = 'vultr'
+        payload['folder'] = '6ba43f7f-8cf1-49bb-894f-0ac75e3b5b0f'
+        payload['title'] = archive_filepath.name
+        files = (
+            ('file', (archive_filepath.name, archive_file, 'application/gzip')),
+        )
+        response = None
+        try:
+            response = requests.post(FILES_PREFIX, headers=headers, data=payload, files=files)
+            data = response.json()
+        except Exception as error:
+            if response:
+                print(response)
+                print(response.text)
+            raise error
+        instance_tgz_id = data['data']['id']
+
+    return True, instance_tgz_id, instance_filename
+
+
+def main(dataset_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, memory_dirpath: pathlib.Path, worker_number: int = 4, since_version: str = '0.0.0', paper: bool = False, token: str = None):
     logger.info(f'Checking Cache Directory Path: {cache_dirpath}')
     if cache_dirpath.is_dir():
         cache_content = [path for path in cache_dirpath.iterdir()]
@@ -157,24 +173,62 @@ def main(dataset_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, worker_numb
     else:
         create_dir(cache_dirpath)
 
-    logger.info(f'Retrieving Already Inserted Instances...')
-    exist_instances = list(read_series_complete_items(token))
-    logger.info(f'Retrieved Total {len(exist_instances)}.')
+    # logger.info(f'Retrieving Already Inserted Instances...')
+    # exist_instances = set(read_series_complete_items(token))
+    # logger.info(f'Retrieved Total {len(exist_instances)}.')
+
+    upload_fp = memory_dirpath.joinpath('upload')
+    insert_fp = memory_dirpath.joinpath('insert')
+
+    exist_instances = dict()
+    if upload_fp.is_file():
+        with open(upload_fp, 'r') as upload_file:
+            for index, line in enumerate(upload_file):
+                file_id, instance_filename = line.strip().split('--S--')
+                exist_instances[instance_filename] = file_id
+    logger.info(f'Already Uploaded {len(exist_instances)}.')
 
     logger.info(f'Scanning Dataset Directory Path: {dataset_dirpath}')
     parameters: list[tuple[pathlib.Path, pathlib.Path]] = list()
-    for path in dataset_dirpath.iterdir():
+    for path in sorted(list(dataset_dirpath.iterdir())):
         if path.is_dir():
-            if path.name not in exist_instances:
-                parameters.append((path, cache_dirpath, since_version, paper, token))
+            parameters.append((path, cache_dirpath, since_version, paper, token, exist_instances))
 
     logger.info(f'Total Instances To Be Uploaded: {len(parameters)}')
 
     with multiprocessing.Pool(worker_number) as pool:
         with tqdm.tqdm(total=len(parameters), desc='Uploading') as progress_bar:
-            for index, flag in enumerate(pool.imap_unordered(upload_instance, parameters), start=1):
-                if flag[1] == 'fail':
-                    logger.error(f'FAIL: {flag[0]}')
-                    break
+            for index, (succ, file_id, instance_filename) in enumerate(pool.imap_unordered(upload_instance, parameters), start=1):
+                if succ:
+                    with open(upload_fp, 'a') as upload_file:
+                        upload_file.write(f'{file_id}--S--{instance_filename}\n')
                 progress_bar.update(1)
     delete_dir(cache_dirpath, only_clean=True)
+
+    maps = dict()
+    with open(upload_fp, 'r') as upload_file:
+        for index, line in enumerate(upload_file):
+            file_id, instance_filename = line.strip().split('--S--')
+            maps[instance_filename] = file_id
+
+    #====
+    exist_instances = set()
+    if insert_fp.is_file():
+        with open(insert_fp, 'r') as insert_file:
+            for index, line in enumerate(insert_file):
+                exist_instances.add(line)
+    logger.info(f'Already Inserted {len(exist_instances)}.')
+
+    logger.info(f'Scanning Dataset Directory Path: {dataset_dirpath}')
+    parameters: list[tuple[pathlib.Path, pathlib.Path]] = list()
+    for path in sorted(list(dataset_dirpath.iterdir())):
+        if path.is_dir():
+            parameters.append((path, cache_dirpath, since_version, paper, token, exist_instances, maps))
+
+    with multiprocessing.Pool(worker_number) as pool:
+        with tqdm.tqdm(total=len(parameters), desc='Inserting') as progress_bar:
+            for index, (succ, instance_filename) in enumerate(pool.imap_unordered(insert_instance, parameters), start=1):
+                if succ:
+                    with open(insert_fp, 'a') as insert_file:
+                        insert_file.write(f'{instance_filename}\n')
+                progress_bar.update(1)
