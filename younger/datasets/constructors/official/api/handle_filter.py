@@ -36,13 +36,12 @@ def get_headers(token: str):
         "Authorization": f"Bearer {token}"
     }
 
-
+ 
 def read_series_filter_files_count(token: str) -> int:
     headers = get_headers(token)
     response = requests.get(FILES_PREFIX + '?aggregate[count]=*', headers=headers)
     data = response.json()
     return data['data'][0]['count']
-
 
 def read_series_filter_count(token: str) -> int:
     headers = get_headers(token)
@@ -234,6 +233,7 @@ def upload_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str,
         files = (
             ('file', (archive_filepath.name, archive_file, 'application/gzip')),
         )
+
         response = None
         try:
             if proxies is None:
@@ -258,7 +258,6 @@ def main(dataset_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, memory_dirp
         assert len(cache_content) == 0, 'You Need Specify An Empty Cache Directory.'
     else:
         create_dir(cache_dirpath)
-
 
     upload_fp = memory_dirpath.joinpath('upload')
     insert_fp = memory_dirpath.joinpath('insert')

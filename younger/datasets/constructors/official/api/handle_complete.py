@@ -84,6 +84,7 @@ def create_series_complete_item(series_complete_item: SeriesCompleteItem, token:
         raise error
 
 
+
 def generate_instance_meta(instance_dirpath: pathlib.Path, meta_filepath: pathlib.Path, save: bool = False) -> dict:
     instance_meta = dict()
     instance = Instance()
@@ -136,6 +137,10 @@ def insert_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str,
 
     meta_filepath = cache_dirpath.joinpath(instance_filename + '.json')
     instance_meta = generate_instance_meta(instance_dirpath, meta_filepath)
+
+    archive_filepath = cache_dirpath.joinpath(instance_filename + '.tgz')
+    tar_archive(instance_dirpath, archive_filepath, compress=True)
+
 
     model_name, model_source, model_part = get_instance_name_parts(instance_dirpath.name)
     if model_source == 'HuggingFace':
@@ -210,6 +215,7 @@ def upload_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str,
         files = (
             ('file', (archive_filepath.name, archive_file, 'application/gzip')),
         )
+
         response = None
         try:
             if proxies is None:
