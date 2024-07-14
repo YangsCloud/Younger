@@ -223,12 +223,12 @@ def upload_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str,
             else:
                 response = requests.post(FILES_PREFIX, headers=headers, data=payload, files=files, timeout=150, proxies=proxies)
             data = response.json()
+            instance_tgz_id = data['data']['id']
         except Exception as error:
             if response is not None:
                 print(response)
                 print(response.text)
             raise error
-        instance_tgz_id = data['data']['id']
 
     return instance_tgz_id, instance_filename
 
