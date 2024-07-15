@@ -103,7 +103,7 @@ def generate_instance_meta(instance_dirpath: pathlib.Path, meta_filepath: pathli
 def insert_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str, set[str], dict[str, str]]):
     sess = requests.session()
     sess.keep_alive = False
-    (instance_dirpath, cache_dirpath, since_version, paper, token, exist_instances, maps, proxy) = parameter
+    (instance_dirpath, cache_dirpath, since_version, paper, token, maps, proxy) = parameter
     if proxy is None:
         proxies = None
     else:
@@ -114,8 +114,8 @@ def insert_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str,
 
     instance_filename = hash_string(instance_dirpath.name + f'-Paper:{paper}', hash_algorithm='blake2b', digest_size=16)
 
-    if instance_filename in exist_instances:
-        return None
+    # if instance_filename in exist_instances:
+    #     return None
 
     headers = get_headers(token)
 
@@ -128,7 +128,7 @@ def insert_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str,
         data = response.json()
         assert len(data['data']) in {0, 1}
         if len(data['data']) == 1:
-            return instance_filename
+            return instance_filename, instance_dirpath.name
     except Exception as error:
         if response is not None:
             print(response)
@@ -169,13 +169,13 @@ def insert_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str,
     )
 
     instance_filename = create_series_complete_item(series_complete_item=series_complete_item, token=token, proxies=proxies)
-    return instance_filename
+    return instance_filename, instance_dirpath.name
 
 
 def upload_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str, dict[str, str]]):
     sess = requests.session()
     sess.keep_alive = False
-    (instance_dirpath, cache_dirpath, since_version, paper, token, exist_instances, proxy) = parameter
+    (instance_dirpath, cache_dirpath, since_version, paper, token, proxy) = parameter
     if proxy is None:
         proxies = None
     else:
@@ -186,8 +186,8 @@ def upload_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str,
 
     instance_filename = hash_string(instance_dirpath.name + f'-Paper:{paper}', hash_algorithm='blake2b', digest_size=16)
 
-    if instance_filename in exist_instances:
-        return None, None
+    # if instance_filename in exist_instances:
+    #     return None, None
 
     headers = get_headers(token)
 
@@ -197,7 +197,7 @@ def upload_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str,
         data = response.json()
         assert len(data['data']) in {0, 1}
         if len(data['data']) == 1:
-            return data['data'][0]['id'], instance_filename
+            return data['data'][0]['id'], instance_filename, instance_dirpath.name
     except Exception as error:
         if response is not None:
             print(response)
@@ -230,7 +230,7 @@ def upload_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str,
                 print(response.text)
             raise error
 
-    return instance_tgz_id, instance_filename
+    return instance_tgz_id, instance_filename, instance_dirpath.name
 
 
 def main(dataset_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, memory_dirpath: pathlib.Path, worker_number: int = 4, since_version: str = '0.0.0', paper: bool = False, token: str = None, proxy: str = None):
@@ -252,51 +252,54 @@ def main(dataset_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, memory_dirp
     if upload_fp.is_file():
         with open(upload_fp, 'r') as upload_file:
             for index, line in enumerate(upload_file):
-                file_id, instance_filename = line.strip().split('--S--')
-                exist_instances[instance_filename] = file_id
+                file_id, instance_filename, instance_truename = line.strip().split('--S--')
+                exist_instances[instance_truename] = (file_id, instance_filename)
     logger.info(f'Already Uploaded {len(exist_instances)}.')
 
     logger.info(f'Scanning Dataset Directory Path: {dataset_dirpath}')
     parameters: list[tuple[pathlib.Path, pathlib.Path]] = list()
     for path in sorted(list(dataset_dirpath.iterdir())):
         if path.is_dir():
-            parameters.append((path, cache_dirpath, since_version, paper, token, exist_instances, proxy))
+            if path.name not in exist_instances:
+                parameters.append((path, cache_dirpath, since_version, paper, token, proxy))
 
     logger.info(f'Total Instances To Be Uploaded: {len(parameters)}')
 
     with multiprocessing.Pool(worker_number) as pool:
         with tqdm.tqdm(total=len(parameters), desc='Uploading') as progress_bar:
-            for index, (file_id, instance_filename) in enumerate(pool.imap_unordered(upload_instance, parameters), start=1):
-                if file_id is not None and instance_filename is not None:
+            for index, (file_id, instance_filename, instance_truename) in enumerate(pool.imap_unordered(upload_instance, parameters), start=1):
+                if file_id is not None and instance_filename is not None and instance_truename is not None:
                     with open(upload_fp, 'a') as upload_file:
-                        upload_file.write(f'{file_id}--S--{instance_filename}\n')
+                        upload_file.write(f'{file_id}--S--{instance_filename}--S--{instance_truename}\n')
                 progress_bar.update(1)
     delete_dir(cache_dirpath, only_clean=True)
 
     maps = dict()
     with open(upload_fp, 'r') as upload_file:
         for index, line in enumerate(upload_file):
-            file_id, instance_filename = line.strip().split('--S--')
-            maps[instance_filename] = file_id
+            file_id, instance_filename, instance_truename = line.strip().split('--S--')
+            maps[instance_truename] = (file_id, instance_filename)
 
     #====
     exist_instances = set()
     if insert_fp.is_file():
         with open(insert_fp, 'r') as insert_file:
             for index, line in enumerate(insert_file):
-                exist_instances.add(line.strip())
+                instance_filename, instance_truename = line.strip().split('--S--')
+                exist_instances[instance_truename] = instance_filename
     logger.info(f'Already Inserted {len(exist_instances)}.')
 
     logger.info(f'Scanning Dataset Directory Path: {dataset_dirpath}')
     parameters: list[tuple[pathlib.Path, pathlib.Path]] = list()
     for path in sorted(list(dataset_dirpath.iterdir())):
         if path.is_dir():
-            parameters.append((path, cache_dirpath, since_version, paper, token, exist_instances, maps, proxy))
+            if path.name not in exist_instances:
+                parameters.append((path, cache_dirpath, since_version, paper, token, maps, proxy))
 
     with multiprocessing.Pool(worker_number) as pool:
         with tqdm.tqdm(total=len(parameters), desc='Inserting') as progress_bar:
-            for index, instance_filename in enumerate(pool.imap_unordered(insert_instance, parameters), start=1):
-                if instance_filename is not None:
+            for index, instance_filename, instance_truename in enumerate(pool.imap_unordered(insert_instance, parameters), start=1):
+                if instance_filename is not None and instance_truename is not None:
                     with open(insert_fp, 'a') as insert_file:
-                        insert_file.write(f'{instance_filename}\n')
+                        insert_file.write(f'{instance_filename}--S--{instance_truename}\n')
                 progress_bar.update(1)
