@@ -122,9 +122,9 @@ def insert_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str,
     response = None
     try:
         if proxies is None:
-            response = requests.get(SERIES_COMPLETE_PREFIX+ f'?fields[]=instance_name&filter[instance_name][_eq]={instance_filename}', headers, timeout=15)
+            response = requests.get(SERIES_COMPLETE_PREFIX+ f'?fields[]=instance_name&filter[instance_name][_eq]={instance_filename}', headers=headers, timeout=15)
         else:
-            response = requests.get(SERIES_COMPLETE_PREFIX+ f'?fields[]=instance_name&filter[instance_name][_eq]={instance_filename}', headers, timeout=15, proxies=proxies)
+            response = requests.get(SERIES_COMPLETE_PREFIX+ f'?fields[]=instance_name&filter[instance_name][_eq]={instance_filename}', headers=headers, timeout=15, proxies=proxies)
         data = response.json()
         assert len(data['data']) in {0, 1}
         if len(data['data']) == 1:
@@ -137,10 +137,6 @@ def insert_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str,
 
     meta_filepath = cache_dirpath.joinpath(instance_filename + '.json')
     instance_meta = generate_instance_meta(instance_dirpath, meta_filepath)
-
-    archive_filepath = cache_dirpath.joinpath(instance_filename + '.tgz')
-    tar_archive(instance_dirpath, archive_filepath, compress=True)
-
 
     model_name, model_source, model_part = get_instance_name_parts(instance_dirpath.name)
     if model_source == 'HuggingFace':
@@ -165,7 +161,7 @@ def insert_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str,
         since_version=since_version,
         paper=paper,
         status='access',
-        instance_tgz=maps[instance_filename]
+        instance_tgz=maps[instance_dirpath.name][0]
     )
 
     instance_filename = create_series_complete_item(series_complete_item=series_complete_item, token=token, proxies=proxies)
@@ -281,7 +277,7 @@ def main(dataset_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, memory_dirp
             maps[instance_truename] = (file_id, instance_filename)
 
     #====
-    exist_instances = set()
+    exist_instances = dict()
     if insert_fp.is_file():
         with open(insert_fp, 'r') as insert_file:
             for index, line in enumerate(insert_file):
@@ -298,7 +294,7 @@ def main(dataset_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, memory_dirp
 
     with multiprocessing.Pool(worker_number) as pool:
         with tqdm.tqdm(total=len(parameters), desc='Inserting') as progress_bar:
-            for index, instance_filename, instance_truename in enumerate(pool.imap_unordered(insert_instance, parameters), start=1):
+            for index, (instance_filename, instance_truename) in enumerate(pool.imap_unordered(insert_instance, parameters), start=1):
                 if instance_filename is not None and instance_truename is not None:
                     with open(insert_fp, 'a') as insert_file:
                         insert_file.write(f'{instance_filename}--S--{instance_truename}\n')
