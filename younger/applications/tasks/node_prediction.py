@@ -99,6 +99,7 @@ class NodePrediction(YoungerTask):
             if self.config['mode'] == 'Train':
                 self._train_dataset = NodeDataset(
                     self.config['dataset']['train_dataset_dirpath'],
+                    'train',
                     worker_number=self.config['dataset']['worker_number'],
                     encode_type=self.config['dataset']['encode_type'],
                 )
@@ -122,6 +123,7 @@ class NodePrediction(YoungerTask):
             if self.config['mode'] == 'Train':
                 self._valid_dataset = NodeDataset(
                     self.config['dataset']['valid_dataset_dirpath'],
+                    'valid',
                     worker_number=self.config['dataset']['worker_number'],
                     encode_type=self.config['dataset']['encode_type'],
                 )
@@ -138,6 +140,7 @@ class NodePrediction(YoungerTask):
             if self.config['mode'] == 'Test':
                 self._test_dataset = NodeDataset(
                     self.config['dataset']['test_dataset_dirpath'],
+                    'test',
                     worker_number=self.config['dataset']['worker_number'],
                     encode_type=self.config['dataset']['encode_type'],
                 )
