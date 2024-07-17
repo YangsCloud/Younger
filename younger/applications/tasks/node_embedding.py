@@ -93,7 +93,7 @@ class NodeEmbedding(YoungerTask):
             train_dataset = self._train_dataset
         else:
             if self.config['mode'] == 'Train':
-                self._train_dataset = NodeDataset(
+                self._train_dataset = EgoDataset(
                     self.config['dataset']['train_dataset_dirpath'],
                     'train',
                     worker_number=self.config['dataset']['worker_number'],
@@ -114,7 +114,7 @@ class NodeEmbedding(YoungerTask):
             valid_dataset = self._valid_dataset
         else:
             if self.config['mode'] == 'Train':
-                self._valid_dataset = NodeDataset(
+                self._valid_dataset = EgoDataset(
                     self.config['dataset']['valid_dataset_dirpath'],
                     'valid',
                     worker_number=self.config['dataset']['worker_number'],
@@ -130,7 +130,7 @@ class NodeEmbedding(YoungerTask):
             test_dataset = self._test_dataset
         else:
             if self.config['mode'] == 'Test':
-                self._test_dataset = NodeDataset(
+                self._test_dataset = EgoDataset(
                     self.config['dataset']['test_dataset_dirpath'],
                     'test',
                     worker_number=self.config['dataset']['worker_number'],
@@ -231,9 +231,9 @@ class NodeEmbedding(YoungerTask):
         assert onnx_model_dirpath, f'No ONNX Dir.'
 
         self.logger.info(f'  v Loading Meta ...')
-        meta = NodeDataset.load_meta(meta_filepath)
-        x_dict = NodeDataset.get_x_dict(meta, node_dict_size=self.config['dataset']['node_dict_size'])
-        y_dict = NodeDataset.get_y_dict(meta, task_dict_size=self.config['dataset']['task_dict_size'])
+        meta = EgoDataset.load_meta(meta_filepath)
+        x_dict = EgoDataset.get_x_dict(meta, node_dict_size=self.config['dataset']['node_dict_size'])
+        y_dict = EgoDataset.get_y_dict(meta, task_dict_size=self.config['dataset']['task_dict_size'])
         self.logger.info(f'    -> Tasks Dict Size: {len(x_dict)}')
         self.logger.info(f'    -> Nodes Dict Size: {len(y_dict)}')
         self.logger.info(f'  ^ Built.')
@@ -250,7 +250,7 @@ class NodeEmbedding(YoungerTask):
                 attributes = standardized_graph.nodes[node_index]['features']['attributes']
                 standardized_graph.nodes[node_index]['features']['attributes'] = get_complete_attributes_of_node(attributes, operator['op_type'], operator['domain'], meta['max_inclusive_version'])
             standardized_graph.graph.clear()
-            data = NodeDataset.get_data(standardized_graph, x_dict, y_dict, feature_get_type='none')
+            data = EgoDataset.get_data(standardized_graph, x_dict, y_dict, feature_get_type='none')
             datas.append(data)
         minibatch = Batch.from_data_list(datas)
         self.logger.info(f'  ^ Loaded. Total - {len(datas)}.')
