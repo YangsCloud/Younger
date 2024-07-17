@@ -99,6 +99,7 @@ class LinkPridiction(YoungerTask):
             if self.config['mode'] == 'Train':
                 self._train_dataset = LinkDataset(
                     self.config['dataset']['train_dataset_dirpath'],
+                    'train',
                     worker_number=self.config['dataset']['worker_number'],
                     seed=self.config['dataset']['seed'],
                     encode_type=self.config['dataset']['encode_type'],
@@ -122,6 +123,7 @@ class LinkPridiction(YoungerTask):
             if self.config['mode'] == 'Train':
                 self._valid_dataset = LinkDataset(
                     self.config['dataset']['valid_dataset_dirpath'],
+                    'valid',
                     link_get_number=self.config['dataset']['link_get_number'],
                     worker_number=self.config['dataset']['worker_number'],
                     seed=self.config['dataset']['seed'],
@@ -140,6 +142,7 @@ class LinkPridiction(YoungerTask):
             if self.config['mode'] == 'Test':
                 self._test_dataset = LinkDataset(
                     self.config['dataset']['test_dataset_dirpath'],
+                    'test',
                     link_get_number=self.config['dataset']['link_get_number'],
                     worker_number=self.config['dataset']['worker_number'],
                     encode_type=self.config['dataset']['encode_type'],
