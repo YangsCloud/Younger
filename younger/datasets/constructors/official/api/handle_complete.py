@@ -130,6 +130,7 @@ def insert_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str,
         if len(data['data']) == 1:
             return instance_filename, instance_dirpath.name
     except Exception as error:
+        print('Error URL:', SERIES_COMPLETE_PREFIX+ f'?fields[]=instance_name&filter[instance_name][_eq]={instance_filename}')
         if response is not None:
             print(response)
             print(response.text)
@@ -240,6 +241,9 @@ def main(dataset_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, memory_dirp
     # logger.info(f'Retrieving Already Inserted Instances...')
     # exist_instances = set(read_series_complete_items(token))
     # logger.info(f'Retrieved Total {len(exist_instances)}.')
+
+    if not memory_dirpath.is_dir():
+        create_dir(memory_dirpath)
 
     upload_fp = memory_dirpath.joinpath('upload')
     insert_fp = memory_dirpath.joinpath('insert')
