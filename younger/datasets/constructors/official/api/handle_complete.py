@@ -130,6 +130,7 @@ def insert_instance(parameter: tuple[pathlib.Path, pathlib.Path, str, bool, str,
         if len(data['data']) == 1:
             return instance_filename, instance_dirpath.name
     except Exception as error:
+        print('Error URL:', SERIES_COMPLETE_PREFIX+ f'?fields[]=instance_name&filter[instance_name][_eq]={instance_filename}')
         if response is not None:
             print(response)
             print(response.text)
