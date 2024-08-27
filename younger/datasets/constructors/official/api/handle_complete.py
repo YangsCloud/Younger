@@ -246,6 +246,9 @@ def main(dataset_dirpath: pathlib.Path, cache_dirpath: pathlib.Path, memory_dirp
     # exist_instances = set(read_series_complete_items(token))
     # logger.info(f'Retrieved Total {len(exist_instances)}.')
 
+    if not memory_dirpath.is_dir():
+        create_dir(memory_dirpath)
+
     upload_fp = memory_dirpath.joinpath('upload')
     insert_fp = memory_dirpath.joinpath('insert')
 
