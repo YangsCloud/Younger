@@ -13,7 +13,6 @@
 import os
 import tqdm
 import torch
-import random
 import networkx
 import multiprocessing
 
@@ -28,7 +27,7 @@ from younger.datasets.modules import Network
 from younger.datasets.utils.constants import YoungerDatasetAddress
 
 
-class NodeData(Data):
+class EgoData(Data):
     def __cat_dim__(self, key: str, value: Any, *args, **kwargs) -> Any:
         if key == 'mask_x_label': # op type
             return -1
@@ -56,7 +55,7 @@ class NodeData(Data):
             return 0
 
 
-class NodeDataset(Dataset):
+class EgoDataset(Dataset):
     def __init__(
         self,
         root: str,
@@ -66,39 +65,28 @@ class NodeDataset(Dataset):
         pre_filter: Callable | None = None,
         log: bool = True,
         force_reload: bool = False,
-
-        node_dict_size: int | None = None,
-        operator_dict_size: int | None = None,
-        encode_type: Literal['node', 'operator'] = 'node',
-
         worker_number: int = 4,
     ):
-        assert encode_type in {'node', 'operator'}
-
-        self.encode_type = encode_type
         self.worker_number = worker_number
 
         meta_filepath = os.path.join(root, 'meta.json')
         if not os.path.isfile(meta_filepath):
             print(f'No \'meta.json\' File Provided, It will be downloaded From Official Cite ...')
-            if encode_type == 'node':
-                download_url(getattr(YoungerDatasetAddress, f'OPERATOR_{split.upper()}_WA_PAPER'), root, filename='meta.json')
-            if encode_type == 'operator':
-                download_url(getattr(YoungerDatasetAddress, f'OPERATOR_{split.upper()}_WOA_PAPER'), root, filename='meta.json')
+            download_url(getattr(YoungerDatasetAddress, f'EGO_{split.upper()}_PAPER'), root, filename='meta.json')
 
         self.meta = self.__class__.load_meta(meta_filepath)
-        self.x_dict = self.__class__.get_x_dict(self.meta, node_dict_size, operator_dict_size)
+        self.x_dict = self.__class__.get_x_dict(self.meta)
 
         super().__init__(root, transform, pre_transform, pre_filter, log, force_reload)
 
     @property
     def raw_dir(self) -> str:
-        name = f'younger_raw_{self.encode_type}_np'
+        name = f'younger_raw_ego'
         return os.path.join(self.root, name)
 
     @property
     def processed_dir(self) -> str:
-        name = f'younger_processed_{self.encode_type}_np'
+        name = f'younger_processed_ego'
         return os.path.join(self.root, name)
 
     @property
@@ -112,11 +100,9 @@ class NodeDataset(Dataset):
     def len(self) -> int:
         return self.meta['size']
 
-    def get(self, index: int) -> NodeData:
-        block_data = torch.load(os.path.join(self.processed_dir, f'sample-{index}.pth'))
-        # print("block_data_list: ", block_data_list)
-        # print("len(block_data_list)",len(block_data_list))
-        return block_data
+    def get(self, index: int) -> EgoData:
+        ego_data = torch.load(os.path.join(self.processed_dir, f'sample-{index}.pth'))
+        return ego_data
 
     def download(self):
         archive_filepath = os.path.join(self.root, self.meta['archive'])
@@ -133,27 +119,27 @@ class NodeDataset(Dataset):
         with multiprocessing.Pool(self.worker_number) as pool:
             with tqdm.tqdm(total=self.meta['size']) as progress_bar:
                 for sample_index, _ in pool.imap_unordered(self.process_sample, range(self.meta['size'])):
-                    progress_bar.update()
+                    progress_bar.update(1)
 
     def process_sample(self, sample_index: int) -> tuple[int, int]:
         sample_filepath = os.path.join(self.raw_dir, f'sample-{sample_index}.pkl')
         sample: tuple[str, networkx.DiGraph, tuple] = load_pickle(sample_filepath)
-        block_data = self.__class__.get_block_data(sample, self.x_dict, self.encode_type)
-        if self.pre_filter is not None and not self.pre_filter(block_data):
+        ego_data = self.__class__.get_ego_data(sample, self.x_dict)
+        if self.pre_filter is not None and not self.pre_filter(ego_data):
             return
 
         if self.pre_transform is not None:
-            block_data = self.pre_transform(block_data)
-        torch.save(block_data, os.path.join(self.processed_dir, f'sample-{sample_index}.pth'))
-        return (sample_index, len(block_data))
+            ego_data = self.pre_transform(ego_data)
+        torch.save(ego_data, os.path.join(self.processed_dir, f'sample-{sample_index}.pth'))
+        return (sample_index, len(ego_data))
 
     @classmethod
     def load_meta(cls, meta_filepath: str) -> dict[str, Any]:
         loaded_meta: dict[str, Any] = load_json(meta_filepath)
         meta: dict[str, Any] = dict()
 
-        meta['all_nodes'] = loaded_meta['all_nodes']
         meta['all_operators'] = loaded_meta['all_operators']
+        meta['lt_operators'] = loaded_meta['lt_operators']
 
         meta['split'] = loaded_meta['split']
         meta['archive'] = loaded_meta['archive']
@@ -168,21 +154,17 @@ class NodeDataset(Dataset):
         return dict(zip(sorted(graph.nodes()), range(graph.number_of_nodes())))
 
     @classmethod
-    def get_x_dict(cls, meta: dict[str, Any], node_dict_size: int | None = None, operator_dict_size: int | None = None) -> dict[str, list[str] | dict[str, int]]:
-        all_nodes = [(node_id, node_count) for node_id, node_count in meta['all_nodes']['onnx'].items()] + [(node_id, node_count) for node_id, node_count in meta['all_nodes']['others'].items()]
-        all_nodes = sorted(all_nodes, key=lambda x: x[1])
-
-        all_operators = [(operator_id, operator_count) for operator_id, operator_count in meta['all_operators']['onnx'].items()] + [(operator_id, operator_count) for operator_id, operator_count in meta['all_operators']['others'].items()]
+    def get_x_dict(cls, meta: dict[str, Any]) -> dict[str, list[str] | dict[str, int]]:
+        all_operators = [(operator_id, operator_count) for operator_id, operator_count in meta['all_operators']['onnx'].items()]
         all_operators = sorted(all_operators, key=lambda x: x[1])
 
-        node_dict_size = len(all_nodes) if node_dict_size is None else node_dict_size
-        operator_dict_size = len(all_operators) if operator_dict_size is None else operator_dict_size
+        lt_operators = [(operator_id, operator_count) for operator_id, operator_count in meta['lt_operators']['onnx'].items()]
+        lt_operators = sorted(lt_operators, key=lambda x: x[1])
 
         x_dict = dict()
-        x_dict['i2n'] = ['__UNK__'] + ['__MASK__'] + [node_id for node_id, node_count in all_nodes[:node_dict_size]]
-        x_dict['n2i'] = {node_id: index for index, node_id in enumerate(x_dict['i2n'])}
-        x_dict['i2o'] = ['__UNK__'] + ['__MASK__'] + [operator_id for operator_id, operator_count in all_operators[:operator_dict_size]]
+        x_dict['i2o'] = ['__UNK__'] + ['__MASK__'] + ['__TAIL__'] + [operator_id for operator_id, operator_count in all_operators if operator_id not in meta['lt_operators']['onnx']]
         x_dict['o2i'] = {operator_id: index for index, operator_id in enumerate(x_dict['i2o'])}
+        x_dict['lto'] = {operator_id for operator_id, operator_count in lt_operators}
         return x_dict
 
     @classmethod
@@ -194,45 +176,39 @@ class NodeDataset(Dataset):
         return edge_index
 
     @classmethod
-    def get_node_class(cls, node_features: dict, x_dict: dict[str, Any], encode_type: Literal['node', 'operator'] = 'node') -> int:
-        if encode_type == 'node':
-            node_identifier: str = Network.get_node_identifier_from_features(node_features, mode='full')
-            node_class = x_dict['n2i'].get(node_identifier, x_dict['n2i']['__UNK__'])
-
-        if encode_type == 'operator':
-            node_identifier: str = Network.get_node_identifier_from_features(node_features, mode='type')
+    def get_node_class(cls, node_features: dict, x_dict: dict[str, Any]) -> int:
+        node_identifier: str = Network.get_node_identifier_from_features(node_features, mode='type')
+        if node_identifier in x_dict['lto']:
+            node_class = x_dict['o2i']['__TAIL__']
+        else:
             node_class = x_dict['o2i'].get(node_identifier, x_dict['o2i']['__UNK__'])
 
         return node_class
 
     @classmethod
-    def get_x(cls, graph: networkx.DiGraph, mapping: dict[str, int], boundary: set[str], x_dict: dict[str, Any], encode_type: Literal['node', 'operator'] = 'node') -> torch.Tensor:
+    def get_x(cls, graph: networkx.DiGraph, mapping: dict[str, int], focus: str, x_dict: dict[str, Any]) -> torch.Tensor:
         node_indices = sorted(list(graph.nodes), key=lambda x: mapping[x])
 
-        if encode_type == 'node':
-            dict_key = 'n2i'
-        if encode_type == 'operator':
-            dict_key = 'o2i'
+        dict_key = 'o2i'
 
         node_features = list()
         for node_index in node_indices:
-            if node_index in boundary:
+            if node_index == focus:
                 node_feature = [x_dict[dict_key]['__MASK__']]
             else:
-                node_feature = [cls.get_node_class(graph.nodes[node_index]['features'], x_dict, encode_type=encode_type)]
+                node_feature = [cls.get_node_class(graph.nodes[node_index]['features'], x_dict)]
             node_features.append(node_feature)
         node_features = torch.tensor(node_features, dtype=torch.long)
 
         return node_features
 
     @classmethod
-    def get_block_data(
+    def get_ego_data(
         cls,
         sample: tuple[str, networkx.DiGraph, tuple],
-        x_dict: dict[str, Any],
-        encode_type: Literal['node', 'operator'] = 'node',
-    ) -> NodeData:
-        subgraph_hash, subgraph, boundary = sample
+        x_dict: dict[str, Any]
+    ) -> EgoData:
+        subgraph_hash, subgraph, focus = sample
         mapping = cls.get_mapping(subgraph) # e.g.
                                             # dict(zip(sorted(G.nodes()), range(G.number_of_nodes())))
                                             # >>> print(node_mapping)
@@ -242,10 +218,10 @@ class NodeDataset(Dataset):
                                             # >>> print(sorted(G.nodes()))
                                             # [2, 3, 5, 10]
 
-        x = cls.get_x(subgraph, mapping, boundary, x_dict, encode_type)
+        x = cls.get_x(subgraph, mapping, focus, x_dict)
         edge_index = cls.get_edge_index(subgraph, mapping)
-        mask_x_label = torch.tensor([cls.get_node_class(subgraph.nodes[node]['features'], x_dict, encode_type) for node in sorted(list(boundary))], dtype=torch.long)
-        mask_x_position = torch.tensor([mapping[node] for node in sorted(list(boundary))], dtype=torch.long)
+        mask_x_label = torch.tensor([cls.get_node_class(subgraph.nodes[focus]['features'], x_dict)], dtype=torch.long)
+        mask_x_position = torch.tensor([mapping[focus]], dtype=torch.long)
 
-        block_data = NodeData(x=x, edge_index=edge_index, mask_x_label=mask_x_label, mask_x_position=mask_x_position)
-        return block_data
+        ego_data = EgoData(x=x, edge_index=edge_index, mask_x_label=mask_x_label, mask_x_position=mask_x_position)
+        return ego_data

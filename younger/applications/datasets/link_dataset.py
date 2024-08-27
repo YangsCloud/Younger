@@ -32,6 +32,7 @@ class LinkDataset(Dataset):
     def __init__(
         self,
         root: str,
+        split: Literal['train', 'valid', 'test'],
         transform: Callable | None = None,
         pre_transform: Callable | None = None,
         pre_filter: Callable | None = None,
@@ -52,7 +53,12 @@ class LinkDataset(Dataset):
         self.link_get_number = link_get_number
 
         meta_filepath = os.path.join(root, 'meta.json')
-        assert os.path.isfile(meta_filepath), f'Please Download The \'meta.json\' File Of A Specific Version Of The Younger Dataset From Official Website.'
+        if not os.path.isfile(meta_filepath):
+            print(f'No \'meta.json\' File Provided, It will be downloaded From Official Cite ...')
+            if encode_type == 'node':
+                download_url(getattr(YoungerDatasetAddress, f'DATAFLOW_{split.upper()}_WA_PAPER'), root, filename='meta.json')
+            if encode_type == 'operator':
+                download_url(getattr(YoungerDatasetAddress, f'DATAFLOW_{split.upper()}_WOA_PAPER'), root, filename='meta.json')
 
         self.meta = self.__class__.load_meta(meta_filepath)
         self.x_dict = self.__class__.get_x_dict(self.meta, node_dict_size, operator_dict_size)
@@ -105,7 +111,9 @@ class LinkDataset(Dataset):
     def download(self):
         archive_filepath = os.path.join(self.root, self.meta['archive'])
         if not fs.exists(archive_filepath):
-            archive_filepath = download_url(getattr(YoungerDatasetAddress, self.meta['url']), self.root, filename=self.meta['archive'])
+            print(f'Dataset Archive Not Found.It will be downloaded From Official Cite ...')
+            print(f'Begin Download {self.meta["archive"]}')
+            archive_filepath = download_url(self.meta['url'], self.root, filename=self.meta['archive'])
         tar_extract(archive_filepath, self.raw_dir)
 
         for sample_index in range(self.meta['size']):
