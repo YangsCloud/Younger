@@ -56,7 +56,17 @@ def split_run(arguments):
     dataset_dirpath = pathlib.Path(arguments.dataset_dirpath)
     save_dirpath = pathlib.Path(arguments.save_dirpath)
 
-    if arguments.community:
+    if arguments.ego:
+        from younger.datasets.constructors.official import ego_split
+        ego_split.main(
+            dataset_dirpath, save_dirpath,
+            range_left=arguments.range_left,
+            range_right=arguments.range_right,
+            sample_frequency=arguments.sample_frequency,
+            worker_number=arguments.worker_number,
+            seed=arguments.seed,
+        )
+    elif arguments.community:
         from younger.datasets.constructors.official import community_split
         community_split.main(
             tasks_filepath, dataset_dirpath, save_dirpath,
@@ -302,7 +312,12 @@ def set_datasets_split_arguments(parser: argparse.ArgumentParser):
     parser.add_argument('--version', type=str, required=True)
     parser.add_argument('--silly', action='store_true')
     parser.add_argument('--community', action='store_true')
+    parser.add_argument('--ego', action='store_true')
     parser.add_argument('--metric-name', type=str, default=None)
+
+    parser.add_argument('--sample-frequency', type=int, default=None)
+    parser.add_argument('--range-left', type=int, default=None)
+    parser.add_argument('--range-right', type=int, default=None)
 
     parser.add_argument('--node-size-lbound', type=int, default=None)
     parser.add_argument('--node-size-ubound', type=int, default=None)

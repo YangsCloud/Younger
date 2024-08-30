@@ -154,6 +154,7 @@ class Network(object):
     @classmethod
     def get_node_features_from_identifier(cls, node_identifier: str) -> dict[str, dict]:
         sub_ids = node_identifier.split('-o-a-')
+        # TODO: 'Type' Mode Is Not Covered
         assert len(sub_ids) == 2
         operator_id, attributes_id = sub_ids
 

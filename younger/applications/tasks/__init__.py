@@ -15,6 +15,7 @@ from younger.applications.tasks.performance_prediction import PerformancePredict
 from younger.applications.tasks.block_embedding import BlockEmbedding
 from younger.applications.tasks.node_prediction import NodePrediction
 from younger.applications.tasks.link_prediction import LinkPridiction
+from younger.applications.tasks.node_embedding import NodeEmbedding
 
 
 task_builders: dict[str, YoungerTask] = dict(
@@ -22,4 +23,5 @@ task_builders: dict[str, YoungerTask] = dict(
     block_embedding = BlockEmbedding,
     node_prediciton = NodePrediction,
     link_prediction = LinkPridiction,
+    node_embedding = NodeEmbedding,
 )
