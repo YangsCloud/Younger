@@ -10,18 +10,15 @@
 # LICENSE file in the root directory of this source tree.
 
 
-import ssl
 import tqdm
 import fsspec
 import pathlib
 import requests
 
-import urllib.request
-
 from younger.commons.io import create_dir
 
 
-def download(url: str, dirpath: pathlib.Path, force: bool = True):
+def download(url: str, dirpath: pathlib.Path, force: bool = True, proxy: str | None = None):
     r"""Downloads the content of an URL to a specific directory path.
 
     Args:
@@ -33,6 +30,15 @@ def download(url: str, dirpath: pathlib.Path, force: bool = True):
 
     filepath = dirpath.joinpath(filename)
 
+    if proxy:
+        print(f'URL Requests Through Proxy {proxy}')
+        proxies = dict(
+            http = f'http://{proxy}',
+            https = f'https://{proxy}',
+        )
+    else:
+        proxies = None
+
     print(f'Downloading {url}')
 
     create_dir(dirpath)
@@ -43,11 +49,11 @@ def download(url: str, dirpath: pathlib.Path, force: bool = True):
     else:
         resume_byte_pos = 0
 
-    response = requests.get(url, stream=True, allow_redirects=True)
+    response = requests.get(url, stream=True, allow_redirects=True, proxies=proxies)
     total_size = int(response.headers.get('Content-Length', '0'))
 
     headers = {'Content-Length': '0', 'Range': f'bytes={resume_byte_pos}-'}
-    response = requests.get(url, stream=True, headers=headers, allow_redirects=True)
+    response = requests.get(url, stream=True, headers=headers, allow_redirects=True, proxies=proxies)
     if not force and (resume_byte_pos == total_size or total_size == 0):
         print(f'File is already downloaded: {filename}')
         return filepath

@@ -44,10 +44,17 @@ if __name__ == '__main__':
 
 
     download_dirpath = pathlib.Path('pts_onnx')
+    tar_filepaths = list()
     os.makedirs(download_dirpath, exist_ok=True)
     for index, workload in enumerate(workloads, start=1):
         print(f' v {index}. Now download {workload["name"]} (Size: {int(workload["size"])//(1024*1024)}MB)...')
         workload_link = workload["link"].replace('blob', 'raw')
         tar_filepath = download(workload_link, download_dirpath, force=False)
+        tar_filepaths.append(tar_filepath)
+        print(' ^ Done')
+
+    print(' = Uncompress All Tars')
+    for tar_filepath in tar_filepaths:
+        print(f' v {index}. Uncompressing {tar_filepath}...')
         tar_extract(tar_filepath, download_dirpath)
         print(' ^ Done')
