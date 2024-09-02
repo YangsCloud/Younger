@@ -47,6 +47,7 @@ if __name__ == '__main__':
     os.makedirs(download_dirpath, exist_ok=True)
     for index, workload in enumerate(workloads, start=1):
         print(f' v {index}. Now download {workload["name"]} (Size: {int(workload["size"])//(1024*1024)}MB)...')
-        tar_filepath = download(workload["link"], download_dirpath)
+        workload_link = workload["link"].replace('blob', 'raw')
+        tar_filepath = download(workload_link, download_dirpath, force=False)
         tar_extract(tar_filepath, download_dirpath)
         print(' ^ Done')
