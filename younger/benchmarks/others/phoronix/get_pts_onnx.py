@@ -56,5 +56,5 @@ if __name__ == '__main__':
     print(' = Uncompress All Tars')
     for index, tar_filepath in enumerate(tar_filepaths, start=1):
         print(f' v {index}. Uncompressing {tar_filepath}...')
-        tar_extract(tar_filepath, download_dirpath)
+        tar_extract(tar_filepath, download_dirpath.joinpath('models'))
         print(' ^ Done')
