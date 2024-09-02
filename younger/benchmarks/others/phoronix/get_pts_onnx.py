@@ -54,7 +54,7 @@ if __name__ == '__main__':
         print(' ^ Done')
 
     print(' = Uncompress All Tars')
-    for tar_filepath in tar_filepaths:
+    for index, tar_filepath in enumerate(tar_filepaths, start=1):
         print(f' v {index}. Uncompressing {tar_filepath}...')
         tar_extract(tar_filepath, download_dirpath)
         print(' ^ Done')
