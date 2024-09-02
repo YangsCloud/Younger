@@ -20,7 +20,7 @@ from younger.commons.logging import logger
 from younger.commons.download import download
 
 
-def prepare_phoronix_onnx(download_xml: pathlib.Path, download_dir: pathlib.Path):
+def prepare_phoronix(download_xml: pathlib.Path, download_dir: pathlib.Path):
     xml_tree = ElementTree.parse(download_xml)
 
     xml_root = xml_tree.getroot()

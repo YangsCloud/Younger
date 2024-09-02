@@ -17,6 +17,12 @@ from younger.commons.io import tar_extract
 from younger.commons.logging import logger
 from younger.commons.download import download
 
+from younger.datasets.modules import Instance
 
-def profile_phoronix_onnx(download_xml: pathlib.Path, download_dir: pathlib.Path):
-    pass
+
+def analyze_phoronix(phoronix_dir: pathlib.Path, analysis_dir: pathlib.Path):
+    for onnx_filepath in phoronix_dir.rglob('*.onnx'):
+        instance = Instance(onnx_filepath)
+        instance.save(analysis_dir)
+        print(onnx_filepath)
+    print(analysis_dir)

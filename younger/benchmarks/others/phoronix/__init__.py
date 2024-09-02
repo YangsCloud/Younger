@@ -10,5 +10,6 @@
 # LICENSE file in the root directory of this source tree.
 
 
-from .prepare_phoronix_onnx import prepare_phoronix_onnx
-from .profile_phoronix_onnx import profile_phoronix_onnx
+from .prepare_phoronix import prepare_phoronix
+from .profile_phoronix import profile_phoronix
+from .analyze_phoronix import analyze_phoronix

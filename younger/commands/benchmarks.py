@@ -33,9 +33,19 @@ def others_phoronix_prepare_run(arguments):
     download_xml = pathlib.Path(arguments.download_xml)
     download_dir = pathlib.Path(arguments.download_dir)
 
-    from younger.benchmarks.others.phoronix import prepare_phoronix_onnx
+    from younger.benchmarks.others.phoronix import prepare_phoronix
 
-    prepare_phoronix_onnx(download_xml, download_dir)
+    prepare_phoronix(download_xml, download_dir)
+
+
+def others_phoronix_analyze_run(arguments):
+    update_logger(arguments)
+    phoronix_dir = pathlib.Path(arguments.phoronix_dir)
+    analysis_dir = pathlib.Path(arguments.analysis_dir)
+
+    from younger.benchmarks.others.phoronix import analyze_phoronix
+
+    analyze_phoronix(phoronix_dir, analysis_dir)
 
 
 def others_phoronix_profile_run(arguments):
@@ -56,6 +66,12 @@ def set_others_arguments(parser: argparse.ArgumentParser):
     phoronix_prepare_parser.add_argument('--download-dir', type=str)
     phoronix_prepare_parser.add_argument('--logging-filepath', type=str, default=None)
     phoronix_prepare_parser.set_defaults(run=others_phoronix_prepare_run)
+
+    phoronix_analyze_parser = subparser.add_parser('phoronix-analyze')
+    phoronix_analyze_parser.add_argument('--phoronix-dir', type=str)
+    phoronix_analyze_parser.add_argument('--analysis-dir', type=str)
+    phoronix_analyze_parser.add_argument('--logging-filepath', type=str, default=None)
+    phoronix_analyze_parser.set_defaults(run=others_phoronix_analyze_run)
 
 
 def set_benchmarks_arguments(parser: argparse.ArgumentParser):
