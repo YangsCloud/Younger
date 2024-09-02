@@ -43,9 +43,11 @@ def download(url: str, dirpath: pathlib.Path, force: bool = True):
     else:
         resume_byte_pos = 0
 
+    response = requests.get(url, stream=True, allow_redirects=True)
+    total_size = int(response.headers.get('Content-Length', '0'))
+
     headers = {'Content-Length': '0', 'Range': f'bytes={resume_byte_pos}-'}
     response = requests.get(url, stream=True, headers=headers, allow_redirects=True)
-    total_size = int(response.headers.get('Content-Length', '0'))
     if not force and (resume_byte_pos == total_size or total_size == 0):
         print(f'File is already downloaded: {filename}')
         return filepath
