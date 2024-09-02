@@ -11,18 +11,17 @@
 
 
 import os
-import wget
 import pathlib
-import requests
 
 from xml.etree import ElementTree
 
 from younger.commons.io import tar_extract
+from younger.commons.logging import logger
 from younger.commons.download import download
 
 
-if __name__ == '__main__':
-    xml_tree = ElementTree.parse('downloads.xml')
+def prepare_phoronix_onnx(download_xml: pathlib.Path, download_dir: pathlib.Path):
+    xml_tree = ElementTree.parse(download_xml)
 
     xml_root = xml_tree.getroot()
 
@@ -43,18 +42,17 @@ if __name__ == '__main__':
         )
 
 
-    download_dirpath = pathlib.Path('pts_onnx')
     tar_filepaths = list()
-    os.makedirs(download_dirpath, exist_ok=True)
+    os.makedirs(download_dir, exist_ok=True)
     for index, workload in enumerate(workloads, start=1):
-        print(f' v {index}. Now download {workload["name"]} (Size: {int(workload["size"])//(1024*1024)}MB)...')
+        logger.info(f' v {index}. Now download {workload["name"]} (Size: {int(workload["size"])//(1024*1024)}MB)...')
         workload_link = workload["link"].replace('blob', 'raw')
-        tar_filepath = download(workload_link, download_dirpath, force=False)
+        tar_filepath = download(workload_link, download_dir, force=False)
         tar_filepaths.append(tar_filepath)
-        print(' ^ Done')
+        logger.info(' ^ Done')
 
-    print(' = Uncompress All Tars')
+    logger.info(' = Uncompress All Tars')
     for index, tar_filepath in enumerate(tar_filepaths, start=1):
-        print(f' v {index}. Uncompressing {tar_filepath}...')
-        tar_extract(tar_filepath, download_dirpath.joinpath('models'))
-        print(' ^ Done')
+        logger.info(f' v {index}. Uncompressing {tar_filepath}...')
+        tar_extract(tar_filepath, download_dir.joinpath('models'))
+        logger.info(' ^ Done')
