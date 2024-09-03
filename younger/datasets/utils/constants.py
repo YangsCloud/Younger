@@ -15,39 +15,6 @@ import onnx
 from younger.commons.constants import Constant
 
 
-class ONNX_OPERATOR_DOMAIN(Constant):
-    def initialize(self) -> None:
-        self.DEFAULT = onnx.defs.ONNX_DOMAIN
-        self.ML = onnx.defs.ONNX_ML_DOMAIN
-        self.PREVIEW_TRAINING = onnx.defs.AI_ONNX_PREVIEW_TRAINING_DOMAIN
-
-ONNXOperatorDomain = ONNX_OPERATOR_DOMAIN()
-ONNXOperatorDomain.initialize()
-ONNXOperatorDomain.freeze()
-
-
-class ONNX_OPERATOR_TYPE(Constant):
-    def initialize(self) -> None:
-        default_types = set()
-        ml_types = set()
-        preview_training_types = set()
-        for op_schema in onnx.defs.get_all_schemas():
-            if op_schema.domain == ONNXOperatorDomain.DEFAULT:
-                default_types.add(op_schema.name)
-            elif op_schema.domain == ONNXOperatorDomain.ML:
-                ml_types.add(op_schema.name)
-            elif op_schema.domain == ONNXOperatorDomain.PREVIEW_TRAINING:
-                preview_training_types.add(op_schema.name)
-
-        self.DEFAULT = frozenset(default_types)
-        self.ML = frozenset(ml_types)
-        self.PREVIEW_TRAINING = frozenset(preview_training_types)
-
-ONNXOperatorType = ONNX_OPERATOR_TYPE()
-ONNXOperatorType.initialize()
-ONNXOperatorType.freeze()
-
-
 class ONNX_OPERAND_TYPE(Constant):
     def initialize(self) -> None:
         operand_types = dict()
@@ -112,6 +79,21 @@ ONNX.OPSetVersions = sorted(set(schema.since_version for schema in onnx.defs.get
 
 
 # ^^^^^^^^^^^ Above Code Should Be Rewrite ^^^^^^^^^^^^^^
+
+
+class ONNX_OPERATOR(Constant):
+    def initialize(self) -> None:
+        self.DOMAINS = (onnx.defs.ONNX_DOMAIN, onnx.defs.ONNX_ML_DOMAIN, onnx.defs.AI_ONNX_PREVIEW_TRAINING_DOMAIN)
+
+        types = set()
+        for op_schema in onnx.defs.get_all_schemas():
+            types.add((op_schema.name, op_schema.domain))
+        self.TYPES = frozenset(types)
+
+ONNXOperator = ONNX_OPERATOR()
+ONNXOperator.initialize()
+ONNXOperator.freeze()
+
 
 class README_PATTERN(Constant):
     def initialize(self) -> None:
