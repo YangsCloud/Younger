@@ -13,6 +13,8 @@
 import pathlib
 import argparse
 
+from typing import Literal
+
 from younger.commons.logging import set_logger, use_logger
 from younger.commons.constants import YoungerHandle
 
@@ -28,56 +30,73 @@ def run(arguments):
     pass
 
 
-def others_phoronix_prepare_run(arguments):
+def prepare_run(arguments):
     update_logger(arguments)
-    download_xml = pathlib.Path(arguments.download_xml)
-    download_dir = pathlib.Path(arguments.download_dir)
+    bench_dirpath = pathlib.Path(arguments.bench_dirpath)
+    dataset_dirpath = pathlib.Path(arguments.dataset_dirpath)
 
-    from younger.benchmarks.others.phoronix import prepare_phoronix
+    from younger.benchmarks.prepare import main
 
-    prepare_phoronix(download_xml, download_dir)
+    main(bench_dirpath, dataset_dirpath, arguments.version)
 
 
-def others_phoronix_analyze_run(arguments):
+def analyze_run(arguments):
     update_logger(arguments)
-    phoronix_dir = pathlib.Path(arguments.phoronix_dir)
-    analysis_dir = pathlib.Path(arguments.analysis_dir)
+    dataset_dirpath = pathlib.Path(arguments.dataset_dirpath)
+    statistics_dirpath = pathlib.Path(arguments.statistics_dirpath)
 
-    from younger.benchmarks.others.phoronix import analyze_phoronix
+    from younger.benchmarks.analyze import main
 
-    analyze_phoronix(phoronix_dir, analysis_dir)
+    main(dataset_dirpath, statistics_dirpath)
 
 
-def others_phoronix_profile_run(arguments):
+def produce_run(arguments):
     update_logger(arguments)
-    download_xml = pathlib.Path(arguments.download_xml)
-    download_dir = pathlib.Path(arguments.download_dir)
+    real_dirpath = pathlib.Path(arguments.real_dirpath)
+    product_dirpath = pathlib.Path(arguments.product_dirpath)
+    statistics_dirpath = pathlib.Path(arguments.statistics_dirpath) if arguments.statistics_dirpath is not None else None
 
-    from younger.benchmarks.others.phoronix import profile_phoronix_onnx
+    from younger.benchmarks.produce import main
 
-    profile_phoronix_onnx(download_xml, download_dir)
+    main(real_dirpath, product_dirpath, statistics_dirpath)
 
 
-def set_others_arguments(parser: argparse.ArgumentParser):
-    subparser = parser.add_subparsers()
+def set_prepare_arguments(parser: argparse.ArgumentParser):
+    parser.add_argument('--bench-dirpath', type=str)
+    parser.add_argument('--dataset-dirpath', type=str)
+    parser.add_argument('--version', type=str)
 
-    phoronix_prepare_parser = subparser.add_parser('phoronix-prepare')
-    phoronix_prepare_parser.add_argument('--download-xml', type=str)
-    phoronix_prepare_parser.add_argument('--download-dir', type=str)
-    phoronix_prepare_parser.add_argument('--logging-filepath', type=str, default=None)
-    phoronix_prepare_parser.set_defaults(run=others_phoronix_prepare_run)
+    parser.add_argument('--logging-filepath', type=str, default=None)
+    parser.set_defaults(run=prepare_run)
 
-    phoronix_analyze_parser = subparser.add_parser('phoronix-analyze')
-    phoronix_analyze_parser.add_argument('--phoronix-dir', type=str)
-    phoronix_analyze_parser.add_argument('--analysis-dir', type=str)
-    phoronix_analyze_parser.add_argument('--logging-filepath', type=str, default=None)
-    phoronix_analyze_parser.set_defaults(run=others_phoronix_analyze_run)
+
+def set_analyze_arguments(parser: argparse.ArgumentParser):
+    parser.add_argument('--dataset-dirpath', type=str)
+    parser.add_argument('--statistics-dirpath', type=str)
+
+    parser.add_argument('--logging-filepath', type=str, default=None)
+    parser.set_defaults(run=analyze_run)
+
+
+def set_produce_arguments(parser: argparse.ArgumentParser):
+    parser.add_argument('--real-dirpath', type=str)
+    parser.add_argument('--product-dirpath', type=str)
+    parser.add_argument('--statistics-dirpath', type=str, default=None)
+
+    parser.add_argument('--logging-filepath', type=str, default=None)
+    parser.set_defaults(run=produce_run)
 
 
 def set_benchmarks_arguments(parser: argparse.ArgumentParser):
     subparser = parser.add_subparsers()
 
-    others_parser = subparser.add_parser('others')
-    set_others_arguments(others_parser)
+    prepare_parser = subparser.add_parser('prepare')
+    set_prepare_arguments(prepare_parser)
+
+    analyze_parser = subparser.add_parser('analyze')
+    set_analyze_arguments(analyze_parser)
+
+    produce_parser = subparser.add_parser('produce')
+    set_produce_arguments(produce_parser)
 
     parser.set_defaults(run=run)

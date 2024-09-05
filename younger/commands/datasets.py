@@ -47,6 +47,7 @@ def filter_run(arguments):
         dataset_dirpath, save_dirpath,
         arguments.worker_number,
         arguments.max_inclusive_version,
+        arguments.clean,
     )
 
 
@@ -297,6 +298,8 @@ def set_datasets_filter_arguments(parser: argparse.ArgumentParser):
     parser.add_argument('--save-dirpath', type=str, default='.')
 
     parser.add_argument('--max-inclusive-version', type=int, default=None)
+
+    parser.add_argument('--clean', action='store_true')
 
     parser.add_argument('--worker-number', type=int, default=4)
 
