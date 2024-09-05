@@ -10,6 +10,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import tqdm
 import pathlib
 
 from younger.datasets.modules import Instance
@@ -17,7 +18,8 @@ from younger.datasets.modules import Instance
 
 def get_instances(dataset_dirpath: pathlib.Path) -> list[Instance]:
     instances = list()
-    for instance_dirpath in dataset_dirpath.iterdir():
+    instance_dirpaths = list(dataset_dirpath.iterdir())
+    for instance_dirpath in tqdm.tqdm(instance_dirpaths, desc='Loading Instance'):
         instance = Instance()
         try:
             instance.load(instance_dirpath)

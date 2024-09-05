@@ -51,9 +51,9 @@ def main(dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path):
     worksheet.write(0, 0, 'OP_Name')
     worksheet.write(0, 1, 'Phoronix')
 
-    for index, (op, count) in enumerate(op_frequency.items(), start=1):
+    for index, (op, frequency) in enumerate(op_frequency.items(), start=1):
         worksheet.write(index, 0, op)
-        worksheet.write(index, 1, count)
+        worksheet.write(index, 1, frequency)
 
     workbook.close()
     logger.info(f'   XLSX Statistics results saved into: {statistics_xlsx_filepath}')
