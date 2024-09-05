@@ -37,7 +37,7 @@ def main(real_dirpath: pathlib.Path, product_dirpath: pathlib.Path, statistics_d
     logger.info(f' ^ Done')
 
     logger.info(f' v Loading all Instances in Younger ...')
-    instances = get_instances(younger_dirpath)
+    instances = get_instances(younger_dirpath, remove_tiny=30)
     logger.info(f' ^ Done')
 
     if statistics_dirpath is None:
@@ -109,6 +109,18 @@ def main(real_dirpath: pathlib.Path, product_dirpath: pathlib.Path, statistics_d
         for index, instance in enumerate(instances)
     ]
 
+    no_quantize_product = list()
+    for product in detailed_product:
+        invalid = False
+        for op, _ in product['detail']:
+            if ('Integer' in op) or ('Quantize' in op):
+                invalid = True
+                break
+        if not invalid:
+            no_quantize_product.append(product)
+
+    detailed_product = no_quantize_product
+
     kind_base_product = sorted(detailed_product, key=lambda x: x['kind'], reverse=True)
     freq_base_product = sorted(detailed_product, key=lambda x: x['freq'], reverse=True)
 
@@ -128,8 +140,8 @@ def main(real_dirpath: pathlib.Path, product_dirpath: pathlib.Path, statistics_d
         f'    - Top10: {freq_base_product[9]["freq"]}/{freq_base_product[9]["overall_freq"]} ({freq_base_product[9]["freq"]/freq_base_product[9]["overall_freq"]*100:.2f}%)\n'
     )
 
-    kind_pct_base_product = sorted(detailed_product, key=lambda x: x['kind']/x['overall_kind'], reverse=True)
-    freq_pct_base_product = sorted(detailed_product, key=lambda x: x['freq']/x['overall_freq'], reverse=True)
+    kind_pct_base_product = sorted(detailed_product, key=lambda x: (x['kind']/x['overall_kind']) if x['overall_kind'] !=0 else 0, reverse=True)
+    freq_pct_base_product = sorted(detailed_product, key=lambda x: (x['freq']/x['overall_freq']) if x['overall_freq'] !=0 else 0, reverse=True)
 
     logger.info(
         f'\n   Kind-Base:\n'

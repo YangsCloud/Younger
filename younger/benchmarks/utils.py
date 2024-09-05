@@ -16,14 +16,17 @@ import pathlib
 from younger.datasets.modules import Instance
 
 
-def get_instances(dataset_dirpath: pathlib.Path) -> list[Instance]:
+def get_instances(dataset_dirpath: pathlib.Path, remove_tiny: int | None = None) -> list[Instance]:
     instances = list()
     instance_dirpaths = list(dataset_dirpath.iterdir())
     for instance_dirpath in tqdm.tqdm(instance_dirpaths, desc='Loading Instance'):
         instance = Instance()
         try:
             instance.load(instance_dirpath)
-            instances.append(instance)
+            if len(instance.network.graph) < remove_tiny:
+                continue
+            else:
+                instances.append(instance)
         except:
             continue
 
