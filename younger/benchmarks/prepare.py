@@ -10,11 +10,13 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import os
 import pathlib
 
+from typing import Literal
 from xml.etree import ElementTree
 
-from younger.commons.io import tar_extract
+from younger.commons.io import tar_extract, create_dir
 from younger.commons.logging import logger
 from younger.commons.download import download
 
@@ -30,12 +32,56 @@ SUPPORT_VERSION = {
 }
 
 
-def mlperf_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path, release: str, direct: bool = False) -> list[Instance]:
+def hf_hub_download(r_path: str, l_path: str):
+    from huggingface_hub import HfFileSystem
+    hf_file_system = HfFileSystem()
+
+    if hf_file_system.isdir(r_path):
+        logger.info(f'     -> A dirpath is provided, now downloading the dir ...')
+        for r_child_path in hf_file_system.glob(os.path.join(r_path, '**'), detail=False):
+            if hf_file_system.isfile(r_child_path):
+                relative_path = os.path.relpath(r_child_path, start=r_path)
+                l_child_path = os.path.join(l_path, relative_path)
+                l_child_parent = os.path.dirname(l_child_path)
+                create_dir(l_child_parent)
+                child_link = hf_file_system.url(r_child_path)
+                download(child_link, pathlib.Path(l_child_parent), force=False)
+        logger.info(f'     -> Done')
+
+    if hf_file_system.isfile(r_path):
+        logger.info(f'     -> A filepath is provided, now downloading the file ...')
+        link = hf_file_system.url(r_path)
+        download(link, pathlib.Path(l_path), force=False)
+        logger.info(f'     -> Done')
+
+
+def mlperf_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path, release: str, direct: Literal['instance', 'onnx', 'both'] | None = None) -> list[Instance]:
     if direct:
         if release == 'v4.1':
-            pass
+            r_dirpath = 'datasets/AIJasonYoung/YoungBench-Assets/competitors/mlperf_v4.1'
         if release == 'v0.5':
+            r_dirpath = 'datasets/AIJasonYoung/YoungBench-Assets/competitors/mlperf_v0.5'
+
+        r_instances_dirpath = os.path.join(r_dirpath, 'instances')
+        r_onnxs_dirpath = os.path.join(r_dirpath, 'onnxs')
+
+        instances: list[Instance] = list()
+        if direct in {'instance', 'both'}:
+            logger.info(f' = Getting Instances From Official Repository ...')
+            hf_hub_download(r_instances_dirpath, str(dataset_dirpath.absolute()))
+            for path in dataset_dirpath.iterdir():
+                instance = Instance()
+                instance.load(path)
+                instances.append(instance)
+
+        if direct in {'onnx', 'both'}:
+            logger.info(f' = Getting ONNXs ...')
+            hf_hub_download(r_onnxs_dirpath, str(dataset_dirpath.absolute()))
+
+        if len(instances) == 0:
             pass
+        else:
+            logger.info(' = Not Retrieved Any Instances.')
     else:
         if release == 'v4.1':
             onnx_links = {
@@ -97,12 +143,33 @@ def mlperf_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path, r
                     instance.save(instance_dirpath)
                     logger.info(f'    - No.{index}. Instance saved into {instance_dirpath}')
             logger.info(f' ^ Done')
-        return instances
+    return instances
 
 
-def phoronix_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path, direct: bool = False) -> list[Instance]:
+def phoronix_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path, direct: Literal['instance', 'onnx', 'both'] | None = None) -> list[Instance]:
     if direct:
-        pass
+        r_dirpath = 'datasets/AIJasonYoung/YoungBench-Assets/competitors/phoronix'
+        r_instances_dirpath = os.path.join(r_dirpath, 'instances')
+        r_onnxs_dirpath = os.path.join(r_dirpath, 'onnxs')
+
+        instances: list[Instance] = list()
+        if direct in {'instance', 'both'}:
+            logger.info(f' = Getting Instances From Official Repository ...')
+            hf_hub_download(r_instances_dirpath, str(dataset_dirpath.absolute()))
+            for path in dataset_dirpath.iterdir():
+                instance = Instance()
+                instance.load(path)
+                instances.append(instance)
+
+        if direct in {'onnx', 'both'}:
+            logger.info(f' = Getting ONNXs ...')
+            hf_hub_download(r_onnxs_dirpath, str(dataset_dirpath.absolute()))
+
+        if len(instances) == 0:
+            pass
+        else:
+            logger.info(' = Not Retrieved Any Instances.')
+
     else:
         xml_tree = ElementTree.parse(bench_dirpath.joinpath("downloads.xml"))
 
@@ -164,10 +231,10 @@ def phoronix_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path,
                 instance.save(instance_dirpath)
                 logger.info(f'   Instance saved into {instance_dirpath}')
             logger.info(f' ^ Done')
-        return instances
+    return instances
 
 
-def main(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path, version: str, direct: bool = False):
+def main(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path, version: str, direct: Literal['instance', 'onnx', 'both'] | None = None):
     assert version in SUPPORT_VERSION
     prepared = False
     if version == 'phoronix':

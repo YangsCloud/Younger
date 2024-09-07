@@ -37,7 +37,7 @@ def prepare_run(arguments):
 
     from younger.benchmarks.prepare import main
 
-    main(bench_dirpath, dataset_dirpath, arguments.version)
+    main(bench_dirpath, dataset_dirpath, arguments.version, arguments.direct)
 
 
 def analyze_run(arguments):
@@ -65,6 +65,7 @@ def set_prepare_arguments(parser: argparse.ArgumentParser):
     parser.add_argument('--bench-dirpath', type=str)
     parser.add_argument('--dataset-dirpath', type=str)
     parser.add_argument('--version', type=str)
+    parser.add_argument('--direct', type=str, choices=['instance', 'onnx', 'both', None], default=None)
 
     parser.add_argument('--logging-filepath', type=str, default=None)
     parser.set_defaults(run=prepare_run)
