@@ -18,15 +18,16 @@ import requests
 from younger.commons.io import create_dir
 
 
-def download(url: str, dirpath: pathlib.Path, force: bool = True, proxy: str | None = None):
+def download(url: str, dirpath: pathlib.Path, filename: str | None = None, force: bool = True, proxy: str | None = None):
     r"""Downloads the content of an URL to a specific directory path.
 
     Args:
         url (str): The URL.
         dirpath (pathlib.Path): The folder.
     """
-    filename = url.rpartition('/')[2]
-    filename = filename if filename[0] == '?' else filename.split('?')[0]
+    if filename is None:
+        filename = url.rpartition('/')[2]
+        filename = filename if filename[0] == '?' else filename.split('?')[0]
 
     filepath = dirpath.joinpath(filename)
 
