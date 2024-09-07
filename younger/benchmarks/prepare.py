@@ -239,13 +239,16 @@ def convert_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path) 
     logger.info(' = Extracting All Instances')
     instances: list[Instance] = list()
     for index, model_path in enumerate(bench_dirpath.iterdir()):
-        model_name = model_path.name
+        model_name = model_path.stem
         logger.info(f' v Now processing model: {model_name}')
         if model_path.is_dir():
             model_dirpath = bench_dirpath.joinpath(f'{model_name}')
             model_filepaths = [model_filepath for model_filepath in model_dirpath.rglob('*.onnx')]
         else:
-            model_filepaths = [bench_dirpath.joinpath(f'{model_name}')]
+            if model_path.name.endswith('.onnx'):
+                model_filepaths = [bench_dirpath.joinpath(f'{model_name}.onnx')]
+            else:
+                continue
         logger.info(f'   This ONNX model contains total {len(model_filepaths)} sub models')
         for index, model_filepath in enumerate(model_filepaths):
             model_name = f'{model_name}-{index}'
