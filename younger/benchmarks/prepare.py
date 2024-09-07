@@ -76,7 +76,7 @@ def mlperf_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path, r
 
         if direct in {'onnx', 'both'}:
             logger.info(f' = Getting ONNXs ...')
-            hf_hub_download(r_onnxs_dirpath, str(dataset_dirpath.absolute()))
+            hf_hub_download(r_onnxs_dirpath, str(bench_dirpath.absolute()))
 
         if len(instances) == 0:
             pass
@@ -163,7 +163,7 @@ def phoronix_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path,
 
         if direct in {'onnx', 'both'}:
             logger.info(f' = Getting ONNXs ...')
-            hf_hub_download(r_onnxs_dirpath, str(dataset_dirpath.absolute()))
+            hf_hub_download(r_onnxs_dirpath, str(bench_dirpath.absolute()))
 
         if len(instances) == 0:
             pass
