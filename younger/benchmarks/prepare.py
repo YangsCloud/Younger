@@ -26,6 +26,7 @@ from optimum.exporters.onnx import main_export
 
 
 SUPPORT_VERSION = {
+    'convert',
     'phoronix',
     'mlperf_v4.1',
     'mlperf_v0.5'
@@ -76,7 +77,7 @@ def mlperf_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path, r
 
         if direct in {'onnx', 'both'}:
             logger.info(f' = Getting ONNXs ...')
-            hf_hub_download(r_onnxs_dirpath, str(bench_dirpath.absolute()))
+            hf_hub_download(r_onnxs_dirpath, str(dataset_dirpath.absolute()))
 
         if len(instances) == 0:
             pass
@@ -163,7 +164,7 @@ def phoronix_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path,
 
         if direct in {'onnx', 'both'}:
             logger.info(f' = Getting ONNXs ...')
-            hf_hub_download(r_onnxs_dirpath, str(bench_dirpath.absolute()))
+            hf_hub_download(r_onnxs_dirpath, str(dataset_dirpath.absolute()))
 
         if len(instances) == 0:
             pass
@@ -215,7 +216,7 @@ def phoronix_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path,
             model_filepaths = [model_filepath for model_filepath in model_dirpath.rglob('*.onnx')]
             assert len(model_filepaths) == 1
 
-            model_filepath = model_filepaths[0]
+            model_filepath = f'{model_filepaths[0]}-0'
             instance_dirpath = dataset_dirpath.joinpath(model_name)
             if instance_dirpath.is_dir():
                 logger.info(f'   Instance Alreadly Exists: {instance_dirpath}')
@@ -234,9 +235,45 @@ def phoronix_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path,
     return instances
 
 
+def convert_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path) -> list[Instance]:
+    logger.info(' = Extracting All Instances')
+    instances: list[Instance] = list()
+    for index, model_path in enumerate(bench_dirpath.iterdir()):
+        model_name = model_path.name
+        logger.info(f' v Now processing model: {model_name}')
+        if model_path.is_dir():
+            model_dirpath = bench_dirpath.joinpath(f'{model_name}')
+            model_filepaths = [model_filepath for model_filepath in model_dirpath.rglob('*.onnx')]
+        else:
+            model_filepaths = [bench_dirpath.joinpath(f'{model_name}')]
+        logger.info(f'   This ONNX model contains total {len(model_filepaths)} sub models')
+        for index, model_filepath in enumerate(model_filepaths):
+            model_name = f'{model_name}-{index}'
+            instance_dirpath = dataset_dirpath.joinpath(model_name)
+            if instance_dirpath.is_dir():
+                logger.info(f'    - Instance Alreadly Exists: {instance_dirpath}')
+                instance = Instance()
+                instance.load(instance_dirpath)
+                instances.append(instance)
+            else:
+                logger.info(f'      Model Filepath: {model_filepath}')
+                logger.info(f'      Extracting Instance ...')
+                instance = Instance(model_filepath)
+                instances.append(instance)
+                logger.info(f'    - Extracted')
+                instance.save(instance_dirpath)
+                logger.info(f'    - No.{index}. Instance saved into {instance_dirpath}')
+        logger.info(f' ^ Done')
+    return instances
+
+
 def main(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path, version: str, direct: Literal['instance', 'onnx', 'both'] | None = None):
     assert version in SUPPORT_VERSION
     prepared = False
+    if version == 'convert':
+        instances = convert_prepare(bench_dirpath, dataset_dirpath)
+        prepared = True
+
     if version == 'phoronix':
         instances = phoronix_prepare(bench_dirpath, dataset_dirpath, direct)
         prepared = True
