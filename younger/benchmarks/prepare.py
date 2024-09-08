@@ -88,7 +88,7 @@ def mlperf_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path, r
             onnx_links = {
                 'resnet50-v1.5-fp32': 'https://zenodo.org/record/4735647/files/resnet50_v1.onnx',
                 'retinanet-800x800-fp32': 'https://zenodo.org/record/6617879/files/resnext50_32x4d_fpn.onnx',
-                # 'BERT-Large-int8': 'https://zenodo.org/records/3750364/files/bert_large_v1_1_fake_quant.onnx',
+                'BERT-Large-int8': 'https://zenodo.org/records/3750364/files/bert_large_v1_1_fake_quant.onnx',
                 'BERT-Large-fp32': 'https://zenodo.org/records/3733910/files/model.onnx',
                 '3d-unet-fp32': 'https://zenodo.org/records/5597155/files/3dunet_kits19_128x128x128.onnx',
                 'gpt-j-fp32': {'model_id': 'EleutherAI/gpt-j-6b', 'task': 'auto'},
