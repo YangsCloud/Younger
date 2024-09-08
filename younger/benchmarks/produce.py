@@ -12,32 +12,15 @@
 
 import pathlib
 
-from younger.commons.io import tar_extract, load_json, save_json
+from younger.commons.io import load_json, save_json
 from younger.commons.logging import logger
-from younger.commons.download import download
 
 from younger.benchmarks.utils import get_instances, get_op_string
 
 
-YOUNGER_V_PAPER_FILTER_DETAIL_URL="https://datasets.yangs.cloud/public/assets/622387f1-dee7-4019-b538-34f341eb2914?download="
-YOUNGER_V_PAPER_FILTER_DETAIL_NAME = 'detailed_filter_series_without_attributes_paper'
-
-
 def main(real_dirpath: pathlib.Path, product_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path | None = None):
-    logger.info(f' v Downloading Younger ...')
-    tar_filepath = download(YOUNGER_V_PAPER_FILTER_DETAIL_URL, real_dirpath, force=False)
-    logger.info(f' ^ Done')
-
-    younger_dirpath = real_dirpath.joinpath(YOUNGER_V_PAPER_FILTER_DETAIL_NAME)
-    logger.info(f' v Uncompressing ...')
-    if younger_dirpath.is_dir():
-        pass
-    else:
-        tar_extract(tar_filepath, real_dirpath)
-    logger.info(f' ^ Done')
-
     logger.info(f' v Loading all Instances in Younger ...')
-    instances = get_instances(younger_dirpath, remove_tiny=30)
+    instances = get_instances(real_dirpath, remove_tiny=30)
     logger.info(f' ^ Done')
 
     if statistics_dirpath is None:

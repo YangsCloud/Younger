@@ -15,6 +15,7 @@ import pathlib
 
 from typing import Literal
 from xml.etree import ElementTree
+from optimum.exporters.onnx import main_export
 
 from younger.commons.io import tar_extract, create_dir
 from younger.commons.logging import logger
@@ -22,10 +23,11 @@ from younger.commons.download import download
 
 from younger.datasets.modules import Instance
 
-from optimum.exporters.onnx import main_export
+from younger.benchmarks.utils import get_instances
 
 
 SUPPORT_VERSION = {
+    'younger',
     'convert',
     'phoronix',
     'mlperf_v4.1',
@@ -270,9 +272,45 @@ def convert_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path) 
     return instances
 
 
+def younger_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path) -> list[Instance]:
+    YOUNGER_V_PAPER_FILTER_DETAIL_URL="https://datasets.yangs.cloud/public/assets/622387f1-dee7-4019-b538-34f341eb2914?download="
+    YOUNGER_V_PAPER_FILTER_DETAIL_NAME = 'detailed_filter_series_without_attributes_paper'
+
+    with open(bench_dirpath.joinpath('version')) as version_file:
+        version = version_file.read().strip()
+
+    if version == 'paper':
+        younger_link = YOUNGER_V_PAPER_FILTER_DETAIL_URL
+        younger_name = YOUNGER_V_PAPER_FILTER_DETAIL_NAME
+    else:
+        pass
+
+
+    logger.info(f' v Downloading Younger ...')
+    tar_filepath = download(younger_link, bench_dirpath, filename=f'{younger_name}.tgz', force=False)
+    logger.info(f' ^ Done')
+
+    younger_dirpath = dataset_dirpath.joinpath(younger_name)
+    logger.info(f' v Uncompressing ...')
+    if younger_dirpath.is_dir():
+        pass
+    else:
+        tar_extract(tar_filepath, dataset_dirpath)
+    logger.info(f' ^ Done')
+
+    logger.info(f' v Checking all Instances in Younger ...')
+    instances = get_instances(younger_dirpath)
+    logger.info(f' ^ Done')
+    return instances
+
+
 def main(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path, version: str, direct: Literal['instance', 'onnx', 'both'] | None = None):
     assert version in SUPPORT_VERSION
     prepared = False
+    if version == 'younger':
+        instances = younger_prepare(bench_dirpath, dataset_dirpath)
+        prepared = True
+
     if version == 'convert':
         instances = convert_prepare(bench_dirpath, dataset_dirpath)
         prepared = True

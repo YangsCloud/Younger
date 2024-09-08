@@ -10,6 +10,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import tqdm
 import pathlib
 import xlsxwriter
 
@@ -27,8 +28,12 @@ def main(dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path):
 
     op_frequency = dict()
     instances = get_instances(dataset_dirpath)
-    for instance in instances:
-        graph = Network.standardize(instance.network.graph)
+    for instance in tqdm.tqdm(instances, desc='Analyzing Instance'):
+        try:
+            graph = Network.standardize(instance.network.graph)
+        except:
+            # Already cleansed.
+            graph = instance.network.graph
         for node_index in graph.nodes():
             op = get_op_string(graph.nodes[node_index]['operator']['op_type'], graph.nodes[node_index]['operator']['domain'])
             op_frequency[op] = op_frequency.get(op, 0) + 1
@@ -49,7 +54,7 @@ def main(dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path):
     worksheet = workbook.add_worksheet('op_frequency')
 
     worksheet.write(0, 0, 'OP_Name')
-    worksheet.write(0, 1, 'Phoronix')
+    worksheet.write(0, 1, 'Frequency')
 
     for index, (op, frequency) in enumerate(op_frequency.items(), start=1):
         worksheet.write(index, 0, op)

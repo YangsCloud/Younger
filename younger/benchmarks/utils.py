@@ -23,7 +23,7 @@ def get_instances(dataset_dirpath: pathlib.Path, remove_tiny: int | None = None)
         instance = Instance()
         try:
             instance.load(instance_dirpath)
-            if len(instance.network.graph) < remove_tiny:
+            if remove_tiny and len(instance.network.graph) < remove_tiny:
                 continue
             else:
                 instances.append(instance)
