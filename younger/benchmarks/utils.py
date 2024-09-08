@@ -13,24 +13,26 @@
 import tqdm
 import pathlib
 
+from typing import Generator
 from younger.datasets.modules import Instance
 
 
-def get_instances(dataset_dirpath: pathlib.Path, remove_tiny: int | None = None) -> list[Instance]:
-    instances = list()
-    instance_dirpaths = list(dataset_dirpath.iterdir())
-    for instance_dirpath in tqdm.tqdm(instance_dirpaths, desc='Loading Instance'):
-        instance = Instance()
-        try:
-            instance.load(instance_dirpath)
-            if remove_tiny and len(instance.network.graph) < remove_tiny:
-                continue
-            else:
-                instances.append(instance)
-        except:
-            continue
+def get_instances(dataset_dirpath: pathlib.Path | str, remove_tiny: int | None = None) -> Generator[Instance, None, None]:
+    dataset_dirpath = pathlib.Path(dataset_dirpath) if isinstance(dataset_dirpath, str) else dataset_dirpath
 
-    return instances
+    instance_dirpaths = list(dataset_dirpath.iterdir())
+    with tqdm.tqdm(total=len(instance_dirpaths), desc='Loading Instance') as progress_bar:
+        for instance_dirpath in instance_dirpaths:
+            instance = Instance()
+            try:
+                instance.load(instance_dirpath)
+                if remove_tiny and len(instance.network.graph) < remove_tiny:
+                    continue
+                else:
+                    yield instance
+            except:
+                continue
+            progress_bar.update(1)
 
 
 def get_op_string(op_type: str, domain: str) -> str:

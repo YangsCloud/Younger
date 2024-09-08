@@ -61,6 +61,17 @@ def produce_run(arguments):
     main(real_dirpath, product_dirpath, statistics_dirpath)
 
 
+def merge_run(arguments):
+    update_logger(arguments)
+    real_dirpath = pathlib.Path(arguments.real_dirpath)
+    save_dirpath = pathlib.Path(arguments.save_dirpath)
+    other_dirpaths = [pathlib.Path(other_dirpath) for other_dirpath in arguments.other_dirpaths]
+
+    from younger.benchmarks.merge import main
+
+    main(real_dirpath, save_dirpath, other_dirpaths)
+
+
 def set_prepare_arguments(parser: argparse.ArgumentParser):
     parser.add_argument('--bench-dirpath', type=str)
     parser.add_argument('--dataset-dirpath', type=str)
@@ -88,6 +99,15 @@ def set_produce_arguments(parser: argparse.ArgumentParser):
     parser.set_defaults(run=produce_run)
 
 
+def set_merge_arguments(parser: argparse.ArgumentParser):
+    parser.add_argument('--real-dirpath', type=str)
+    parser.add_argument('--save-dirpath', type=str)
+    parser.add_argument('--other-dirpaths', type=str, nargs='+')
+
+    parser.add_argument('--logging-filepath', type=str, default=None)
+    parser.set_defaults(run=merge_run)
+
+
 def set_benchmarks_arguments(parser: argparse.ArgumentParser):
     subparser = parser.add_subparsers()
 
@@ -99,5 +119,8 @@ def set_benchmarks_arguments(parser: argparse.ArgumentParser):
 
     produce_parser = subparser.add_parser('produce')
     set_produce_arguments(produce_parser)
+
+    merge_parser = subparser.add_parser('merge')
+    set_merge_arguments(merge_parser)
 
     parser.set_defaults(run=run)
