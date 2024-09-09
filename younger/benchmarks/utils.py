@@ -21,7 +21,7 @@ def get_instances(dataset_dirpath: pathlib.Path | str, remove_tiny: int | None =
     dataset_dirpath = pathlib.Path(dataset_dirpath) if isinstance(dataset_dirpath, str) else dataset_dirpath
 
     instance_dirpaths = list(dataset_dirpath.iterdir())
-    with tqdm.tqdm(total=len(instance_dirpaths), desc='Loading Instance') as progress_bar:
+    with tqdm.tqdm(total=len(instance_dirpaths), desc='Processing Instance') as progress_bar:
         for instance_dirpath in instance_dirpaths:
             instance = Instance()
             try:

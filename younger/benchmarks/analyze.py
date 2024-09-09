@@ -10,7 +10,6 @@
 # LICENSE file in the root directory of this source tree.
 
 
-import tqdm
 import pathlib
 import xlsxwriter
 
@@ -27,8 +26,7 @@ def main(dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path):
     statistics = dict()
 
     op_frequency = dict()
-    instances = get_instances(dataset_dirpath)
-    for instance in tqdm.tqdm(instances, desc='Analyzing Instance'):
+    for instance in get_instances(dataset_dirpath):
         try:
             graph = Network.standardize(instance.network.graph)
         except:
