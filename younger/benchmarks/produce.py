@@ -50,7 +50,7 @@ def main(real_dirpath: pathlib.Path, product_dirpath: pathlib.Path, statistics_d
             instance_unknown_op_frequency[op] = instance_unknown_op_frequency.get(op, 0) + 1
         younger_op_frequency.append(instance_op_frequency)
         unknown_op_frequency.append(instance_unknown_op_frequency)
-    
+
     younger_statistics['overall_op_frequency'] = overall_op_frequency
     younger_statistics['younger_op_frequency'] = younger_op_frequency
     younger_statistics['unknown_op_frequency'] = unknown_op_frequency
@@ -69,7 +69,7 @@ def main(real_dirpath: pathlib.Path, product_dirpath: pathlib.Path, statistics_d
         total += has_uns
         unseen_op_kind.append(op_kind)
         unseen_op_freq.append(op_freq)
-    
+
     younger_statistics['unseen_op_kind'] = {f'{instances[index].labels["hash"]}': op_kind for index, op_kind in enumerate(unseen_op_kind)}
     younger_statistics['unseen_op_freq'] = {f'{instances[index].labels["hash"]}': op_freq for index, op_freq in enumerate(unseen_op_freq)}
 

@@ -100,7 +100,7 @@ def mlperf_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path, r
             onnx_links = {
                 'resnet50-v1.5-fp32': 'https://zenodo.org/record/2592612/files/resnet50_v1.onnx',
                 'mobilenet-v1-fp32': 'https://zenodo.org/record/3157894/files/mobilenet_v1_1.0_224.onnx',
-                # 'mobilenet-v1-int8': 'https://zenodo.org/record/3353417/files/Quantized%20MobileNet.zip',
+                # 'mobilenet-v1-int8': 'https://zenodo.org/record/3353417/files/Quantized%20MobileNet.zip', # Wrong Resources. Not An ONNX Model.
                 'ssd-mobilenet-300x300-fp32': 'https://zenodo.org/record/3163026/files/ssd_mobilenet_v1_coco_2018_01_28.onnx',
                 'ssd-resnet34-1200x1200-fp32': 'https://zenodo.org/record/3228411/files/resnet34-ssd1200.onnx',
             }
@@ -299,7 +299,7 @@ def younger_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path) 
     logger.info(f' ^ Done')
 
     logger.info(f' v Checking all Instances in Younger ...')
-    instances = get_instances(younger_dirpath)
+    instances = [instance for instance in get_instances(younger_dirpath)]
     logger.info(f' ^ Done')
     return instances
 
