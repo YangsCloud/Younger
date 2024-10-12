@@ -2,7 +2,7 @@
 
 This repository maintains all code related to using the Younger dataset and its related applications.
 
-Go to the website "[Datasets - Yangs Cloud](https://datasets.yangs.cloud/)" for [Detailed Documentation]([./README.ZH.md](https://datasets.yangs.cloud/younger/)) of Younger's Applications.
+Go to the website "[Datasets - Yangs Cloud](https://datasets.yangs.cloud/)" for [Detailed Documentation](https://datasets.yangs.cloud/younger/) of Younger's Applications.
 
 Due to ongoing updates to this branch, the code may not match the initial version presented in the paper. Therefore, if you need the version that corresponds to what is mentioned in the paper, please switch to the `paper` [branch](https://github.com/YangsCloud/Younger/tree/paper) for reference.
 
