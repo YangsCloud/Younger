@@ -1,5 +1,5 @@
 # Younger
 
-[Chinese Documentation](./README.ZH.md)
+Please see [Here](https://github.com/YangsCloud/Younger/tree/paper/reproduction) for the details about reproduction.
 
-## Dataset Construction
+Please see the official site [Here](https://datasets.yangs.cloud/) for more information.
