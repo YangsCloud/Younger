@@ -19,6 +19,11 @@ Additionally, install the following Python packages:
 - `onnx`
 - `matplotlib`
 
+like:
+```
+pip install numpy==1.26.4 torch_geometric onnx matplotlib
+```
+
 Finally, set up the project:
 
 ```sh
