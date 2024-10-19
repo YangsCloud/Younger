@@ -154,11 +154,11 @@ class YOUNGER_DATASET_ADDRESS(Constant):
         self.DATAFLOW_TEST_WOA_PAPER = 'https://datasets.yangs.cloud/public/assets/4301b27b-eab6-4543-a6e0-73989ae4affe?download='
 
         self.OPERATOR_TRAIN_WA_PAPER = 'https://datasets.yangs.cloud/public/assets/048b6198-30cc-406c-a5db-6b1b299a5876?download='
-        self.OPERATOR_TRAIN_WOA_PAPER = 'https://datasets.yangs.cloud/public/assets/6da16ae5-0365-497c-bed3-400b33211234?download='
+        self.OPERATOR_TRAIN_WOA_PAPER = 'https://datasets.yangs.cloud/public/assets/cb6035b3-91bb-450b-9407-cf6565e9d47c?download='
         self.OPERATOR_VALID_WA_PAPER = 'https://datasets.yangs.cloud/public/assets/17693925-d418-4945-a660-0c69f103d00c?download='
-        self.OPERATOR_VALID_WOA_PAPER = 'https://datasets.yangs.cloud/public/assets/a3e6ea6d-60bd-4c67-96a7-c05f48dbb44c?download='
+        self.OPERATOR_VALID_WOA_PAPER = 'https://datasets.yangs.cloud/public/assets/e67d2c9d-8fee-460e-b0fa-638dfdeb5068?download='
         self.OPERATOR_TEST_WA_PAPER = 'https://datasets.yangs.cloud/public/assets/45480765-f152-46fd-8c59-4b4d477fde3d?download='
-        self.OPERATOR_TEST_WOA_PAPER = 'https://datasets.yangs.cloud/public/assets/df8edc8a-f5af-4443-81d5-8c3fa4ebc15f?download='
+        self.OPERATOR_TEST_WOA_PAPER = 'https://datasets.yangs.cloud/public/assets/12321aa3-51f7-40db-8286-38a57f46a0d4?download='
 
 YoungerDatasetAddress = YOUNGER_DATASET_ADDRESS()
 YoungerDatasetAddress.initialize()
