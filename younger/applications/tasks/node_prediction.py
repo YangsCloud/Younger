@@ -50,7 +50,9 @@ class NodePrediction(YoungerTask):
         dataset_config['train_dataset_dirpath'] = custom_dataset_config.get('train_dataset_dirpath', None)
         dataset_config['valid_dataset_dirpath'] = custom_dataset_config.get('valid_dataset_dirpath', None)
         dataset_config['test_dataset_dirpath'] = custom_dataset_config.get('test_dataset_dirpath', None)
+        dataset_config['dataset_name'] = custom_dataset_config.get('dataset_name', 'Younger_NP')
         dataset_config['encode_type'] = custom_dataset_config.get('encode_type', 'node')
+        dataset_config['standard_onnx'] = custom_dataset_config.get('standard_onnx', False)
         dataset_config['worker_number'] = custom_dataset_config.get('worker_number', 4)
 
         # Model
@@ -100,8 +102,10 @@ class NodePrediction(YoungerTask):
                 self._train_dataset = NodeDataset(
                     self.config['dataset']['train_dataset_dirpath'],
                     'train',
-                    worker_number=self.config['dataset']['worker_number'],
+                    dataset_name=self.config['dataset']['dataset_name'],
                     encode_type=self.config['dataset']['encode_type'],
+                    standard_onnx=self.config['dataset']['standard_onnx'],
+                    worker_number=self.config['dataset']['worker_number'],
                 )
 
                 if self.config['dataset']['encode_type'] == 'node':
@@ -124,8 +128,10 @@ class NodePrediction(YoungerTask):
                 self._valid_dataset = NodeDataset(
                     self.config['dataset']['valid_dataset_dirpath'],
                     'valid',
-                    worker_number=self.config['dataset']['worker_number'],
+                    dataset_name=self.config['dataset']['dataset_name'],
                     encode_type=self.config['dataset']['encode_type'],
+                    standard_onnx=self.config['dataset']['standard_onnx'],
+                    worker_number=self.config['dataset']['worker_number'],
                 )
             else:
                 self._valid_dataset = None
@@ -141,8 +147,10 @@ class NodePrediction(YoungerTask):
                 self._test_dataset = NodeDataset(
                     self.config['dataset']['test_dataset_dirpath'],
                     'test',
-                    worker_number=self.config['dataset']['worker_number'],
+                    dataset_name=self.config['dataset']['dataset_name'],
                     encode_type=self.config['dataset']['encode_type'],
+                    standard_onnx=self.config['dataset']['standard_onnx'],
+                    worker_number=self.config['dataset']['worker_number'],
                 )
                 if self.config['dataset']['encode_type'] == 'node':
                     self.logger.info(f'    -> Nodes Dict Size: {len(self._test_dataset.x_dict["n2i"])}')

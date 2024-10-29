@@ -22,6 +22,9 @@ from torch_geometric.io import fs
 from torch_geometric.data import Data, Dataset, download_url
 from torch_geometric.utils import is_sparse
 
+from torch_geometric.data.data import DataEdgeAttr, DataTensorAttr
+from torch_geometric.data.storage import GlobalStorage
+
 from younger.commons.io import load_json, load_pickle, tar_extract
 
 from younger.datasets.modules import Network
@@ -69,14 +72,18 @@ class NodeDataset(Dataset):
 
         node_dict_size: int | None = None,
         operator_dict_size: int | None = None,
+        dataset_name: str = 'Younger_NP',
         encode_type: Literal['node', 'operator'] = 'node',
+        standard_onnx: bool = False,
 
         worker_number: int = 4,
     ):
         assert encode_type in {'node', 'operator'}
 
+        self.dataset_name = dataset_name if dataset_name else f'Younger_NP_{self.encode_type.capitalize()}'
         self.encode_type = encode_type
         self.worker_number = worker_number
+        self.standard_onnx = standard_onnx
 
         meta_filepath = os.path.join(root, 'meta.json')
         if not os.path.isfile(meta_filepath):
@@ -86,19 +93,19 @@ class NodeDataset(Dataset):
             if encode_type == 'operator':
                 download_url(getattr(YoungerDatasetAddress, f'OPERATOR_{split.upper()}_WOA_PAPER'), root, filename='meta.json')
 
-        self.meta = self.__class__.load_meta(meta_filepath)
-        self.x_dict = self.__class__.get_x_dict(self.meta, node_dict_size, operator_dict_size)
+        self.meta = self.__class__.load_meta(meta_filepath, encode_type=self.encode_type)
+        self.x_dict = self.__class__.get_x_dict(self.meta, node_dict_size=node_dict_size, operator_dict_size=operator_dict_size, standard_onnx=self.standard_onnx)
 
         super().__init__(root, transform, pre_transform, pre_filter, log, force_reload)
 
     @property
     def raw_dir(self) -> str:
-        name = f'younger_raw_{self.encode_type}_np'
+        name = f'{self.dataset_name}_Raw'
         return os.path.join(self.root, name)
 
     @property
     def processed_dir(self) -> str:
-        name = f'younger_processed_{self.encode_type}_np'
+        name = f'{self.dataset_name}_Processed'
         return os.path.join(self.root, name)
 
     @property
@@ -114,6 +121,8 @@ class NodeDataset(Dataset):
 
     def get(self, index: int) -> NodeData:
         block_data = torch.load(os.path.join(self.processed_dir, f'sample-{index}.pth'))
+        # torch.serialization.add_safe_globals([NodeData, DataEdgeAttr, DataTensorAttr, GlobalStorage])
+        # block_data = torch.load(os.path.join(self.processed_dir, f'sample-{index}.pth'), weights_only=True)
         # print("block_data_list: ", block_data_list)
         # print("len(block_data_list)",len(block_data_list))
         return block_data
@@ -121,7 +130,7 @@ class NodeDataset(Dataset):
     def download(self):
         archive_filepath = os.path.join(self.root, self.meta['archive'])
         if not fs.exists(archive_filepath):
-            print(f'Dataset Archive Not Found.It will be downloaded From Official Cite ...')
+            print(f'Dataset Archive Not Found. It will be downloaded From Official Cite ...')
             print(f'Begin Download {self.meta["archive"]}')
             archive_filepath = download_url(self.meta['url'], self.root, filename=self.meta['archive'])
         tar_extract(archive_filepath, self.raw_dir)
@@ -133,7 +142,7 @@ class NodeDataset(Dataset):
         with multiprocessing.Pool(self.worker_number) as pool:
             with tqdm.tqdm(total=self.meta['size']) as progress_bar:
                 for sample_index, _ in pool.imap_unordered(self.process_sample, range(self.meta['size'])):
-                    progress_bar.update()
+                    progress_bar.update(1)
 
     def process_sample(self, sample_index: int) -> tuple[int, int]:
         sample_filepath = os.path.join(self.raw_dir, f'sample-{sample_index}.pkl')
@@ -148,12 +157,14 @@ class NodeDataset(Dataset):
         return (sample_index, len(block_data))
 
     @classmethod
-    def load_meta(cls, meta_filepath: str) -> dict[str, Any]:
+    def load_meta(cls, meta_filepath: str, encode_type: Literal['node', 'operator'] = 'node') -> dict[str, Any]:
         loaded_meta: dict[str, Any] = load_json(meta_filepath)
         meta: dict[str, Any] = dict()
 
-        meta['all_nodes'] = loaded_meta['all_nodes']
-        meta['all_operators'] = loaded_meta['all_operators']
+        if encode_type == 'node':
+            meta['all_nodes'] = loaded_meta['all_nodes']
+        if encode_type == 'operator':
+            meta['all_operators'] = loaded_meta['all_operators']
 
         meta['split'] = loaded_meta['split']
         meta['archive'] = loaded_meta['archive']
@@ -168,21 +179,29 @@ class NodeDataset(Dataset):
         return dict(zip(sorted(graph.nodes()), range(graph.number_of_nodes())))
 
     @classmethod
-    def get_x_dict(cls, meta: dict[str, Any], node_dict_size: int | None = None, operator_dict_size: int | None = None) -> dict[str, list[str] | dict[str, int]]:
-        all_nodes = [(node_id, node_count) for node_id, node_count in meta['all_nodes']['onnx'].items()] + [(node_id, node_count) for node_id, node_count in meta['all_nodes']['others'].items()]
-        all_nodes = sorted(all_nodes, key=lambda x: x[1])
-
-        all_operators = [(operator_id, operator_count) for operator_id, operator_count in meta['all_operators']['onnx'].items()] + [(operator_id, operator_count) for operator_id, operator_count in meta['all_operators']['others'].items()]
-        all_operators = sorted(all_operators, key=lambda x: x[1])
-
-        node_dict_size = len(all_nodes) if node_dict_size is None else node_dict_size
-        operator_dict_size = len(all_operators) if operator_dict_size is None else operator_dict_size
-
+    def get_x_dict(cls, meta: dict[str, Any], node_dict_size: int | None = None, operator_dict_size: int | None = None, standard_onnx: bool = False) -> dict[str, list[str] | dict[str, int]]:
         x_dict = dict()
-        x_dict['i2n'] = ['__UNK__'] + ['__MASK__'] + [node_id for node_id, node_count in all_nodes[:node_dict_size]]
-        x_dict['n2i'] = {node_id: index for index, node_id in enumerate(x_dict['i2n'])}
-        x_dict['i2o'] = ['__UNK__'] + ['__MASK__'] + [operator_id for operator_id, operator_count in all_operators[:operator_dict_size]]
-        x_dict['o2i'] = {operator_id: index for index, operator_id in enumerate(x_dict['i2o'])}
+
+        if 'all_nodes' in meta:
+            if standard_onnx:
+                all_nodes = [(node_id, node_count) for node_id, node_count in meta['all_nodes'].items()]
+            else:
+                all_nodes = [(node_id, node_count) for node_id, node_count in meta['all_nodes']['onnx'].items()] + [(node_id, node_count) for node_id, node_count in meta['all_nodes']['others'].items()]
+            all_nodes = sorted(all_nodes, key=lambda x: x[1])
+            node_dict_size = len(all_nodes) if node_dict_size is None else node_dict_size
+            x_dict['i2n'] = ['__UNK__'] + ['__MASK__'] + [node_id for node_id, node_count in all_nodes[:node_dict_size]]
+            x_dict['n2i'] = {node_id: index for index, node_id in enumerate(x_dict['i2n'])}
+
+        if 'all_operators' in meta:
+            if standard_onnx:
+                all_operators = [(operator_id, operator_count) for operator_id, operator_count in meta['all_operators'].items()]
+            else:
+                all_operators = [(operator_id, operator_count) for operator_id, operator_count in meta['all_operators']['onnx'].items()] + [(operator_id, operator_count) for operator_id, operator_count in meta['all_operators']['others'].items()]
+            all_operators = sorted(all_operators, key=lambda x: x[1])
+            operator_dict_size = len(all_operators) if operator_dict_size is None else operator_dict_size
+            x_dict['i2o'] = ['__UNK__'] + ['__MASK__'] + [operator_id for operator_id, operator_count in all_operators[:operator_dict_size]]
+            x_dict['o2i'] = {operator_id: index for index, operator_id in enumerate(x_dict['i2o'])}
+
         return x_dict
 
     @classmethod
