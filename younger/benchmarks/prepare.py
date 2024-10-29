@@ -35,9 +35,15 @@ SUPPORT_VERSION = {
 }
 
 
-def hf_hub_download(r_path: str, l_path: str):
+def hf_hub_download(r_path: str, l_path: str, ignore_patterns: list[str] | None = None):
     from huggingface_hub import HfFileSystem
     hf_file_system = HfFileSystem()
+
+    def ignore(string: str, patterns: list[str]) -> bool:
+        for pattern in patterns:
+            if pattern in string:
+                return True
+        return False
 
     if hf_file_system.isdir(r_path):
         logger.info(f'     -> A dirpath is provided, now downloading the dir ...')
@@ -48,13 +54,19 @@ def hf_hub_download(r_path: str, l_path: str):
                 l_child_parent = os.path.dirname(l_child_path)
                 create_dir(l_child_parent)
                 child_link = hf_file_system.url(r_child_path)
-                download(child_link, pathlib.Path(l_child_parent), force=False)
+                if ignore(child_link, ignore_patterns):
+                    logger.info(f'Skip. Ignore Pattern Match.')
+                else:
+                    download(child_link, pathlib.Path(l_child_parent), force=False)
         logger.info(f'     -> Done')
 
     if hf_file_system.isfile(r_path):
         logger.info(f'     -> A filepath is provided, now downloading the file ...')
         link = hf_file_system.url(r_path)
-        download(link, pathlib.Path(l_path), force=False)
+        if ignore(link, ignore_patterns):
+            logger.info(f'Skip. Ignore Pattern Match.')
+        else:
+            download(link, pathlib.Path(l_path), force=False)
         logger.info(f'     -> Done')
 
 
@@ -71,7 +83,7 @@ def mlperf_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path, r
         instances: list[Instance] = list()
         if direct in {'instance', 'both'}:
             logger.info(f' = Getting Instances From Official Repository ...')
-            hf_hub_download(r_instances_dirpath, str(dataset_dirpath.absolute()))
+            hf_hub_download(r_instances_dirpath, str(dataset_dirpath.absolute()), ['gpt-j-fp32', 'stable-diffusion-xl-fp32'])
             for path in dataset_dirpath.iterdir():
                 instance = Instance()
                 instance.load(path)
@@ -79,7 +91,7 @@ def mlperf_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path, r
 
         if direct in {'onnx', 'both'}:
             logger.info(f' = Getting ONNXs ...')
-            hf_hub_download(r_onnxs_dirpath, str(dataset_dirpath.absolute()))
+            hf_hub_download(r_onnxs_dirpath, str(dataset_dirpath.absolute()), ['gpt-j-fp32', 'stable-diffusion-xl-fp32'])
 
         if len(instances) == 0:
             pass
@@ -93,8 +105,8 @@ def mlperf_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path, r
                 'BERT-Large-int8': 'https://zenodo.org/records/3750364/files/bert_large_v1_1_fake_quant.onnx',
                 'BERT-Large-fp32': 'https://zenodo.org/records/3733910/files/model.onnx',
                 '3d-unet-fp32': 'https://zenodo.org/records/5597155/files/3dunet_kits19_128x128x128.onnx',
-                'gpt-j-fp32': {'model_id': 'EleutherAI/gpt-j-6b', 'task': 'auto'},
-                'stable-diffusion-xl-fp32': {'model_id': 'stabilityai/stable-diffusion-xl-base-1.0', 'task': 'stable-diffusion-xl'},
+                # 'gpt-j-fp32': {'model_id': 'EleutherAI/gpt-j-6b', 'task': 'auto'},
+                # 'stable-diffusion-xl-fp32': {'model_id': 'stabilityai/stable-diffusion-xl-base-1.0', 'task': 'stable-diffusion-xl'},
             }
         if release == 'v0.5':
             onnx_links = {
