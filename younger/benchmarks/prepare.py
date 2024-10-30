@@ -52,11 +52,11 @@ def hf_hub_download(r_path: str, l_path: str, ignore_patterns: list[str] | None 
                 relative_path = os.path.relpath(r_child_path, start=r_path)
                 l_child_path = os.path.join(l_path, relative_path)
                 l_child_parent = os.path.dirname(l_child_path)
-                create_dir(l_child_parent)
                 child_link = hf_file_system.url(r_child_path)
-                if ignore(child_link, ignore_patterns):
+                if ignore_patterns is not None and ignore(child_link, ignore_patterns):
                     logger.info(f'Skip. Ignore Pattern Match.')
                 else:
+                    create_dir(l_child_parent)
                     download(child_link, pathlib.Path(l_child_parent), force=False)
         logger.info(f'     -> Done')
 
@@ -91,7 +91,7 @@ def mlperf_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path, r
 
         if direct in {'onnx', 'both'}:
             logger.info(f' = Getting ONNXs ...')
-            hf_hub_download(r_onnxs_dirpath, str(dataset_dirpath.absolute()), ['gpt-j-fp32', 'stable-diffusion-xl-fp32'])
+            hf_hub_download(r_onnxs_dirpath, str(bench_dirpath.absolute()), ['gpt-j-fp32', 'stable-diffusion-xl-fp32'])
 
         if len(instances) == 0:
             pass
@@ -178,7 +178,7 @@ def phoronix_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path,
 
         if direct in {'onnx', 'both'}:
             logger.info(f' = Getting ONNXs ...')
-            hf_hub_download(r_onnxs_dirpath, str(dataset_dirpath.absolute()))
+            hf_hub_download(r_onnxs_dirpath, str(bench_dirpath.absolute()))
 
         if len(instances) == 0:
             pass
@@ -324,18 +324,22 @@ def main(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path, version: st
         prepared = True
 
     if version == 'convert':
+        # Convert Arbitrary Benchmarks (Any Dir Contains ONNX Modles)
         instances = convert_prepare(bench_dirpath, dataset_dirpath)
         prepared = True
 
     if version == 'phoronix':
+        # One Get Phoronix ONNXs or Instances or Both
         instances = phoronix_prepare(bench_dirpath, dataset_dirpath, direct)
         prepared = True
 
     if version == 'mlperf_v4.1':
+        # One Get MLPerfv4.1 ONNXs or Instances or Both
         instances = mlperf_prepare(bench_dirpath, dataset_dirpath, 'v4.1', direct)
         prepared = True
 
     if version == 'mlperf_v0.5':
+        # One Get MLPerfv0.5 ONNXs or Instances or Both
         instances = mlperf_prepare(bench_dirpath, dataset_dirpath, 'v0.5', direct)
         prepared = True
 
