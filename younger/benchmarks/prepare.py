@@ -295,8 +295,7 @@ def younger_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path) 
         younger_link = YOUNGER_V_PAPER_FILTER_DETAIL_URL
         younger_name = YOUNGER_V_PAPER_FILTER_DETAIL_NAME
     else:
-        pass
-
+        assert version in {'paper'}, f'Must Specify A Valid Version of Younger. Now Only Support: ["paper"] .'
 
     logger.info(f' v Downloading Younger ...')
     tar_filepath = download(younger_link, bench_dirpath, filename=f'{younger_name}.tgz', force=False)
@@ -305,7 +304,7 @@ def younger_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path) 
     younger_dirpath = dataset_dirpath.joinpath(younger_name)
     logger.info(f' v Uncompressing ...')
     if younger_dirpath.is_dir():
-        pass
+        logger.info(f'   Skip. Already Uncompressed.')
     else:
         tar_extract(tar_filepath, dataset_dirpath)
     logger.info(f' ^ Done')
