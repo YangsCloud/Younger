@@ -21,9 +21,7 @@ from younger.commons.io import tar_extract, create_dir
 from younger.commons.logging import logger
 from younger.commons.download import download
 
-from younger.datasets.modules import Instance
-
-from younger.benchmarks.utils import get_instances
+from younger.datasets.modules import Dataset, Instance
 
 
 SUPPORT_VERSION = {
@@ -310,7 +308,7 @@ def younger_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path) 
     logger.info(f' ^ Done')
 
     logger.info(f' v Checking all Instances in Younger ...')
-    instances = [instance for instance in get_instances(younger_dirpath)]
+    instances = [instance for instance in Dataset.load_instances(younger_dirpath)]
     logger.info(f' ^ Done')
     return instances
 
