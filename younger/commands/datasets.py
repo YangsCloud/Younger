@@ -85,6 +85,7 @@ def split_run(arguments):
         random_split.main(
             dataset_dirpath, save_dirpath,
             arguments.version,
+            arguments.allow_domains,
             arguments.subgraph_sizes,
             arguments.subgraph_number,
             arguments.retrieve_try,
@@ -326,6 +327,7 @@ def set_datasets_split_arguments(parser: argparse.ArgumentParser):
 
     parser.add_argument('--version', type=str, required=True)
     parser.add_argument('--silly', action='store_true')
+    parser.add_argument('--allow-domains', type=str, nargs='*', default=[])
     parser.add_argument('--subgraph-sizes', type=int, nargs='+', default=[5])
     parser.add_argument('--subgraph-number', type=int, default=10)
     parser.add_argument('--retrieve-try', type=int, default=1000)

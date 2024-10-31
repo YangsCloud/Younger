@@ -14,18 +14,16 @@ import tqdm
 import pathlib
 
 from younger.commons.logging import logger
-from younger.datasets.modules import Network
+from younger.datasets.modules import Dataset, Network
 from younger.datasets.utils.translation import get_onnx_opset_version
 from younger.datasets.constructors.official.filter import update_unique_instance, purify_instance_with_graph_hash
-
-from younger.benchmarks.utils import get_instances
 
 def main(real_dirpath: pathlib.Path, save_dirpath: pathlib.Path, other_dirpaths: list[pathlib.Path]):
     unique_instances = dict()
 
     max_inclusive_version = get_onnx_opset_version()
 
-    for younger_instance in get_instances(real_dirpath):
+    for younger_instance in Dataset.load_instances(real_dirpath):
         younger_identifier = Network.hash(younger_instance.network.graph, node_attr='operator')
         unique_instances[younger_identifier] = younger_instance
 

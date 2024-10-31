@@ -102,6 +102,7 @@ def retrieve_subgraph(graph: networkx.DiGraph, node_index: str, subgraph_size: i
 def main(
     dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path,
     version: str,
+    allow_domains: list[str],
     subgraph_sizes: list[int],
     subgraph_number: int,
     retrieve_try: int = 1000,
@@ -152,7 +153,7 @@ def main(
             for node_index in instance.network.graph.nodes():
                 node_features = instance.network.graph.nodes[node_index]['features']
                 node_origin = get_operator_origin(node_features['operator']['op_type'], domain=node_features['operator']['domain'])
-                if node_origin == 'onnx':
+                if node_origin == 'onnx' or node_origin in allow_domains:
                     sop_identifier = Network.get_node_identifier_from_features(node_features, mode='type')
                     sop_positions = all_sop_positions.get(sop_identifier, dict())
                     sop_node_indices = sop_positions.get(instance_index, set())
