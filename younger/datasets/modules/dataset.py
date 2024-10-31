@@ -10,7 +10,10 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import tqdm
 import pathlib
+
+from typing import Generator
 
 from younger.commons.io import load_json, save_json
 from younger.commons.hash import hash_strings
@@ -216,3 +219,18 @@ class Dataset(object):
         else:
             self._stamps.add(stamp)
         return
+
+    @classmethod
+    def load_instances(cls, dataset_dirpath: pathlib.Path | str) -> Generator[Instance, None, None]:
+        dataset_dirpath = pathlib.Path(dataset_dirpath) if isinstance(dataset_dirpath, str) else dataset_dirpath
+
+        instance_dirpaths = list(dataset_dirpath.iterdir())
+        with tqdm.tqdm(total=len(instance_dirpaths), desc='Processing Instance') as progress_bar:
+            for instance_dirpath in instance_dirpaths:
+                instance = Instance()
+                try:
+                    instance.load(instance_dirpath)
+                    yield instance
+                except:
+                    continue
+                progress_bar.update(1)
