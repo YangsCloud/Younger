@@ -88,7 +88,7 @@ younger datasets split --mode random --version subgraphs \
     --train-proportion 98.0 \
     --valid-proportion 1.0 \
     --test-proportion 1.0 \
-    --seed 666666 \
+    --seed 666666
 ```
 or one can extract subgraphs also contains `'com.microsoft'` operators with argument `--allow-domain 'com.microsoft'`, as follows:
 ```shell
@@ -104,7 +104,7 @@ younger datasets split --mode random --version subgraphs_with_ms \
     --valid-proportion 1.0 \
     --test-proportion 1.0 \
     --seed 666666 \
-    --allow-domain 'com.microsoft' \
+    --allow-domain 'com.microsoft'
 ```
 
 4. Create the training configuration file `model.toml`:
