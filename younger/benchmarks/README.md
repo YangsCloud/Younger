@@ -88,7 +88,8 @@ younger datasets split --mode random --version subgraphs \
     --train-proportion 98.0 \
     --valid-proportion 1.0 \
     --test-proportion 1.0 \
-    --seed 666666
+    --seed 666666 \
+    --logging-filepath extract_subgraphs.log
 ```
 or one can extract subgraphs also contains `'com.microsoft'` operators with argument `--allow-domain 'com.microsoft'`, as follows:
 ```shell
@@ -104,6 +105,7 @@ younger datasets split --mode random --version subgraphs_with_ms \
     --valid-proportion 1.0 \
     --test-proportion 1.0 \
     --seed 666666 \
+    --logging-filepath extract_subgraphs_with_ms.log \
     --allow-domain 'com.microsoft'
 ```
 
