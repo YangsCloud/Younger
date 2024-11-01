@@ -152,11 +152,11 @@ def statistical_analysis(younger_dataset_dirpath: pathlib.Path, statistics_dirpa
             logger.info(f' ^ Done')
 
 
-def structural_analysis(younger_dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_dict_filepath: pathlib.Path | None = None):
+def structural_analysis(younger_dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_dirpath: pathlib.Path | None = None):
     pass
 
 
-def main(younger_dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_dict_filepath: pathlib.Path | None = None, mode: Literal['sts', 'stc', 'both'] = 'sts'):
+def main(younger_dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_dirpath: pathlib.Path | None = None, mode: Literal['sts', 'stc', 'both'] = 'sts'):
     assert mode in {'sts', 'stc', 'both'}
     analyzed = False
     if mode in {'sts', 'both'}:
@@ -164,7 +164,7 @@ def main(younger_dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path
         analyzed = True
 
     if mode in {'stc', 'both'}:
-        structural_analysis(younger_dataset_dirpath, statistics_dirpath, other_dataset_indices_filepath, operator_embedding_dict_filepath)
+        structural_analysis(younger_dataset_dirpath, statistics_dirpath, other_dataset_indices_filepath, operator_embedding_dirpath)
         analyzed = True
 
     if analyzed:
