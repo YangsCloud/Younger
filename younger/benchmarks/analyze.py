@@ -11,12 +11,14 @@
 
 
 import ast
+import numpy
 import pathlib
 import xlsxwriter
 
-from typing import Literal
+from typing import Any, Literal
+from numpy.typing import NDArray
 
-from younger.commons.io import load_json, save_json
+from younger.commons.io import load_json, save_json, load_pickle
 from younger.commons.logging import logger
 
 from younger.datasets.modules import Dataset, Network
@@ -152,8 +154,8 @@ def statistical_analysis(younger_dataset_dirpath: pathlib.Path, statistics_dirpa
             logger.info(f' ^ Done')
 
 
-def structurally_analyze(dataset_name: str, dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path) -> dict[str, int | dict[str, tuple[int, float]]]:
-    logger.info(f' v Now statistically analyzing {dataset_name} ...')
+def structurally_analyze(dataset_name: str, dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path, operator_embedding_dict: dict[str, NDArray[numpy.float64]]) -> dict[str, int | dict[str, tuple[int, float]]]:
+    logger.info(f' v Now sttructurally analyzing {dataset_name} ...')
 
     statistics = dict()
 
@@ -238,11 +240,16 @@ def structurally_analyze(dataset_name: str, dataset_dirpath: pathlib.Path, stati
     return statistics
 
 
-def structural_analysis(younger_dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_dirpath: pathlib.Path | None = None):
-    pass
+def structural_analysis(younger_dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_meta_filepath: pathlib.Path | None = None):
+    opemb_meta = load_pickle(operator_embedding_meta_filepath)
+    opemb_dirpath = operator_embedding_meta_filepath.parent
+    opemb_weights_filepath = opemb_dirpath.joinpath(opemb_meta['weights_filename'])
+    opemb_op_dict_filepath = opemb_dirpath.joinpath(opemb_meta['op_dict_filename'])
+
+    operator_embedding_dict = dict()
 
 
-def main(younger_dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_dirpath: pathlib.Path | None = None, mode: Literal['sts', 'stc', 'both'] = 'sts'):
+def main(younger_dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_meta_filepath: pathlib.Path | None = None, mode: Literal['sts', 'stc', 'both'] = 'sts'):
     assert mode in {'sts', 'stc', 'both'}
     analyzed = False
     if mode in {'sts', 'both'}:
@@ -250,7 +257,7 @@ def main(younger_dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path
         analyzed = True
 
     if mode in {'stc', 'both'}:
-        structural_analysis(younger_dataset_dirpath, statistics_dirpath, other_dataset_indices_filepath, operator_embedding_dirpath)
+        structural_analysis(younger_dataset_dirpath, statistics_dirpath, other_dataset_indices_filepath, operator_embedding_meta_filepath)
         analyzed = True
 
     if analyzed:
