@@ -1,6 +1,24 @@
-## Usage
+## Table of Contents
+<!-- vscode-markdown-toc -->
+* 1. [Usage](#Usage)
+	* 1.1. [Prepare](#Prepare)
+		* 1.1.1. [Download Younger](#DownloadYounger)
+		* 1.1.2. [Get Operator/Network Embedding](#GetOperatorNetworkEmbedding)
+	* 1.2. [Benchmark Generation](#BenchmarkGeneration)
+	* 1.3. [Analysis and Visualization](#AnalysisandVisualization)
+		* 1.3.1. [Prepare](#Prepare-1)
+		* 1.3.2. [Statistical Analysis](#StatisticalAnalysis)
+		* 1.3.3. [Structral Analysis](#StructralAnalysis)
 
-### Prepare
+<!-- vscode-markdown-toc-config
+	numbering=true
+	autoSave=true
+	/vscode-markdown-toc-config -->
+<!-- /vscode-markdown-toc -->
+
+##  1. <a name='Usage'></a>Usage
+
+###  1.1. <a name='Prepare'></a>Prepare
 
 Overall Directory Structure:
 ```
@@ -27,7 +45,7 @@ YoungBench/
         └── phoronix/
 ```
 
-#### Download Younger
+####  1.1.1. <a name='DownloadYounger'></a>Download Younger
 Create a directory `YoungBench/Assets/younger`:
 ```shell
 mkdir -p ./YoungBench/Assets/younger
@@ -55,7 +73,7 @@ younger/
 └── version
 ```
 
-#### Get Operator/Network Embedding
+####  1.1.2. <a name='GetOperatorNetworkEmbedding'></a>Get Operator/Network Embedding
 
 ##### Download Pre-Trained Embedding
 
@@ -109,20 +127,109 @@ younger datasets split --mode random --version subgraphs_with_ms \
     --allow-domain 'com.microsoft'
 ```
 
-4. Create the training configuration file `model.toml`:
+4. Create the deep learning configuration file `model.toml`:
 ```toml
+# model.toml
+
+mode = 'Train'
+
+[dataset]
+train_dataset_dirpath = "subgraphs/train"
+valid_dataset_dirpath = "subgraphs/valid"
+test_dataset_dirpath  = "subgraphs/test"
+
+# train_dataset_dirpath = "subgraphs_with_ms/train"
+# valid_dataset_dirpath = "subgraphs_with_ms/valid"
+# test_dataset_dirpath  = "subgraphs_with_ms/test"
+
+dataset_name = 'YoungBench_Embedding'
+encode_type = 'operator'
+standard_onnx = true
+worker_number = 32
+
+[model]
+model_type = 'SAGE_NP'
+node_dim = 512
+hidden_dim = 256
+dropout = 0.5
+
+[optimizer]
+learning_rate = 1e-3
+weight_decay = 5e-5
+
+[scheduler]
+# step_size=40000
+# gamma=0.5
+
+[api]
+meta_filepath = ""
+onnx_model_dirpath = ""
+
+[logging]
+name = "Subgraphs"
+# name = "Subgraphs_With_MS"
+mode = "both"
+filepath = "./subgraphs.log"
+# filepath = "./subgraphs_with_ms.log"
+```
+The argument `model_type` can be set to either `'GCN_NP'` or `SAGE_NP`, and the dataset directory can be set to either `subgraphs` or `subgraphs_with_ms` to obtain different model performance or to servce various experimental purposes.
+
+5. Change the name the sub-directory:
+```shell
+mv subgraphs/train/item subgraphs/train/YoungBench_Embedding_Raw
+mv subgraphs/valid/item subgraphs/valid/YoungBench_Embedding_Raw
+mv subgraphs/test/item  subgraphs/test/YoungBench_Embedding_Raw
 ```
 
-5. Now, train the model!
+6. Create the training script `train.sh`:
+```shell
+#!/bin/bash
+# train.sh
+THIS_NAME=GCN
+
+CONFIG_FILEPATH=${THIS_NAME}.toml
+CHECKPOINT_DIRPATH=./Checkpoint/${THIS_NAME}
+CHECKPOINT_NAME=${THIS_NAME}
+MASTER_ADDR=localhost
+MASTER_PORT=16161
+MASTER_RANK=0
+
+CUBLAS_WORKSPACE_CONFIG=:4096:8 younger applications deep_learning train \
+  --task-name node_prediciton \
+  --config-filepath ${CONFIG_FILEPATH} \
+  --checkpoint-dirpath ${CHECKPOINT_DIRPATH} \
+  --checkpoint-name ${CHECKPOINT_NAME} \
+  --keep-number 200 \
+  --train-batch-size 512 --valid-batch-size 512 --shuffle \
+  --life-cycle 500 --report-period 10 --update-period 1 \
+  --train-period 100 --valid-period 100 \
+  --device GPU \
+  --world-size 4 --master-addr ${MASTER_ADDR} --master-port ${MASTER_PORT} --master-rank ${MASTER_RANK} \
+  --seed 12345
+```
+
+7. Start training:
+```shell
+chmod +x train.sh
+./train.sh
+```
+
+8. Stop when the training/validation loss converges and test the corresponding checkpoint, first create shell script `test.sh` like `train.sh`, then run the script `test.sh`:
 ```shell
 ```
 
+```shell
+chmod +x test.sh
+./test.sh
+```
 
-### Benchmark Generation
+9. Get the operator embeddings:
 
-### Analysis and Visualization
+###  1.2. <a name='BenchmarkGeneration'></a>Benchmark Generation
 
-#### Prepare
+###  1.3. <a name='AnalysisandVisualization'></a>Analysis and Visualization
+
+####  1.3.1. <a name='Prepare-1'></a>Prepare
 
 Download Competitors under directory `YoungBench/Assets/competitors`:
 
@@ -140,7 +247,7 @@ Change the working directory to `YoungBench/Analysis`:
 cd ./YoungBench/Analysis
 ```
 
-#### Statistical Analysis
+####  1.3.2. <a name='StatisticalAnalysis'></a>Statistical Analysis
 
 Create a dataset indices file `other_dataset_indices` which contains multiple lines `Dataset_Name: Dataset_Directory`, suppose that one want to analysis both MLPerf and Phoronix, the file can contain lines:
 ```shell
@@ -171,4 +278,4 @@ YoungBench/
 └── statistics_younger.xlsx
 ```
 
-#### Structral Analysis
+####  1.3.3. <a name='StructralAnalysis'></a>Structral Analysis
