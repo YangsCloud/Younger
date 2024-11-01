@@ -22,7 +22,7 @@ from torch_geometric.nn import GAE, VGAE
 
 from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score
 
-from younger.commons.io import save_json
+from younger.commons.io import save_json, save_pickle
 
 from younger.datasets.modules import Instance, Network
 from younger.datasets.utils.translation import get_complete_attributes_of_node
@@ -84,9 +84,9 @@ class NodePrediction(YoungerTask):
         # Embedding
         embedding_config = dict()
         custom_embedding_config = custom_config.get('embedding', dict())
+        embedding_config['name'] = custom_embedding_config.get('name', 'GNN')
         embedding_config['activate'] = custom_embedding_config.get('activate', False)
-        embedding_config['weights_filepath'] = custom_embedding_config.get('weights_filepath', None)
-        embedding_config['op_dict_filepath'] = custom_embedding_config.get('op_dict_filepath', None)
+        embedding_config['embedding_dirpath'] = custom_embedding_config.get('embedding_dirpath', None)
 
         # API
         api_config = dict()
@@ -315,8 +315,14 @@ class NodePrediction(YoungerTask):
         if self.config['mode'] == 'Test' and self.config['embedding']['activate']:
             operator_embeddings = self.model.node_embedding_layer.weight.to('cpu').numpy()
             assert len(operator_embeddings) == len(self.test_dataset.x_dict['o2i'])
-            numpy.save(self.config['embedding']['weights_filepath'], operator_embeddings)
-            save_json(self.test_dataset.x_dict['o2i'], self.config['embedding']['op_dict_filepath'], indent=2)
+            embedding_name = self.config["embedding"]["name"]
+            embedding_dirpath = pathlib.Path(self.config['embedding']['embedding_dirpath'])
+            embmeta_filepath = embedding_dirpath.joinpath(f'ybemb_{embedding_name}.meta')
+            weights_filepath = embedding_dirpath.joinpath(f'ybemb_weights_{embedding_name}.npy')
+            op_dict_filepath = embedding_dirpath.joinpath(f'ybemb_op_dict_{embedding_name}.json')
+            numpy.save(weights_filepath, operator_embeddings)
+            save_json(self.test_dataset.x_dict['o2i'], op_dict_filepath, indent=2)
+            save_pickle(dict(weights_filename=weights_filepath.name, op_dict_filename=op_dict_filepath.name), embmeta_filepath)
 
         # Return Output & Golden
         return output, minibatch.mask_x_label
