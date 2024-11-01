@@ -9,7 +9,9 @@
 # This source code is licensed under the Apache-2.0 license found in the
 # LICENSE file in the root directory of this source tree.
 
+import numpy
 import pathlib
+
 import torch
 import torch.utils.data
 
@@ -19,7 +21,8 @@ from torch_geometric.data import Batch, Data
 from torch_geometric.nn import GAE, VGAE
 
 from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score
-from younger.commons.logging import Logger
+
+from younger.commons.io import save_json
 
 from younger.datasets.modules import Instance, Network
 from younger.datasets.utils.translation import get_complete_attributes_of_node
@@ -78,6 +81,13 @@ class NodePrediction(YoungerTask):
         scheduler_config['factor'] = custom_scheduler_config.get('factor', 0.2)
         scheduler_config['min_lr'] = custom_scheduler_config.get('min_lr', 5e-5)
 
+        # Embedding
+        embedding_config = dict()
+        custom_embedding_config = custom_config.get('embedding', dict())
+        embedding_config['activate'] = custom_embedding_config.get('activate', False)
+        embedding_config['weights_filepath'] = custom_embedding_config.get('weights_filepath', None)
+        embedding_config['op_dict_filepath'] = custom_embedding_config.get('op_dict_filepath', None)
+
         # API
         api_config = dict()
         custom_api_config = custom_config.get('api', dict())
@@ -89,6 +99,7 @@ class NodePrediction(YoungerTask):
         config['model'] = model_config
         config['optimizer'] = optimizer_config
         config['scheduler'] = scheduler_config
+        config['embedding'] = embedding_config
         config['api'] = api_config
         config['mode'] = mode
         self.config = config
@@ -300,13 +311,20 @@ class NodePrediction(YoungerTask):
             output = self.model(embeddings, minibatch.mask_x_position)
         else:
             output = self.model(minibatch.x, minibatch.edge_index, minibatch.mask_x_position)
+
+        if self.config['mode'] == 'Test' and self.config['embedding']['activate']:
+            operator_embeddings = self.model.node_embedding_layer.weight.to('cpu').numpy()
+            assert len(operator_embeddings) == len(self.test_dataset.x_dict['o2i'])
+            numpy.save(self.config['embedding']['weights_filepath'], operator_embeddings)
+            save_json(self.test_dataset.x_dict['o2i'], self.config['embedding']['op_dict_filepath'], indent=2)
+
         # Return Output & Golden
         return output, minibatch.mask_x_label
 
     def eval_calculate_logs(self, all_outputs: list[torch.Tensor], all_goldens: list[torch.Tensor]) -> OrderedDict:
         if self.config['model']['stage'] == 'encoder':
             return 
-            
+
         all_outputs = torch.cat(all_outputs)
         all_goldens = torch.cat(all_goldens)
 
