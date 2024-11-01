@@ -45,21 +45,21 @@ def analyze_run(arguments):
     younger_dataset_dirpath = pathlib.Path(arguments.younger_dataset_dirpath)
     statistics_dirpath = pathlib.Path(arguments.statistics_dirpath)
     other_dataset_indices_filepath = pathlib.Path(arguments.other_dataset_indices_filepath) if arguments.other_dataset_indices_filepath is not None else None
+    operator_embedding_dict_filepath = pathlib.Path(arguments.operator_embedding_dict_filepath) if arguments.operator_embedding_dict_filepath is not None else None
 
     from younger.benchmarks.analyze import main
 
-    main(younger_dataset_dirpath, statistics_dirpath, other_dataset_indices_filepath)
+    main(younger_dataset_dirpath, statistics_dirpath, other_dataset_indices_filepath=other_dataset_indices_filepath, operator_embedding_dict_filepath=operator_embedding_dict_filepath, mode=arguments.mode)
 
 
 def generate_run(arguments):
     update_logger(arguments)
-    real_dirpath = pathlib.Path(arguments.real_dirpath)
-    product_dirpath = pathlib.Path(arguments.product_dirpath)
-    statistics_dirpath = pathlib.Path(arguments.statistics_dirpath) if arguments.statistics_dirpath is not None else None
+    younger_dataset_dirpath = pathlib.Path(arguments.younger_dataset_dirpath)
+    configuration_filepath = pathlib.Path(arguments.configuration_filepath)
 
     from younger.benchmarks.generate import main
 
-    main(real_dirpath, product_dirpath, statistics_dirpath)
+    main(younger_dataset_dirpath, configuration_filepath)
 
 
 def merge_run(arguments):
@@ -87,15 +87,16 @@ def set_analyze_arguments(parser: argparse.ArgumentParser):
     parser.add_argument('-d', '--younger-dataset-dirpath', type=str)
     parser.add_argument('-s', '--statistics-dirpath', type=str)
     parser.add_argument('-o', '--other-dataset-indices-filepath', type=str, default=None)
+    parser.add_argument('-e', '--operator-embedding-dict-filepath', type=str, default=None)
+    parser.add_argument('-m', '--mode', type=str, choices=['sts', 'stc', 'both'])
 
     parser.add_argument('--logging-filepath', type=str, default=None)
     parser.set_defaults(run=analyze_run)
 
 
 def set_generate_arguments(parser: argparse.ArgumentParser):
-    parser.add_argument('--real-dirpath', type=str)
-    parser.add_argument('--product-dirpath', type=str)
-    parser.add_argument('--statistics-dirpath', type=str, default=None)
+    parser.add_argument('-d', '--younger-dataset-dirpath', type=str)
+    parser.add_argument('-c', '--configuration-filepath', type=str)
 
     parser.add_argument('--logging-filepath', type=str, default=None)
     parser.set_defaults(run=generate_run)

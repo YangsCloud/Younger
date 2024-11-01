@@ -126,6 +126,10 @@ younger datasets split --mode random --version subgraphs_with_ms \
     --logging-filepath extract_subgraphs_with_ms.log \
     --allow-domain 'com.microsoft'
 ```
+or just download the preprocessed dataset with extracted subgraphs:
+```shell
+TODO
+```
 
 4. Create the deep learning configuration file `model.toml`:
 ```toml
@@ -214,8 +218,24 @@ chmod +x train.sh
 ./train.sh
 ```
 
-8. Stop when the training/validation loss converges and test the corresponding checkpoint, first create shell script `test.sh` like `train.sh`, then run the script `test.sh`:
+8. Stop when the training/validation loss converges and test the corresponding checkpoint: (A). First, change the value of `mode` argument to `'Test'`; (B). Then, create shell script `test.sh` like `train.sh`, and run the script `test.sh`:
 ```shell
+#!/bin/bash
+# test.sh
+
+THIS_NAME=GCN
+
+CONFIG_FILEPATH=${THIS_NAME}.toml
+CHECKPOINT_FILEPATH=./Checkpoint/${THIS_NAME}/GCN_Epoch_100_Step_33800.cp
+MASTER_ADDR=localhost
+MASTER_PORT=16161
+MASTER_RANK=0
+
+CUBLAS_WORKSPACE_CONFIG=:4096:8 younger applications deep_learning test \
+  --task-name node_prediciton \
+  --config-filepath ${CONFIG_FILEPATH} \
+  --checkpoint-filepath ${CHECKPOINT_FILEPATH} \
+  --test-batch-size 512 \
 ```
 
 ```shell

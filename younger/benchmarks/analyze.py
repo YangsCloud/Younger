@@ -14,6 +14,8 @@ import ast
 import pathlib
 import xlsxwriter
 
+from typing import Literal
+
 from younger.commons.io import load_json, save_json
 from younger.commons.logging import logger
 
@@ -107,7 +109,7 @@ def statistically_analyze(dataset_name: str, dataset_dirpath: pathlib.Path, stat
     return statistics
 
 
-def main(younger_dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None):
+def statistical_analysis(younger_dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None):
     younger_dataset_statistics = statistically_analyze('younger', younger_dataset_dirpath, statistics_dirpath)
 
     if other_dataset_indices_filepath is not None:
@@ -148,3 +150,22 @@ def main(younger_dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path
                 logger.info(f'   {dataset_name}\'s statistics results (JSON format) compared to Younger saved into: {json_filepath}')
 
             logger.info(f' ^ Done')
+
+
+def structural_analysis(younger_dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_dict_filepath: pathlib.Path | None = None):
+    pass
+
+
+def main(younger_dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_dict_filepath: pathlib.Path | None = None, mode: Literal['sts', 'stc', 'both'] = 'sts'):
+    assert mode in {'sts', 'stc', 'both'}
+    analyzed = False
+    if mode in {'sts', 'both'}:
+        statistical_analysis(younger_dataset_dirpath, statistics_dirpath, other_dataset_indices_filepath)
+        analyzed = True
+
+    if mode in {'stc', 'both'}:
+        structural_analysis(younger_dataset_dirpath, statistics_dirpath, other_dataset_indices_filepath, operator_embedding_dict_filepath)
+        analyzed = True
+
+    if analyzed:
+        logger.info(f' = Analyzed Younger and Other Datasets.')
