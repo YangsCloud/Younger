@@ -24,10 +24,6 @@ Overall Directory Structure:
 ```
 YoungBench/
 ├── Embedding/
-│   ├── 
-│   ├── 
-│   ├── ... (more instances)
-│   └── 
 ├── Analysis/
 │   └── ...
 └── Assets/
@@ -76,6 +72,7 @@ younger/
 ####  1.1.2. <a name='GetOperatorNetworkEmbedding'></a>Get Operator/Network Embedding
 
 ##### Download Pre-Trained Embedding
+**`TBD`**
 
 ##### From Scratch
 This project utilizes operator embeddings from the Operator Type Classification task to obtain and calculate operator and network embeddings.
@@ -127,9 +124,8 @@ younger datasets split --mode random --version subgraphs_with_ms \
     --allow-domain 'com.microsoft'
 ```
 or just download the preprocessed dataset with extracted subgraphs:
-```shell
-TODO
-```
+
+**`TBD`**
 
 4. Create the deep learning configuration file `model.toml`:
 ```toml
@@ -164,6 +160,11 @@ weight_decay = 5e-5
 [scheduler]
 # step_size=40000
 # gamma=0.5
+
+[embedding]
+activate = false
+weights_filepath = "weights"
+op_dict_filepath = "op_dict.json"
 
 [api]
 meta_filepath = ""
@@ -243,7 +244,41 @@ chmod +x test.sh
 ./test.sh
 ```
 
-9. Get the operator embeddings:
+9. Select an appropriate checkpoint to get the `'weights'` and `'op_dict'` of the operator embeddings, and change the value of `mode` argument to `'Test'` and `embedding.activate` to `true`, like:
+```toml
+mode = "Test"
+
+# ...
+# ^ Other Settings
+
+[embedding]
+activate = true
+weights_filepath = "weights"
+op_dict_filepath = "op_dict.json"
+
+# v Other Settings
+# ...
+
+```
+
+10. Run shell script `test.sh` again. The file `weights.npy` and `op_dict.json` will be saved under the directory `YoungBench/Embedding`:
+```shell
+./test.sh
+```
+Finally the directory `YoungBench/Embedding` looks like:
+```shell
+Embedding/
+├── Checkpoint/
+├── extract_subgraphs.log
+├── extract_subgraphs_with_ms.log
+├── model.toml
+├── op_dict.json
+├── subgraphs/
+├── subgraphs_with_ms/
+├── test.sh
+├── train.sh
+└── weights.npy
+```
 
 ###  1.2. <a name='BenchmarkGeneration'></a>Benchmark Generation
 
@@ -283,7 +318,7 @@ younger benchmarks analyze --younger-dataset-dirpath ../Assets/younger/detailed_
 
 All analysis results will be placed at directory `YoungBench/Analysis`, and the structure is as below:
 ```
-YoungBench/
+Analysis/
 ├── other_dataset_indices
 ├── statistics_compare_mlperf_v0.5.json
 ├── statistics_compare_mlperf_v4.1.json
