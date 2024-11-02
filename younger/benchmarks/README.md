@@ -162,9 +162,8 @@ weight_decay = 5e-5
 # gamma=0.5
 
 [embedding]
-name = "GCN_Subgraphs"
 activate = true
-embedding_dirpath = "."
+embedding_dirpath = "./YBEmb_GCN_Subgraphs"
 
 [api]
 meta_filepath = ""
@@ -252,16 +251,15 @@ mode = "Test"
 # ^ Other Settings
 
 [embedding]
-name = "GCN_Subgraphs"
 activate = true
-embedding_dirpath = "."
+embedding_dirpath = "./YBEmb_GCN_Subgraphs"
 
 # v Other Settings
 # ...
 
 ```
 
-10. Run shell script `test.sh` again. The file `YBEmb_*_weights.npy` and `YBEmb_*_op_dict.json` will be saved under the directory `YoungBench/Embedding`:
+10. Run shell script `test.sh` again. The file `YBEmb_GCN_Subgraphs/weights.npy` and `YBEmb_GCN_Subgraphs/op_dict.json` will be saved under the directory `YoungBench/Embedding`:
 ```shell
 ./test.sh
 ```
@@ -278,9 +276,9 @@ Embedding/
 ├── subgraphs_with_ms_gcn.log
 ├── test.sh
 ├── train.sh
-├── YBEmb_GCN_Subgraphs.meta
-├── YBEmb_GCN_Subgraphs_op_dict.json
-└── YBEmb_GCN_Subgraphs_weights.npy
+└── YBEmb_GCN_Subgraphs/
+    ├── op_dict.json
+    └── weights.npy
 ```
 
 ###  1.2. <a name='BenchmarkGeneration'></a>Benchmark Generation
