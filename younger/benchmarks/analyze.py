@@ -24,6 +24,8 @@ from younger.commons.logging import logger
 from younger.datasets.modules import Dataset, Network
 from younger.datasets.utils.translation import get_operator_origin
 
+from younger.applications.utils.neural_network import load_operator_embedding
+
 
 def statistically_analyze(dataset_name: str, dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path) -> dict[str, int | dict[str, tuple[int, float]]]:
     logger.info(f' v Now statistically analyzing {dataset_name} ...')
@@ -155,7 +157,7 @@ def statistical_analysis(younger_dataset_dirpath: pathlib.Path, statistics_dirpa
 
 
 def structurally_analyze(dataset_name: str, dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path, operator_embedding_dict: dict[str, NDArray[numpy.float64]]) -> dict[str, int | dict[str, tuple[int, float]]]:
-    logger.info(f' v Now sttructurally analyzing {dataset_name} ...')
+    logger.info(f' v Now structurally analyzing {dataset_name} ...')
 
     statistics = dict()
 
@@ -240,13 +242,8 @@ def structurally_analyze(dataset_name: str, dataset_dirpath: pathlib.Path, stati
     return statistics
 
 
-def structural_analysis(younger_dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_meta_filepath: pathlib.Path | None = None):
-    opemb_meta = load_pickle(operator_embedding_meta_filepath)
-    opemb_dirpath = operator_embedding_meta_filepath.parent
-    opemb_weights_filepath = opemb_dirpath.joinpath(opemb_meta['weights_filename'])
-    opemb_op_dict_filepath = opemb_dirpath.joinpath(opemb_meta['op_dict_filename'])
-
-    operator_embedding_dict = dict()
+def structural_analysis(younger_dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_dirpath: pathlib.Path | None = None):
+    opemb_weights, opemb_op_dict = load_operator_embedding(operator_embedding_dirpath)
 
 
 def main(younger_dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_meta_filepath: pathlib.Path | None = None, mode: Literal['sts', 'stc', 'both'] = 'sts'):
