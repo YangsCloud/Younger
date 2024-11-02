@@ -310,9 +310,13 @@ class NodePrediction(YoungerTask):
             output = self.model(minibatch.x, minibatch.edge_index, minibatch.mask_x_position)
 
         if self.config['mode'] == 'Test' and self.config['embedding']['activate']:
-            operator_embeddings = self.model.node_embedding_layer.weight.to('cpu').numpy()
-            assert len(operator_embeddings) == len(self.test_dataset.x_dict['o2i'])
-            save_operator_embedding(pathlib.Path(self.config['embedding']['embedding_dirpath']), operator_embeddings, self.test_dataset.x_dict['o2i'])
+            save_dirpath = pathlib.Path(self.config['embedding']['embedding_dirpath'])
+            if save_dirpath.is_dir():
+                pass
+            else:
+                operator_embeddings = self.model.node_embedding_layer.weight.to('cpu').numpy()
+                assert len(operator_embeddings) == len(self.test_dataset.x_dict['o2i'])
+                save_operator_embedding(save_dirpath, operator_embeddings, self.test_dataset.x_dict['o2i'])
 
         # Return Output & Golden
         return output, minibatch.mask_x_label
