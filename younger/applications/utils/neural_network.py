@@ -136,6 +136,7 @@ def remove_checkpoint(checkpoint_path: pathlib.Path):
 
 
 def save_operator_embedding(save_dirpath: pathlib.Path, weights: NDArray, op_dict: dict[str, int]):
+    save_dirpath.mkdir(parents=True, exist_ok=False)
     weights_filepath = save_dirpath.joinpath(f'weights.npy')
     op_dict_filepath = save_dirpath.joinpath(f'op_dict.json')
     numpy.save(weights_filepath, weights)
