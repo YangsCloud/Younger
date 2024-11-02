@@ -272,12 +272,12 @@ Embedding/
 ├── extract_subgraphs.log
 ├── extract_subgraphs_with_ms.log
 ├── model.toml
-├── YBEmb_GCN_Subgraphs.meta
-├── YBEmb_GCN_Subgraphs_op_dict.json
 ├── subgraphs/
 ├── subgraphs_with_ms/
 ├── test.sh
 ├── train.sh
+├── YBEmb_GCN_Subgraphs.meta
+├── YBEmb_GCN_Subgraphs_op_dict.json
 └── YBEmb_GCN_Subgraphs_weights.npy
 ```
 
