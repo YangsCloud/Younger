@@ -318,8 +318,8 @@ class NodePrediction(YoungerTask):
             embedding_name = self.config["embedding"]["name"]
             embedding_dirpath = pathlib.Path(self.config['embedding']['embedding_dirpath'])
             embmeta_filepath = embedding_dirpath.joinpath(f'YBEmb_{embedding_name}.meta')
-            weights_filepath = embedding_dirpath.joinpath(f'YBEmb_weights_{embedding_name}.npy')
-            op_dict_filepath = embedding_dirpath.joinpath(f'YBEmb_op_dict_{embedding_name}.json')
+            weights_filepath = embedding_dirpath.joinpath(f'YBEmb_{embedding_name}_weights.npy')
+            op_dict_filepath = embedding_dirpath.joinpath(f'YBEmb_{embedding_name}_op_dict.json')
             numpy.save(weights_filepath, operator_embeddings)
             save_json(self.test_dataset.x_dict['o2i'], op_dict_filepath, indent=2)
             save_pickle(dict(weights_filename=weights_filepath.name, op_dict_filename=op_dict_filepath.name), embmeta_filepath)
