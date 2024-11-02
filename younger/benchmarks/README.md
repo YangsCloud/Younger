@@ -273,7 +273,9 @@ Embedding/
 ├── extract_subgraphs_with_ms.log
 ├── model.toml
 ├── subgraphs/
+├── subgraphs_gcn.log
 ├── subgraphs_with_ms/
+├── subgraphs_with_ms_gcn.log
 ├── test.sh
 ├── train.sh
 ├── YBEmb_GCN_Subgraphs.meta
