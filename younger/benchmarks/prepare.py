@@ -53,12 +53,14 @@ def purify_instance(instance: Instance, model_source: str, model_name: str) -> I
         cleansed_graph.nodes[node_index]['operator'] = cleansed_graph.nodes[node_index]['features']['operator']
     graph_hash = Network.hash(cleansed_graph, node_attr='operator')
 
+    instance.clean_labels()
     instance.setup_labels(
-        {
-            'model_sources': [model_source],
-            'model_name': [model_name],
-            'hash': graph_hash,
-        }
+        dict(
+            model_sources = [model_source],
+            model_name = [model_name],
+            hash = graph_hash,
+            downloads=[], likes=[], tags=[], evaluations=[]
+        )
     )
 
     return instance
