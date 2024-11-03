@@ -12,6 +12,7 @@
 
 import os
 import pathlib
+import networkx
 
 from typing import Literal
 from xml.etree import ElementTree
@@ -21,7 +22,8 @@ from younger.commons.io import tar_extract, create_dir
 from younger.commons.logging import logger
 from younger.commons.download import download
 
-from younger.datasets.modules import Dataset, Instance
+from younger.datasets.modules import Dataset, Instance, Network
+from younger.datasets.utils.translation import get_complete_attributes_of_node, get_onnx_opset_version
 
 
 SUPPORT_VERSION = {
@@ -31,6 +33,35 @@ SUPPORT_VERSION = {
     'mlperf_v4.1',
     'mlperf_v0.5'
 }
+
+
+def purify_instance(instance: Instance, model_source: str, model_name: str) -> Instance:
+    standardized_graph = Network.standardize(instance.network.graph)
+    for node_index in standardized_graph.nodes():
+        operator = standardized_graph.nodes[node_index]['features']['operator']
+        attributes = standardized_graph.nodes[node_index]['features']['attributes']
+        standardized_graph.nodes[node_index]['features']['attributes'] = get_complete_attributes_of_node(attributes, operator['op_type'], operator['domain'], get_onnx_opset_version())
+
+    standardized_graph.graph.clear()
+
+    instance.setup_network(Network(standardized_graph))
+
+    cleansed_graph = networkx.DiGraph()
+    cleansed_graph.add_nodes_from(instance.network.graph.nodes(data=True))
+    cleansed_graph.add_edges_from(instance.network.graph.edges(data=True))
+    for node_index in cleansed_graph.nodes():
+        cleansed_graph.nodes[node_index]['operator'] = cleansed_graph.nodes[node_index]['features']['operator']
+    graph_hash = Network.hash(cleansed_graph, node_attr='operator')
+
+    instance.setup_labels(
+        {
+            'model_sources': [model_source],
+            'model_name': [model_name],
+            'hash': graph_hash,
+        }
+    )
+
+    return instance
 
 
 def hf_hub_download(r_path: str, l_path: str, ignore_patterns: list[str] | None = None):
@@ -151,6 +182,7 @@ def mlperf_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path, r
                     logger.info(f'      Model Filepath: {model_filepath}')
                     logger.info(f'      Extracting Instance ...')
                     instance = Instance(model_filepath)
+                    instance = purify_instance(instance, f'MLPerf_{release}', f'{model_name}')
                     instances.append(instance)
                     logger.info(f'    - Extracted')
                     instance.save(instance_dirpath)
@@ -239,6 +271,7 @@ def phoronix_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path,
                 logger.info(f'   Model Filepath: {model_filepath}')
                 logger.info(f'   Extracting Instance ...')
                 instance = Instance(model_filepath)
+                instance = purify_instance(instance, f'Phoronix', f'{model_name}')
                 instances.append(instance)
                 logger.info(f'   Extracted')
                 instance.save(instance_dirpath)
