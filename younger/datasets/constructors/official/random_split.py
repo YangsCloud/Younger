@@ -74,10 +74,11 @@ def retrieve_subgraph(graph: networkx.DiGraph, node_index: str, subgraph_size: i
         neighbors = list()
 
         for neighbor in networkx.function.all_neighbors(graph, vertex):
-            node_features = graph.nodes[neighbor]['features']
-            node_origin = get_operator_origin(node_features['operator']['op_type'], domain=node_features['operator']['domain'])
-            if node_origin == 'onnx':
-                neighbors.append(neighbor)
+            # node_features = graph.nodes[neighbor]['features']
+            # node_origin = get_operator_origin(node_features['operator']['op_type'], domain=node_features['operator']['domain'])
+            # if node_origin == 'onnx':
+            #     neighbors.append(neighbor)
+            neighbors.append(neighbor)
         if len(neighbors) == 0:
             continue
 
