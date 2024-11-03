@@ -27,10 +27,10 @@ from younger.datasets.utils.translation import get_operator_origin
 from younger.applications.utils.neural_network import load_operator_embedding
 
 
-def statistically_analyze(dataset_name: str, dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path) -> dict[str, int | dict[str, tuple[int, float]]]:
+def statistically_analyze(dataset_name: str, dataset_dirpath: pathlib.Path, sts_results_dirpath: pathlib.Path) -> dict[str, int | dict[str, tuple[int, float]]]:
     logger.info(f' v Now statistically analyzing {dataset_name} ...')
 
-    statistics = dict()
+    sts_results = dict()
 
     total_ops = 0
     op_type_frequency = dict()
@@ -51,31 +51,31 @@ def statistically_analyze(dataset_name: str, dataset_dirpath: pathlib.Path, stat
                 op_origin_frequency[op_origin] = op_origin_frequency.get(op_origin, 0) + 1
             else:
                 unknown_op_type_frequency[op_type] = unknown_op_type_frequency.get(op_type, 0) + 1
-    statistics['op_type_frequency'] = op_type_frequency
-    statistics['op_origin_frequency'] = op_origin_frequency
-    statistics['unknown_op_type_frequency'] = unknown_op_type_frequency
+    sts_results['op_type_frequency'] = op_type_frequency
+    sts_results['op_origin_frequency'] = op_origin_frequency
+    sts_results['unknown_op_type_frequency'] = unknown_op_type_frequency
     logger.info(f'   Total operators = {total_ops}')
     logger.info(f'   Total different operator types = {len(op_type_frequency)}')
     logger.info(f'   Total different operator origins = {len(op_origin_frequency)}')
 
-    statistics['total_ops'] = total_ops
-    for op_type, frequency in statistics['op_type_frequency'].items():
-        statistics['op_type_frequency'][op_type] = (frequency, frequency/total_ops)
+    sts_results['total_ops'] = total_ops
+    for op_type, frequency in sts_results['op_type_frequency'].items():
+        sts_results['op_type_frequency'][op_type] = (frequency, frequency/total_ops)
 
-    for op_origin, frequency in statistics['op_origin_frequency'].items():
-        statistics['op_origin_frequency'][op_origin] = (frequency, frequency/total_ops)
+    for op_origin, frequency in sts_results['op_origin_frequency'].items():
+        sts_results['op_origin_frequency'][op_origin] = (frequency, frequency/total_ops)
 
-    for unknown_op_type, frequency in statistics['unknown_op_type_frequency'].items():
-        statistics['unknown_op_type_frequency'][unknown_op_type] = (frequency, frequency/total_ops)
+    for unknown_op_type, frequency in sts_results['unknown_op_type_frequency'].items():
+        sts_results['unknown_op_type_frequency'][unknown_op_type] = (frequency, frequency/total_ops)
 
     # v =================================== Save To File =================================== v
-    # Save Statistics JSON
-    json_filepath = statistics_dirpath.joinpath(f'statistics_{dataset_name}.json')
-    save_json(statistics, json_filepath, indent=2)
-    logger.info(f'   {dataset_name}\'s statistics results (JSON format) saved into: {json_filepath}')
+    # Save Statistical Analysis Results (JSON)
+    json_filepath = sts_results_dirpath.joinpath(f'sts_results_{dataset_name}.json')
+    save_json(sts_results, json_filepath, indent=2)
+    logger.info(f'   {dataset_name}\'s statistical analysis results (JSON format) saved into: {json_filepath}')
 
-    # Save Statistics XLSX
-    xlsx_filepath = statistics_dirpath.joinpath(f'statistics_{dataset_name}.xlsx')
+    # Save Statistical Analysis Results (XLSX)
+    xlsx_filepath = sts_results_dirpath.joinpath(f'sts_results_{dataset_name}.xlsx')
     workbook = xlsxwriter.Workbook(xlsx_filepath)
 
     # op type frequency
@@ -86,7 +86,7 @@ def statistically_analyze(dataset_name: str, dataset_dirpath: pathlib.Path, stat
     worksheet.write(0, 2, 'Frequency')
     worksheet.write(0, 3, 'Ratio')
 
-    for index, (op_type, (frequency, ratio)) in enumerate(statistics['op_type_frequency'].items(), start=1):
+    for index, (op_type, (frequency, ratio)) in enumerate(sts_results['op_type_frequency'].items(), start=1):
         op_name, op_domain = ast.literal_eval(op_type)
         worksheet.write(index, 0, op_name)
         worksheet.write(index, 1, op_domain)
@@ -100,71 +100,69 @@ def statistically_analyze(dataset_name: str, dataset_dirpath: pathlib.Path, stat
     worksheet.write(0, 1, 'Frequency')
     worksheet.write(0, 2, 'Ratio')
 
-    for index, (op_origin, (frequency, ratio)) in enumerate(statistics['op_origin_frequency'].items(), start=1):
+    for index, (op_origin, (frequency, ratio)) in enumerate(sts_results['op_origin_frequency'].items(), start=1):
         worksheet.write(index, 0, op_origin)
         worksheet.write(index, 1, frequency)
         worksheet.write(index, 2, ratio)
 
     workbook.close()
-    logger.info(f'   {dataset_name}\'s statistics results (XLSX format) saved into: {xlsx_filepath}')
+    logger.info(f'   {dataset_name}\'s statistical analysis results (XLSX format) saved into: {xlsx_filepath}')
     # ^ =================================== Save To File =================================== ^
 
     logger.info(f' ^ Done')
-    return statistics
+    return sts_results
 
 
-def statistical_analysis(younger_dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None):
-    younger_dataset_statistics = statistically_analyze('younger', younger_dataset_dirpath, statistics_dirpath)
+def statistical_analysis(younger_dataset_dirpath: pathlib.Path, sts_results_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None):
+    younger_dataset_sts_results = statistically_analyze('younger', younger_dataset_dirpath, sts_results_dirpath)
 
     if other_dataset_indices_filepath is not None:
-        other_dataset_statistics = dict()
+        other_dataset_sts_results = dict()
         with open(other_dataset_indices_filepath, 'r') as f:
             for line in f:
                 other_dataset_name, other_dataset_dirpath = line.split(':')[0].strip(), line.split(':')[1].strip()
-                other_dataset_statistics[other_dataset_name] = statistically_analyze(other_dataset_name, other_dataset_dirpath, statistics_dirpath)
+                other_dataset_sts_results[other_dataset_name] = statistically_analyze(other_dataset_name, other_dataset_dirpath, sts_results_dirpath)
 
-        if len(other_dataset_statistics) != 0:
+        if len(other_dataset_sts_results) != 0:
             logger.info(f' v Analyzing Younger Compare To Other Datasets ...')
-            for dataset_name, dataset_statistics in other_dataset_statistics.items():
+            for dataset_name, dataset_sts_results in other_dataset_sts_results.items():
                 op_type_cover_ratios = list() # Other Cover Younger
                 uncovered_op_types = list() # Other Uncovered By Younger
-                for op_type, (frequency, ratio) in dataset_statistics['op_type_frequency'].items():
-                    if op_type in younger_dataset_statistics['op_type_frequency']:
-                        op_type_cover_ratios.append((op_type, frequency / younger_dataset_statistics['op_type_frequency'][op_type][0]))
+                for op_type, (frequency, ratio) in dataset_sts_results['op_type_frequency'].items():
+                    if op_type in younger_dataset_sts_results['op_type_frequency']:
+                        op_type_cover_ratios.append((op_type, frequency / younger_dataset_sts_results['op_type_frequency'][op_type][0]))
                     else:
                         uncovered_op_types.append(op_type)
 
                 op_origin_cover_ratios = list() # Other Cover Younger
                 uncovered_op_origins = list() # Other Uncovered By Younger
-                for op_origin, (frequency, ratio) in dataset_statistics['op_origin_frequency'].items():
-                    if op_origin in younger_dataset_statistics['op_origin_frequency']:
-                        op_origin_cover_ratios.append((op_origin, frequency / younger_dataset_statistics['op_origin_frequency'][op_origin][0]))
+                for op_origin, (frequency, ratio) in dataset_sts_results['op_origin_frequency'].items():
+                    if op_origin in younger_dataset_sts_results['op_origin_frequency']:
+                        op_origin_cover_ratios.append((op_origin, frequency / younger_dataset_sts_results['op_origin_frequency'][op_origin][0]))
                     else:
                         uncovered_op_origins.append(op_origin)
 
-                compare_statistics = dict(
+                compare_sts_results = dict(
                     op_type_cover_ratios = op_type_cover_ratios,
                     uncovered_op_types = uncovered_op_types,
                     op_origin_cover_ratios = op_origin_cover_ratios,
                     uncovered_op_origins = uncovered_op_origins
                 )
 
-                json_filepath = statistics_dirpath.joinpath(f'statistics_compare_{dataset_name}.json')
-                save_json(compare_statistics, json_filepath, indent=2)
-                logger.info(f'   {dataset_name}\'s statistics results (JSON format) compared to Younger saved into: {json_filepath}')
+                json_filepath = sts_results_dirpath.joinpath(f'sts_results_compare_{dataset_name}.json')
+                save_json(compare_sts_results, json_filepath, indent=2)
+                logger.info(f'   {dataset_name}\'s statistical analysis results (JSON format) compared to Younger saved into: {json_filepath}')
 
             logger.info(f' ^ Done')
 
 
-def structurally_analyze(dataset_name: str, dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path, operator_embedding_dict: dict[str, NDArray[numpy.float64]]) -> dict[str, int | dict[str, tuple[int, float]]]:
+def structurally_analyze(dataset_name: str, dataset_dirpath: pathlib.Path, stc_results_dirpath: pathlib.Path, operator_embedding_dict: dict[str, NDArray[numpy.float64]]) -> dict[str, int | dict[str, tuple[int, float]]]:
     logger.info(f' v Now structurally analyzing {dataset_name} ...')
 
-    statistics = dict()
+    stc_results = dict()
 
-    total_ops = 0
-    op_type_frequency = dict()
-    op_origin_frequency = dict()
-    unknown_op_type_frequency = dict()
+    dag_embs = dict()
+    op_types = set()
     for instance in Dataset.load_instances(dataset_dirpath):
         try:
             graph = Network.standardize(instance.network.graph)
@@ -172,89 +170,52 @@ def structurally_analyze(dataset_name: str, dataset_dirpath: pathlib.Path, stati
             # Already cleansed.
             graph = instance.network.graph
         total_ops += graph.number_of_nodes()
+        dag_emb = 0
         for node_index in graph.nodes():
             op_type = Network.get_node_identifier_from_features(graph.nodes[node_index], mode='type')
-            op_origin = get_operator_origin(graph.nodes[node_index]['operator']['op_type'], graph.nodes[node_index]['operator']['domain'])
-            if op_origin != 'unknown':
-                op_type_frequency[op_type] = op_type_frequency.get(op_type, 0) + 1
-                op_origin_frequency[op_origin] = op_origin_frequency.get(op_origin, 0) + 1
-            else:
-                unknown_op_type_frequency[op_type] = unknown_op_type_frequency.get(op_type, 0) + 1
-    statistics['op_type_frequency'] = op_type_frequency
-    statistics['op_origin_frequency'] = op_origin_frequency
-    statistics['unknown_op_type_frequency'] = unknown_op_type_frequency
-    logger.info(f'   Total operators = {total_ops}')
-    logger.info(f'   Total different operator types = {len(op_type_frequency)}')
-    logger.info(f'   Total different operator origins = {len(op_origin_frequency)}')
+            op_type = op_type if op_type in operator_embedding_dict else '__UNK__'
+            op_types.add(op_type)
+            dag_emb += operator_embedding_dict[op_type]
+        dag_emb = dag_emb / graph.number_of_nodes()
 
-    statistics['total_ops'] = total_ops
-    for op_type, frequency in statistics['op_type_frequency'].items():
-        statistics['op_type_frequency'][op_type] = (frequency, frequency/total_ops)
+        dag_embs[instance.labels['model_name'][0]] = dag_emb.tolist()
 
-    for op_origin, frequency in statistics['op_origin_frequency'].items():
-        statistics['op_origin_frequency'][op_origin] = (frequency, frequency/total_ops)
+    op_embs = list()
+    for op_type in op_types:
+        op_embs.append(operator_embedding_dict[op_type].tolist())
+    stc_results['op_embeddings'] = op_embs
+    stc_results['dag_embeddings'] = dag_embs
 
-    for unknown_op_type, frequency in statistics['unknown_op_type_frequency'].items():
-        statistics['unknown_op_type_frequency'][unknown_op_type] = (frequency, frequency/total_ops)
-
-    # v =================================== Save To File =================================== v
-    # Save Statistics JSON
-    json_filepath = statistics_dirpath.joinpath(f'statistics_{dataset_name}.json')
-    save_json(statistics, json_filepath, indent=2)
-    logger.info(f'   {dataset_name}\'s statistics results (JSON format) saved into: {json_filepath}')
-
-    # Save Statistics XLSX
-    xlsx_filepath = statistics_dirpath.joinpath(f'statistics_{dataset_name}.xlsx')
-    workbook = xlsxwriter.Workbook(xlsx_filepath)
-
-    # op type frequency
-    worksheet = workbook.add_worksheet('op_type_frequency')
-
-    worksheet.write(0, 0, 'OP_Name')
-    worksheet.write(0, 1, 'OP_Domain')
-    worksheet.write(0, 2, 'Frequency')
-    worksheet.write(0, 3, 'Ratio')
-
-    for index, (op_type, (frequency, ratio)) in enumerate(statistics['op_type_frequency'].items(), start=1):
-        op_name, op_domain = ast.literal_eval(op_type)
-        worksheet.write(index, 0, op_name)
-        worksheet.write(index, 1, op_domain)
-        worksheet.write(index, 2, frequency)
-        worksheet.write(index, 3, ratio)
-
-    # op origin frequency
-    worksheet = workbook.add_worksheet('op_origin_frequency')
-
-    worksheet.write(0, 0, 'OP_Origin')
-    worksheet.write(0, 1, 'Frequency')
-    worksheet.write(0, 2, 'Ratio')
-
-    for index, (op_origin, (frequency, ratio)) in enumerate(statistics['op_origin_frequency'].items(), start=1):
-        worksheet.write(index, 0, op_origin)
-        worksheet.write(index, 1, frequency)
-        worksheet.write(index, 2, ratio)
-
-    workbook.close()
-    logger.info(f'   {dataset_name}\'s statistics results (XLSX format) saved into: {xlsx_filepath}')
-    # ^ =================================== Save To File =================================== ^
-
-    logger.info(f' ^ Done')
-    return statistics
+    return stc_results
 
 
-def structural_analysis(younger_dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_dirpath: pathlib.Path | None = None):
+def structural_analysis(younger_dataset_dirpath: pathlib.Path, stc_results_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_dirpath: pathlib.Path | None = None):
     opemb_weights, opemb_op_dict = load_operator_embedding(operator_embedding_dirpath)
+    operator_embedding_dict = dict()
+    for operator_id, index in opemb_op_dict.items():
+        operator_embedding_dict[operator_id] = opemb_weights[index]
 
+    younger_dataset_stc_results = structurally_analyze('younger', younger_dataset_dirpath, stc_results_dirpath, operator_embedding_dict)
+    if other_dataset_indices_filepath is not None:
+        other_dataset_stc_results = dict()
+        with open(other_dataset_indices_filepath, 'r') as f:
+            for line in f:
+                other_dataset_name, other_dataset_dirpath = line.split(':')[0].strip(), line.split(':')[1].strip()
+                other_dataset_stc_results[other_dataset_name] = statistically_analyze(other_dataset_name, other_dataset_dirpath, stc_results_dirpath)
 
-def main(younger_dataset_dirpath: pathlib.Path, statistics_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_meta_filepath: pathlib.Path | None = None, mode: Literal['sts', 'stc', 'both'] = 'sts'):
+        if len(other_dataset_stc_results) != 0:
+            pass
+ 
+
+def main(younger_dataset_dirpath: pathlib.Path, results_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_meta_filepath: pathlib.Path | None = None, mode: Literal['sts', 'stc', 'both'] = 'sts'):
     assert mode in {'sts', 'stc', 'both'}
     analyzed = False
     if mode in {'sts', 'both'}:
-        statistical_analysis(younger_dataset_dirpath, statistics_dirpath, other_dataset_indices_filepath)
+        statistical_analysis(younger_dataset_dirpath, results_dirpath.joinpath('statistical'), other_dataset_indices_filepath)
         analyzed = True
 
     if mode in {'stc', 'both'}:
-        structural_analysis(younger_dataset_dirpath, statistics_dirpath, other_dataset_indices_filepath, operator_embedding_meta_filepath)
+        structural_analysis(younger_dataset_dirpath, results_dirpath.joinpath('structural'), other_dataset_indices_filepath, operator_embedding_meta_filepath)
         analyzed = True
 
     if analyzed:
