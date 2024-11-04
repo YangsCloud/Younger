@@ -323,7 +323,7 @@ class NodePrediction(YoungerTask):
 
     def eval_calculate_logs(self, all_outputs: list[torch.Tensor], all_goldens: list[torch.Tensor]) -> OrderedDict:
         if self.config['model']['stage'] == 'encoder':
-            return 
+            return
 
         all_outputs = torch.cat(all_outputs)
         all_goldens = torch.cat(all_goldens)
