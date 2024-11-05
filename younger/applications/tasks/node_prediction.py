@@ -25,7 +25,7 @@ from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_sc
 from younger.datasets.modules import Instance, Network
 from younger.datasets.utils.translation import get_complete_attributes_of_node
 
-from younger.applications.models import GCN_NP, GAT_NP, SAGE_NP, Encoder_NP, LinearCls
+from younger.applications.models import GCN_NP, GIN_NP, GAT_NP, SAGE_NP, Encoder_NP, LinearCls
 from younger.applications.datasets import NodeDataset
 from younger.applications.tasks.base_task import YoungerTask
 from younger.applications.utils.neural_network import load_checkpoint, save_operator_embedding
@@ -179,6 +179,14 @@ class NodePrediction(YoungerTask):
             self.logger.info(f"    -> Using Model: {self.config['model']['model_type']}")
             if self.config['model']['model_type'] == 'SAGE_NP':
                 self._model = SAGE_NP(
+                    node_dict_size=self.node_dict_size,
+                    node_dim=self.config['model']['node_dim'],
+                    hidden_dim=self.config['model']['hidden_dim'],
+                    dropout=self.config['model']['dropout'],
+                )
+
+            elif self.config['model']['model_type'] == 'GIN_NP':
+                self._model = GIN_NP(
                     node_dict_size=self.node_dict_size,
                     node_dim=self.config['model']['node_dim'],
                     hidden_dim=self.config['model']['hidden_dim'],
