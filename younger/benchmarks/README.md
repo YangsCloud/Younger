@@ -321,17 +321,25 @@ All analysis results will be placed at directory `YoungBench/Analysis`, and the 
 ```
 Analysis/
 ├── other_dataset_indices
-├── statistics_compare_mlperf_v0.5.json
-├── statistics_compare_mlperf_v4.1.json
-├── statistics_compare_phoronix.json
-├── statistics_mlperf_v0.5.json
-├── statistics_mlperf_v0.5.xlsx
-├── statistics_mlperf_v4.1.json
-├── statistics_mlperf_v4.1.xlsx
-├── statistics_phoronix.json
-├── statistics_phoronix.xlsx
-├── statistics_younger.json
-└── statistics_younger.xlsx
+├── statistical/
+│   ├── sts_results_compare_mlperf_v0.5.json
+│   ├── sts_results_compare_mlperf_v4.1.json
+│   ├── sts_results_compare_phoronix.json
+│   ├── sts_results_mlperf_v0.5.json
+│   ├── sts_results_mlperf_v0.5.xlsx
+│   ├── sts_results_mlperf_v4.1.json
+│   ├── sts_results_mlperf_v4.1.xlsx
+│   ├── sts_results_phoronix.json
+│   ├── sts_results_phoronix.xlsx
+│   ├── sts_results_younger.json
+│   └── sts_results_younger.xlsx
+├── structural/
+│   ├── stc_results_compare_mlperf_v0.5.pkl
+│   ├── stc_results_compare_mlperf_v4.1.pkl
+│   ├── stc_results_compare_phoronix.pkl
+│   ├── stc_results_younger.pkl
+│   ├── stc_visualization_sketch.pdf
+└── vis.toml
 ```
 
 ####  1.3.3. <a name='StructralAnalysis'></a>Structral Analysis

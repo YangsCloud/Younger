@@ -288,7 +288,7 @@ def structural_analysis(younger_dataset_dirpath: pathlib.Path, stc_results_dirpa
                     dagmebs_reduced = compare_dagembs_reduced.tolist(),
                 )
 
-                pickle_filepath = stc_results_dirpath.joinpath(f'stc_results_compare_{dataset_name}.json')
+                pickle_filepath = stc_results_dirpath.joinpath(f'stc_results_compare_{dataset_name}.pkl')
                 save_pickle(compare_stc_results, pickle_filepath)
                 logger.info(f'   {dataset_name.capitalize()}\'s structural analysis results compared to Younger saved into: {pickle_filepath}')
 
