@@ -11,14 +11,18 @@
 
 
 import ast
+import umap
 import numpy
 import pathlib
 import xlsxwriter
 
+import matplotlib.pyplot
+
 from typing import Any, Literal
 from numpy.typing import NDArray
+from sklearn.preprocessing import StandardScaler
 
-from younger.commons.io import load_json, save_json, load_pickle
+from younger.commons.io import load_json, save_json, load_pickle, save_pickle, load_toml
 from younger.commons.logging import logger
 
 from younger.datasets.modules import Dataset, Network
@@ -42,6 +46,8 @@ def statistically_analyze(dataset_name: str, dataset_dirpath: pathlib.Path, sts_
         except:
             # Already cleansed.
             graph = instance.network.graph
+        if graph.number_of_nodes() == 0:
+            continue
         total_ops += graph.number_of_nodes()
         for node_index in graph.nodes():
             op_type = Network.get_node_identifier_from_features(graph.nodes[node_index], mode='type')
@@ -72,7 +78,7 @@ def statistically_analyze(dataset_name: str, dataset_dirpath: pathlib.Path, sts_
     # Save Statistical Analysis Results (JSON)
     json_filepath = sts_results_dirpath.joinpath(f'sts_results_{dataset_name}.json')
     save_json(sts_results, json_filepath, indent=2)
-    logger.info(f'   {dataset_name}\'s statistical analysis results (JSON format) saved into: {json_filepath}')
+    logger.info(f'   {dataset_name.capitalize()}\'s statistical analysis results (JSON format) saved into: {json_filepath}')
 
     # Save Statistical Analysis Results (XLSX)
     xlsx_filepath = sts_results_dirpath.joinpath(f'sts_results_{dataset_name}.xlsx')
@@ -106,7 +112,7 @@ def statistically_analyze(dataset_name: str, dataset_dirpath: pathlib.Path, sts_
         worksheet.write(index, 2, ratio)
 
     workbook.close()
-    logger.info(f'   {dataset_name}\'s statistical analysis results (XLSX format) saved into: {xlsx_filepath}')
+    logger.info(f'   {dataset_name.capitalize()}\'s statistical analysis results (XLSX format) saved into: {xlsx_filepath}')
     # ^ =================================== Save To File =================================== ^
 
     logger.info(f' ^ Done')
@@ -151,12 +157,12 @@ def statistical_analysis(younger_dataset_dirpath: pathlib.Path, sts_results_dirp
 
                 json_filepath = sts_results_dirpath.joinpath(f'sts_results_compare_{dataset_name}.json')
                 save_json(compare_sts_results, json_filepath, indent=2)
-                logger.info(f'   {dataset_name}\'s statistical analysis results (JSON format) compared to Younger saved into: {json_filepath}')
+                logger.info(f'   {dataset_name.capitalize()}\'s statistical analysis results (JSON format) compared to Younger saved into: {json_filepath}')
 
             logger.info(f' ^ Done')
 
 
-def structurally_analyze(dataset_name: str, dataset_dirpath: pathlib.Path, stc_results_dirpath: pathlib.Path, operator_embedding_dict: dict[str, NDArray[numpy.float64]]) -> dict[str, int | dict[str, tuple[int, float]]]:
+def structurally_analyze(dataset_name: str, dataset_dirpath: pathlib.Path, stc_results_dirpath: pathlib.Path, operator_embedding_dict: dict[str, NDArray[numpy.float64]]) -> dict[str, dict[str, list[float]]]:
     logger.info(f' v Now structurally analyzing {dataset_name} ...')
 
     stc_results = dict()
@@ -169,7 +175,8 @@ def structurally_analyze(dataset_name: str, dataset_dirpath: pathlib.Path, stc_r
         except:
             # Already cleansed.
             graph = instance.network.graph
-        total_ops += graph.number_of_nodes()
+        if graph.number_of_nodes() == 0:
+            continue
         dag_emb = 0
         for node_index in graph.nodes():
             op_type = Network.get_node_identifier_from_features(graph.nodes[node_index], mode='type')
@@ -180,34 +187,116 @@ def structurally_analyze(dataset_name: str, dataset_dirpath: pathlib.Path, stc_r
 
         dag_embs[instance.labels['model_name'][0]] = dag_emb.tolist()
 
-    op_embs = list()
+    op_embs = dict()
     for op_type in op_types:
-        op_embs.append(operator_embedding_dict[op_type].tolist())
+        op_embs[op_type] = operator_embedding_dict[op_type].tolist()
     stc_results['op_embeddings'] = op_embs
     stc_results['dag_embeddings'] = dag_embs
 
     return stc_results
 
 
-def structural_analysis(younger_dataset_dirpath: pathlib.Path, stc_results_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_dirpath: pathlib.Path | None = None):
+def structural_analysis(younger_dataset_dirpath: pathlib.Path, stc_results_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_dirpath: pathlib.Path | None = None, visualize_configuration_filepath: pathlib.Path | None = None, standardization: bool = False):
+    visualize_configuration = load_toml(visualize_configuration_filepath)
     opemb_weights, opemb_op_dict = load_operator_embedding(operator_embedding_dirpath)
     operator_embedding_dict = dict()
     for operator_id, index in opemb_op_dict.items():
         operator_embedding_dict[operator_id] = opemb_weights[index]
 
     younger_dataset_stc_results = structurally_analyze('younger', younger_dataset_dirpath, stc_results_dirpath, operator_embedding_dict)
+    younger_oplabs = numpy.array([oplab for oplab, opemb in younger_dataset_stc_results['op_embeddings'].items()])
+    younger_opembs = numpy.array([opemb for oplab, opemb in younger_dataset_stc_results['op_embeddings'].items()])
+    opembs_reducer = umap.UMAP(**visualize_configuration['OP'])
+    logger.info(f'   + Fitting Operator Embeddings UMAP Reducer.')
+    opembs_reducer.fit(numpy.array(younger_opembs))
+    logger.info(f'   - Done.')
+    younger_opembs_reduced = opembs_reducer.transform(numpy.array(younger_opembs))
+
+    younger_daglabs = numpy.array([daglab for daglab, dagemb in younger_dataset_stc_results['dag_embeddings'].items()])
+    younger_dagembs = numpy.array([dagemb for daglab, dagemb in younger_dataset_stc_results['dag_embeddings'].items()])
+    dagembs_reducer = umap.UMAP(**visualize_configuration['DAG'])
+    logger.info(f'   + Fitting DAG Embeddings UMAP Reducer.')
+    dagembs_reducer.fit(younger_dagembs)
+    logger.info(f'   - Done.')
+    younger_dagembs_reduced = dagembs_reducer.transform(younger_dagembs)
+
+    younger_stc_results = dict(
+        oplabs = younger_oplabs,
+        opembs = younger_opembs.tolist(),
+        opmebs_reduced = younger_opembs_reduced.tolist(),
+        opembs_reducer_config = visualize_configuration['OP'],
+        daglabs = younger_daglabs,
+        dagembs = younger_dagembs.tolist(),
+        dagmebs_reduced = younger_dagembs_reduced.tolist(),
+        dagembs_reducer_config = visualize_configuration['DAG'],
+    )
+
+    pickle_filepath = stc_results_dirpath.joinpath(f'stc_results_younger.pkl')
+    save_pickle(younger_stc_results, pickle_filepath)
+    logger.info(f'   Younger\'s structural analysis results (JSON format) compared to Younger saved into: {pickle_filepath}')
+
+    # v Plot Sketch Figure (Younger Part)
+    colormap = matplotlib.pyplot.get_cmap('tab20')
+    younger_color_op = colormap(0)
+    younger_color_dag = colormap(1)
+    fig, axes = matplotlib.pyplot.subplots(1, 2, figsize=(20, 8))
+    axes[0].scatter(younger_opembs_reduced[:, 0],  younger_opembs_reduced[:, 1],  color=younger_color_op, label='younger')
+    axes[1].scatter(younger_dagembs_reduced[:, 0], younger_dagembs_reduced[:, 1], color=younger_color_dag, label='younger')
+    # ^ Plot Sketch Figure (Younger Part)
+
     if other_dataset_indices_filepath is not None:
         other_dataset_stc_results = dict()
         with open(other_dataset_indices_filepath, 'r') as f:
             for line in f:
                 other_dataset_name, other_dataset_dirpath = line.split(':')[0].strip(), line.split(':')[1].strip()
-                other_dataset_stc_results[other_dataset_name] = statistically_analyze(other_dataset_name, other_dataset_dirpath, stc_results_dirpath)
+                other_dataset_stc_results[other_dataset_name] = structurally_analyze(other_dataset_name, other_dataset_dirpath, stc_results_dirpath, operator_embedding_dict)
 
         if len(other_dataset_stc_results) != 0:
-            pass
- 
+            for index, (dataset_name, dataset_stc_results) in enumerate(other_dataset_stc_results.items()):
+                compare_color_op = colormap(0 + 2 * (index + 1))
+                compare_color_dag = colormap(1 + 2 * (index + 1))
 
-def main(younger_dataset_dirpath: pathlib.Path, results_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_meta_filepath: pathlib.Path | None = None, mode: Literal['sts', 'stc', 'both'] = 'sts'):
+                compare_oplabs = numpy.array([oplab for oplab, opemb in dataset_stc_results['op_embeddings'].items()])
+                compare_opembs = numpy.array([opemb for oplab, opemb in dataset_stc_results['op_embeddings'].items()])
+                compare_opembs_reduced = opembs_reducer.transform(compare_opembs)
+
+                compare_daglabs = numpy.array([daglab for daglab, dagemb in dataset_stc_results['dag_embeddings'].items()])
+                compare_dagembs = numpy.array([dagemb for daglab, dagemb in dataset_stc_results['dag_embeddings'].items()])
+                compare_dagembs_reduced = opembs_reducer.transform(compare_dagembs)
+                compare_stc_results = dict(
+                    oplabs = compare_oplabs,
+                    opembs = compare_opembs.tolist(),
+                    opmebs_reduced = compare_opembs_reduced.tolist(),
+                    daglabs = compare_daglabs,
+                    dagembs = compare_dagembs.tolist(),
+                    dagmebs_reduced = compare_dagembs_reduced.tolist(),
+                )
+
+                pickle_filepath = stc_results_dirpath.joinpath(f'stc_results_compare_{dataset_name}.json')
+                save_pickle(compare_stc_results, pickle_filepath)
+                logger.info(f'   {dataset_name.capitalize()}\'s structural analysis results compared to Younger saved into: {pickle_filepath}')
+
+                # v Plot Sketch Figure (Compare Part)
+                axes[0].scatter(compare_opembs_reduced[:, 0],  compare_opembs_reduced[:, 1],  color=compare_color_op, label=dataset_name)
+                axes[1].scatter(compare_dagembs_reduced[:, 0], compare_dagembs_reduced[:, 1], color=compare_color_dag, label=dataset_name)
+                # ^ Plot Sketch Figure (Compare Part)
+
+    axes[0].set_title('Operators')
+    axes[0].set_xlabel('X-axis')
+    axes[0].set_ylabel('Y-axis')
+    axes[0].legend()
+
+    axes[1].set_title('Graphs')
+    axes[1].set_xlabel('X-axis')
+    axes[1].set_ylabel('Y-axis')
+    axes[1].legend()
+    figure_filepath = stc_results_dirpath.joinpath(f'stc_visualization_sketch.pdf')
+    matplotlib.pyplot.tight_layout()
+    fig.savefig(figure_filepath)
+    logger.info(f'   Structural analysis results are visualized, and the figure is saved into: {figure_filepath}')
+
+
+def main(younger_dataset_dirpath: pathlib.Path, results_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_dirpath: pathlib.Path | None = None, visualize_configuration_filepath: pathlib.Path | None = None, standardization: bool = False, mode: Literal['sts', 'stc', 'both'] = 'sts'):
     assert mode in {'sts', 'stc', 'both'}
     analyzed = False
     if mode in {'sts', 'both'}:
@@ -215,7 +304,7 @@ def main(younger_dataset_dirpath: pathlib.Path, results_dirpath: pathlib.Path, o
         analyzed = True
 
     if mode in {'stc', 'both'}:
-        structural_analysis(younger_dataset_dirpath, results_dirpath.joinpath('structural'), other_dataset_indices_filepath, operator_embedding_meta_filepath)
+        structural_analysis(younger_dataset_dirpath, results_dirpath.joinpath('structural'), other_dataset_indices_filepath, operator_embedding_dirpath, visualize_configuration_filepath, standardization)
         analyzed = True
 
     if analyzed:

@@ -46,10 +46,11 @@ def analyze_run(arguments):
     results_dirpath = pathlib.Path(arguments.results_dirpath)
     other_dataset_indices_filepath = pathlib.Path(arguments.other_dataset_indices_filepath) if arguments.other_dataset_indices_filepath is not None else None
     operator_embedding_dirpath = pathlib.Path(arguments.operator_embedding_dirpath) if arguments.operator_embedding_dirpath is not None else None
+    visualize_configuration_filepath = pathlib.Path(arguments.visualize_configuration_filepath) if arguments.visualize_configuration_filepath is not None else None
 
     from younger.benchmarks.analyze import main
 
-    main(younger_dataset_dirpath, results_dirpath, other_dataset_indices_filepath=other_dataset_indices_filepath, operator_embedding_dict_filepath=operator_embedding_dirpath, mode=arguments.mode)
+    main(younger_dataset_dirpath, results_dirpath, other_dataset_indices_filepath=other_dataset_indices_filepath, operator_embedding_dirpath=operator_embedding_dirpath, visualize_configuration_filepath=visualize_configuration_filepath, standardization=arguments.standardization, mode=arguments.mode)
 
 
 def generate_run(arguments):
@@ -85,9 +86,11 @@ def set_prepare_arguments(parser: argparse.ArgumentParser):
 
 def set_analyze_arguments(parser: argparse.ArgumentParser):
     parser.add_argument('-d', '--younger-dataset-dirpath', type=str)
-    parser.add_argument('-s', '--results-dirpath', type=str)
+    parser.add_argument('-r', '--results-dirpath', type=str)
     parser.add_argument('-o', '--other-dataset-indices-filepath', type=str, default=None)
     parser.add_argument('-e', '--operator-embedding-dirpath', type=str, default=None)
+    parser.add_argument('-v', '--visualize-configuration-filepath', type=str, default=None)
+    parser.add_argument('-s', '--standardization', action='store_true')
     parser.add_argument('-m', '--mode', type=str, choices=['sts', 'stc', 'both'])
 
     parser.add_argument('--logging-filepath', type=str, default=None)
