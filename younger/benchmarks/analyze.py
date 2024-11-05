@@ -160,6 +160,7 @@ def statistical_analysis(younger_dataset_dirpath: pathlib.Path, sts_results_dirp
                 logger.info(f'   {dataset_name.capitalize()}\'s statistical analysis results (JSON format) compared to Younger saved into: {json_filepath}')
 
             logger.info(f' ^ Done')
+        #figure_filepath = stc_results_dirpath.joinpath(f'stc_visualization_sketch.pdf')
 
 
 def structurally_analyze(dataset_name: str, dataset_dirpath: pathlib.Path, stc_results_dirpath: pathlib.Path, operator_embedding_dict: dict[str, NDArray[numpy.float64]]) -> dict[str, dict[str, list[float]]]:
@@ -239,10 +240,25 @@ def structural_analysis(younger_dataset_dirpath: pathlib.Path, stc_results_dirpa
     colormap = matplotlib.pyplot.get_cmap('tab20')
     younger_color_op = colormap(0)
     younger_color_dag = colormap(1)
-    fig, axes = matplotlib.pyplot.subplots(1, 2, figsize=(20, 8))
-    axes[0].scatter(younger_opembs_reduced[:, 0],  younger_opembs_reduced[:, 1],  color=younger_color_op, label='younger')
+    fig, axes = matplotlib.pyplot.subplots(2, 2, figsize=(20, 20))
+    axes[0].scatter(younger_opembs_reduced[:, 0],  younger_opembs_reduced[:, 1],  color=younger_color_op,  label='younger')
+    axes[0].set_title('Operators')
+    axes[0].set_xlabel('X-axis')
+    axes[0].set_ylabel('Y-axis')
+    axes[0].legend()
+
     axes[1].scatter(younger_dagembs_reduced[:, 0], younger_dagembs_reduced[:, 1], color=younger_color_dag, label='younger')
+    axes[1].set_title('Graphs')
+    axes[1].set_xlabel('X-axis')
+    axes[1].set_ylabel('Y-axis')
+    axes[1].legend()
     # ^ Plot Sketch Figure (Younger Part)
+
+    # v Plot Sketch Figure (Compare Part)
+    fig, axes = matplotlib.pyplot.subplots(1, 2, figsize=(20, 8))
+    axes[2].scatter(younger_opembs_reduced[:, 0],  younger_opembs_reduced[:, 1],  color=younger_color_op,  label='younger')
+    axes[3].scatter(younger_dagembs_reduced[:, 0], younger_dagembs_reduced[:, 1], color=younger_color_dag, label='younger')
+    # - Plot Sketch Figure (Compare Part)
 
     if other_dataset_indices_filepath is not None:
         other_dataset_stc_results = dict()
@@ -276,24 +292,25 @@ def structural_analysis(younger_dataset_dirpath: pathlib.Path, stc_results_dirpa
                 save_pickle(compare_stc_results, pickle_filepath)
                 logger.info(f'   {dataset_name.capitalize()}\'s structural analysis results compared to Younger saved into: {pickle_filepath}')
 
-                # v Plot Sketch Figure (Compare Part)
-                axes[0].scatter(compare_opembs_reduced[:, 0],  compare_opembs_reduced[:, 1],  color=compare_color_op, label=dataset_name)
-                axes[1].scatter(compare_dagembs_reduced[:, 0], compare_dagembs_reduced[:, 1], color=compare_color_dag, label=dataset_name)
-                # ^ Plot Sketch Figure (Compare Part)
+                # - Plot Sketch Figure (Compare Part)
+                axes[2].scatter(compare_opembs_reduced[:, 0],  compare_opembs_reduced[:, 1],  color=compare_color_op,  label=dataset_name, marker='*')
+                axes[3].scatter(compare_dagembs_reduced[:, 0], compare_dagembs_reduced[:, 1], color=compare_color_dag, label=dataset_name, marker='*')
+                # - Plot Sketch Figure (Compare Part)
 
-    axes[0].set_title('Operators')
-    axes[0].set_xlabel('X-axis')
-    axes[0].set_ylabel('Y-axis')
-    axes[0].legend()
+    axes[2].set_title('Operators')
+    axes[2].set_xlabel('X-axis')
+    axes[2].set_ylabel('Y-axis')
+    axes[2].legend()
 
-    axes[1].set_title('Graphs')
-    axes[1].set_xlabel('X-axis')
-    axes[1].set_ylabel('Y-axis')
-    axes[1].legend()
+    axes[3].set_title('Graphs')
+    axes[3].set_xlabel('X-axis')
+    axes[3].set_ylabel('Y-axis')
+    axes[3].legend()
     figure_filepath = stc_results_dirpath.joinpath(f'stc_visualization_sketch.pdf')
     matplotlib.pyplot.tight_layout()
     fig.savefig(figure_filepath)
     logger.info(f'   Structural analysis results are visualized, and the figure is saved into: {figure_filepath}')
+    # ^ Plot Sketch Figure (Compare Part)
 
 
 def main(younger_dataset_dirpath: pathlib.Path, results_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_dirpath: pathlib.Path | None = None, visualize_configuration_filepath: pathlib.Path | None = None, standardization: bool = False, mode: Literal['sts', 'stc', 'both'] = 'sts'):
