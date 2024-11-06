@@ -62,6 +62,7 @@ class NodePrediction(YoungerTask):
         model_config["model_type"] = custom_model_config.get('model_type', None)
         model_config['node_dim'] = custom_model_config.get('node_dim', 512)
         model_config['hidden_dim'] = custom_model_config.get('hidden_dim', 256)
+        model_config['layer_number'] = custom_model_config.get('layer_number', 3)
         model_config['dropout'] = custom_model_config.get('dropout', 0.5)
         model_config['stage'] = custom_model_config.get('stage', None) # This is for VGAE or GAE
         model_config['ae_type'] = custom_model_config.get('ae_type', 'VGAE') # This is for VGAE or GAE
