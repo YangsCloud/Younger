@@ -191,6 +191,7 @@ class NodePrediction(YoungerTask):
                     node_dim=self.config['model']['node_dim'],
                     hidden_dim=self.config['model']['hidden_dim'],
                     dropout=self.config['model']['dropout'],
+                    layer_number=self.config['model']['layer_number'],
                 )
 
             elif self.config['model']['model_type'] == 'VGAE_NP':

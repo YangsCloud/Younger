@@ -7,7 +7,7 @@ from torch_geometric.nn import GINConv
 
 class GIN_NP(nn.Module):
 
-    def __init__(self, node_dict_size, node_dim, hidden_dim, dropout, output_embedding = False):
+    def __init__(self, node_dict_size, node_dim, hidden_dim, dropout, layer_number = 3, output_embedding = False):
         super(GIN_NP, self).__init__()
         self.output_embedding = output_embedding
         self.node_embedding_layer = Embedding(node_dict_size, node_dim)
@@ -15,7 +15,7 @@ class GIN_NP(nn.Module):
 
         self.layers = nn.ModuleList()
         self.layers.append(GIN_Conv(node_dim, hidden_dim, hidden_dim))
-        for i in range(3):
+        for i in range(layer_number):
             self.layers.append(GIN_Conv(hidden_dim, hidden_dim, hidden_dim))
 
         self.layers.append(GIN_Conv(hidden_dim, hidden_dim, node_dict_size))
