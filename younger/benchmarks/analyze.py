@@ -11,7 +11,7 @@
 
 
 import ast
-import umap
+import sklearn.manifold
 import numpy
 import pathlib
 import xlsxwriter
@@ -20,7 +20,6 @@ import matplotlib.pyplot
 
 from typing import Any, Literal
 from numpy.typing import NDArray
-from sklearn.preprocessing import StandardScaler
 
 from younger.commons.io import load_json, save_json, load_pickle, save_pickle, load_toml
 from younger.commons.logging import logger
@@ -197,8 +196,8 @@ def structurally_analyze(dataset_name: str, dataset_dirpath: pathlib.Path, stc_r
     return stc_results
 
 
-def structural_analysis(younger_dataset_dirpath: pathlib.Path, stc_results_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_dirpath: pathlib.Path | None = None, visualize_configuration_filepath: pathlib.Path | None = None, standardization: bool = False):
-    visualize_configuration = load_toml(visualize_configuration_filepath)
+def structural_analysis(younger_dataset_dirpath: pathlib.Path, stc_results_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_dirpath: pathlib.Path | None = None, configuration_filepath: pathlib.Path | None = None, standardization: bool = False):
+    configuration = load_toml(configuration_filepath)
     opemb_weights, opemb_op_dict = load_operator_embedding(operator_embedding_dirpath)
     operator_embedding_dict = dict()
     for operator_id, index in opemb_op_dict.items():
@@ -214,10 +213,10 @@ def structural_analysis(younger_dataset_dirpath: pathlib.Path, stc_results_dirpa
     younger_stc_results = dict(
         oplabs = younger_oplabs,
         opembs = younger_opembs,
-        opembs_reducer_config = visualize_configuration['OP'],
+        opembs_reducer_config = configuration['Visualize']['OP'],
         daglabs = younger_daglabs,
         dagembs = younger_dagembs,
-        dagembs_reducer_config = visualize_configuration['DAG'],
+        dagembs_reducer_config = configuration['Visualize']['DAG'],
     )
 
     pickle_filepath = stc_results_dirpath.joinpath(f'stc_results_younger.pkl')
@@ -231,18 +230,22 @@ def structural_analysis(younger_dataset_dirpath: pathlib.Path, stc_results_dirpa
                 other_dataset_name, other_dataset_dirpath = line.split(':')[0].strip(), line.split(':')[1].strip()
                 other_dataset_stc_results[other_dataset_name] = structurally_analyze(other_dataset_name, other_dataset_dirpath, stc_results_dirpath, operator_embedding_dict)
 
-        if len(other_dataset_stc_results) == 0:
-            younger_opembs_reducer = umap.UMAP(**visualize_configuration['OP'])
-            logger.info(f'   + Fitting Younger Operator Embeddings UMAP Reducer.')
-            younger_opembs_reducer.fit(numpy.array(younger_opembs))
-            logger.info(f'   - Done.')
-            younger_opembs_reduced = younger_opembs_reducer.transform(numpy.array(younger_opembs))
+        if configuration['Visualize']['Type'] == 't-SNE':
+            reducer_initializer = sklearn.manifold.TSNE
+        if configuration['Visualize']['Type'] == 'UMAP':
+            import umap
+            reducer_initializer = umap.UMAP
 
-            younger_dagembs_reducer = umap.UMAP(**visualize_configuration['DAG'])
-            logger.info(f'   + Fitting Younger DAG Embeddings UMAP Reducer.')
-            younger_dagembs_reducer.fit(numpy.array(younger_dagembs))
+        if len(other_dataset_stc_results) == 0:
+            younger_opembs_reducer = reducer_initializer(**configuration['Visualize']['OP'])
+            logger.info(f'   + Fitting Younger Operator Embeddings {configuration["Visualize"]["Type"]} Reducer.')
+            younger_opembs_reduced = younger_opembs_reducer.fit_transform(numpy.array(younger_opembs))
             logger.info(f'   - Done.')
-            younger_dagembs_reduced = younger_dagembs_reducer.transform(numpy.array(younger_dagembs))
+
+            younger_dagembs_reducer = reducer_initializer(**configuration['Visualize']['DAG'])
+            logger.info(f'   + Fitting Younger DAG Embeddings {configuration["Visualize"]["Type"]} Reducer.')
+            younger_dagembs_reduced = younger_dagembs_reducer.fit_transform(numpy.array(younger_dagembs))
+            logger.info(f'   - Done.')
 
             # v Plot Sketch Figure (Younger Part)
             colormap = matplotlib.pyplot.get_cmap('Paired')
@@ -260,23 +263,21 @@ def structural_analysis(younger_dataset_dirpath: pathlib.Path, stc_results_dirpa
             axes[1].set_xlabel('X-axis')
             axes[1].set_ylabel('Y-axis')
             axes[1].legend()
-            figure_filepath = stc_results_dirpath.joinpath(f'stc_visualization_sketch.pdf')
+            figure_filepath = stc_results_dirpath.joinpath(f'stc_visualization_sketch_{configuration["Clustering"]["Type"]}_{configuration["Visualize"]["Type"]}.pdf')
             matplotlib.pyplot.tight_layout()
             fig.savefig(figure_filepath)
             logger.info(f'   Structural analysis results are visualized, and the figure is saved into: {figure_filepath}')
             # ^ Plot Sketch Figure (Younger Part)
         else:
-            younger_opembs_reducer = umap.UMAP(**visualize_configuration['OP'])
-            logger.info(f'   + Fitting Younger Operator Embeddings UMAP Reducer.')
-            younger_opembs_reducer.fit(numpy.array(younger_opembs))
+            younger_opembs_reducer = reducer_initializer(**configuration['Visualize']['OP'])
+            logger.info(f'   + Fitting Younger Operator Embeddings {configuration["Visualize"]["Type"]} Reducer.')
+            younger_opembs_reduced = younger_opembs_reducer.fit_transform(numpy.array(younger_opembs))
             logger.info(f'   - Done.')
-            younger_opembs_reduced = younger_opembs_reducer.transform(numpy.array(younger_opembs))
 
-            younger_dagembs_reducer = umap.UMAP(**visualize_configuration['DAG'])
-            logger.info(f'   + Fitting Younger DAG Embeddings UMAP Reducer.')
-            younger_dagembs_reducer.fit(numpy.array(younger_dagembs))
+            younger_dagembs_reducer = reducer_initializer(**configuration['Visualize']['DAG'])
+            logger.info(f'   + Fitting Younger DAG Embeddings {configuration["Visualize"]["Type"]} Reducer.')
+            younger_dagembs_reduced = younger_dagembs_reducer.fit_transform(numpy.array(younger_dagembs))
             logger.info(f'   - Done.')
-            younger_dagembs_reduced = younger_dagembs_reducer.transform(numpy.array(younger_dagembs))
 
             # v Plot Sketch Figure (Younger Part)
             colormap = matplotlib.pyplot.get_cmap('Paired')
@@ -331,38 +332,38 @@ def structural_analysis(younger_dataset_dirpath: pathlib.Path, stc_results_dirpa
                 save_pickle(compare_stc_results, pickle_filepath)
                 logger.info(f'   {dataset_name.capitalize()}\'s structural analysis results compared to Younger saved into: {pickle_filepath}')
 
-            compare_opembs_reducer = umap.UMAP(**visualize_configuration['OP'])
-            logger.info(f'   + Fitting All Operator Embeddings UMAP Reducer.')
-            compare_opembs_reducer.fit(numpy.array(compare_opembs))
+            compare_opembs_reducer = reducer_initializer(**configuration['Visualize']['OP'])
+            logger.info(f'   + Fitting All Operator Embeddings {configuration["Visualize"]["Type"]} Reducer.')
+            compare_opembs_reduced = compare_opembs_reducer.fit_transform(numpy.array(compare_opembs))
             logger.info(f'   - Done.')
-            compare_opembs_reduced = compare_opembs_reducer.transform(numpy.array(compare_opembs))
 
-            compare_dagembs_reducer = umap.UMAP(**visualize_configuration['DAG'])
-            logger.info(f'   + Fitting All DAG Embeddings UMAP Reducer.')
-            compare_dagembs_reducer.fit(numpy.array(compare_dagembs))
+            compare_dagembs_reducer = reducer_initializer(**configuration['Visualize']['DAG'])
+            logger.info(f'   + Fitting All DAG Embeddings {configuration["Visualize"]["Type"]} Reducer.')
+            compare_dagembs_reduced = compare_dagembs_reducer.fit_transform(numpy.array(compare_dagembs))
             logger.info(f'   - Done.')
-            compare_dagembs_reduced = compare_dagembs_reducer.transform(numpy.array(compare_dagembs))
 
             # v Plot Sketch Figure
             colormap = matplotlib.pyplot.get_cmap('tab20')
             for index, (dataset_name, oppos, dagpos) in enumerate(zip(dataset_names, compare_opposs, compare_dagposs)):
                 if dataset_name == 'younger':
                     marker = '.'
-                    size = 36
-                    zorder = 2
+                    size = 10 ** 2
+                    zorder = 1
+                    alpha = 1
                 else:
                     marker = '*'
-                    size = 66
-                    zorder = 1
-                color_op = colormap(1 + 2 * index)
+                    size = 12 ** 2
+                    zorder = 2
+                    alpha = 0.6
+                color_op = colormap(0 + 2 * index)
                 color_dag = colormap(0 + 2 * index)
                 axes[1, 0].scatter(
                     compare_opembs_reduced[oppos[0]:oppos[1], 0],  compare_opembs_reduced[oppos[0]:oppos[1], 1],
-                    color=color_op, label=dataset_name, marker=marker, s=size, zorder=zorder
+                    color=color_op, label=dataset_name, marker=marker, s=size, zorder=zorder, alpha=alpha
                 )
                 axes[1, 1].scatter(
                     compare_dagembs_reduced[dagpos[0]:dagpos[1], 0], compare_dagembs_reduced[dagpos[0]:dagpos[1], 1],
-                    color=color_dag, label=dataset_name, marker=marker, s=size, zorder=zorder
+                    color=color_dag, label=dataset_name, marker=marker, s=size, zorder=zorder, alpha=alpha
                 )
             # ^ Plot Sketch Figure
 
@@ -375,14 +376,14 @@ def structural_analysis(younger_dataset_dirpath: pathlib.Path, stc_results_dirpa
             axes[1, 1].set_xlabel('X-axis')
             axes[1, 1].set_ylabel('Y-axis')
             axes[1, 1].legend()
-            figure_filepath = stc_results_dirpath.joinpath(f'stc_visualization_sketch.pdf')
+            figure_filepath = stc_results_dirpath.joinpath(f'stc_visualization_sketch_{configuration["Clustering"]["Type"]}_{configuration["Visualize"]["Type"]}.pdf')
             matplotlib.pyplot.tight_layout()
             fig.savefig(figure_filepath)
             logger.info(f'   Structural analysis results are visualized, and the figure is saved into: {figure_filepath}')
             # ^ Plot Sketch Figure (Compare Part)
 
 
-def main(younger_dataset_dirpath: pathlib.Path, results_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_dirpath: pathlib.Path | None = None, visualize_configuration_filepath: pathlib.Path | None = None, standardization: bool = False, mode: Literal['sts', 'stc', 'both'] = 'sts'):
+def main(younger_dataset_dirpath: pathlib.Path, results_dirpath: pathlib.Path, other_dataset_indices_filepath: pathlib.Path | None = None, operator_embedding_dirpath: pathlib.Path | None = None, configuration_filepath: pathlib.Path | None = None, standardization: bool = False, mode: Literal['sts', 'stc', 'both'] = 'sts'):
     assert mode in {'sts', 'stc', 'both'}
     analyzed = False
     if mode in {'sts', 'both'}:
@@ -390,7 +391,7 @@ def main(younger_dataset_dirpath: pathlib.Path, results_dirpath: pathlib.Path, o
         analyzed = True
 
     if mode in {'stc', 'both'}:
-        structural_analysis(younger_dataset_dirpath, results_dirpath.joinpath('structural'), other_dataset_indices_filepath, operator_embedding_dirpath, visualize_configuration_filepath, standardization)
+        structural_analysis(younger_dataset_dirpath, results_dirpath.joinpath('structural'), other_dataset_indices_filepath, operator_embedding_dirpath, configuration_filepath, standardization)
         analyzed = True
 
     if analyzed:
