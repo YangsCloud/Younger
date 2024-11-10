@@ -239,6 +239,9 @@ def structural_analysis(stc_results_dirpath: pathlib.Path, configuration_filepat
     younger_reduced_opembs = opembs_reducer.transform(numpy.array(younger_opembs))
     younger_reduced_dagembs = dagembs_reducer.transform(numpy.array(younger_dagembs))
 
+    logger.info(f'   Total {numpy.unique(opembs_cluster.labels_)} OP Clusters.')
+    logger.info(f'   Total {numpy.unique(dagembs_cluster.labels_)} DAG Clusters.')
+
     # v Plot Sketch Figure (Younger Part)
     fig, axes = matplotlib.pyplot.subplots(1, 2, figsize=(20, 10))
     axes[0].scatter(younger_reduced_opembs[:, 0],  younger_reduced_opembs[:, 1],  c=opembs_cluster.labels_, cmap='Paired', marker='.', s=10**2, zorder=1, alpha=1)
