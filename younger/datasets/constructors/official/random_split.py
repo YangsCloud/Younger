@@ -92,10 +92,12 @@ def retrieve_subgraph(graph: networkx.DiGraph, node_index: str, subgraph_size: i
     subgraph = networkx.subgraph(graph, bfs_flags).copy()
 
     cleansed_subgraph = networkx.DiGraph()
-    cleansed_subgraph.add_nodes_from(subgraph.nodes(data=True))
-    cleansed_subgraph.add_edges_from(subgraph.edges(data=True))
+    cleansed_subgraph.add_nodes_from(subgraph.nodes(data=False))
+    cleansed_subgraph.add_edges_from(subgraph.edges(data=False))
+    # cleansed_subgraph.add_nodes_from(subgraph.nodes(data=True))
+    # cleansed_subgraph.add_edges_from(subgraph.edges(data=True))
     for node_index in cleansed_subgraph.nodes():
-        cleansed_subgraph.nodes[node_index]['operator'] = cleansed_subgraph.nodes[node_index]['features']['operator']
+        cleansed_subgraph.nodes[node_index]['operator'] = subgraph.nodes[node_index]['features']['operator']
 
     return cleansed_subgraph
 
