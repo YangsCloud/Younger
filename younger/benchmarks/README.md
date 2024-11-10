@@ -243,7 +243,7 @@ chmod +x test.sh
 ./test.sh
 ```
 
-9. Select an appropriate checkpoint to get the `'weights'` and `'op_dict'` of the operator embeddings, and change the value of `mode` argument to `'Test'` and `embedding.activate` to `true`, like:
+9. Select an appropriate checkpoint to get the `'op_embeddings'` and `'dag_embeddings'` of the operator embeddings, and change the value of `mode` argument to `'Test'` and `embedding.activate` to `true`, like:
 ```toml
 mode = "Test"
 
@@ -259,7 +259,7 @@ embedding_dirpath = "./YBEmb_GCN_Subgraphs"
 
 ```
 
-10. Run shell script `test.sh` again. The file `YBEmb_GCN_Subgraphs/weights.npy` and `YBEmb_GCN_Subgraphs/op_dict.json` will be saved under the directory `YoungBench/Embedding`:
+10. Run shell script `test.sh` again. The file `YBEmb_GCN_Subgraphs_E/weights.npy` and `YBEmb_GCN_Subgraphs/op_dict.json` will be saved under the directory `YoungBench/Embedding`:
 ```shell
 ./test.sh
 ```
