@@ -135,17 +135,17 @@ def remove_checkpoint(checkpoint_path: pathlib.Path):
         raise IOError(f'Invalid address: {checkpoint_path}')
 
 
-def save_operator_embedding(save_dirpath: pathlib.Path, weights: NDArray, op_dict: dict[str, int]):
-    save_dirpath.mkdir(parents=True, exist_ok=False)
-    weights_filepath = save_dirpath.joinpath(f'weights.npy')
-    op_dict_filepath = save_dirpath.joinpath(f'op_dict.json')
-    numpy.save(weights_filepath, weights)
-    save_json(op_dict, op_dict_filepath, indent=2)
+# def save_operator_embedding(save_dirpath: pathlib.Path, weights: NDArray, op_dict: dict[str, int]):
+#     save_dirpath.mkdir(parents=True, exist_ok=False)
+#     weights_filepath = save_dirpath.joinpath(f'weights.npy')
+#     op_dict_filepath = save_dirpath.joinpath(f'op_dict.json')
+#     numpy.save(weights_filepath, weights)
+#     save_json(op_dict, op_dict_filepath, indent=2)
 
 
-def load_operator_embedding(load_dirpath: pathlib.Path):
-    weights_filepath = load_dirpath.joinpath(f'weights.npy')
-    op_dict_filepath = load_dirpath.joinpath(f'op_dict.json')
-    weights = numpy.load(weights_filepath)
-    op_dict = load_json(op_dict_filepath)
-    return weights, op_dict
+# def load_operator_embedding(load_dirpath: pathlib.Path):
+#     weights_filepath = load_dirpath.joinpath(f'weights.npy')
+#     op_dict_filepath = load_dirpath.joinpath(f'op_dict.json')
+#     weights = numpy.load(weights_filepath)
+#     op_dict = load_json(op_dict_filepath)
+#     return weights, op_dict

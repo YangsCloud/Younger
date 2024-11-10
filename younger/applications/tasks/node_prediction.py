@@ -28,7 +28,7 @@ from younger.datasets.utils.translation import get_complete_attributes_of_node
 from younger.applications.models import GCN_NP, GIN_NP, GAT_NP, SAGE_NP, Encoder_NP, LinearCls
 from younger.applications.datasets import NodeDataset
 from younger.applications.tasks.base_task import YoungerTask
-from younger.applications.utils.neural_network import load_checkpoint, save_operator_embedding
+from younger.applications.utils.neural_network import load_checkpoint
 
 
 class NodePrediction(YoungerTask):
@@ -318,15 +318,6 @@ class NodePrediction(YoungerTask):
             output = self.model(embeddings, minibatch.mask_x_position)
         else:
             output = self.model(minibatch.x, minibatch.edge_index, minibatch.mask_x_position)
-
-        if self.config['mode'] == 'Test' and self.config['embedding']['activate']:
-            save_dirpath = pathlib.Path(self.config['embedding']['embedding_dirpath'])
-            if save_dirpath.is_dir():
-                pass
-            else:
-                operator_embeddings = self.model.node_embedding_layer.weight.to('cpu').numpy()
-                assert len(operator_embeddings) == len(self.test_dataset.x_dict['o2i'])
-                save_operator_embedding(save_dirpath, operator_embeddings, self.test_dataset.x_dict['o2i'])
 
         # Return Output & Golden
         return output, minibatch.mask_x_label
