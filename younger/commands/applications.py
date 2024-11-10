@@ -78,6 +78,21 @@ def deep_learning_test_run(arguments):
     )
 
 
+def deep_learning_cli_run(arguments):
+    task_name = arguments.task_name
+    config_filepath = pathlib.Path(arguments.config_filepath)
+    checkpoint_filepath = pathlib.Path(arguments.checkpoint_filepath)
+
+    from younger.applications.deep_learning import cli
+
+    cli(
+        task_name,
+        config_filepath,
+        checkpoint_filepath,
+        arguments.device,
+    )
+
+
 def deep_learning_api_run(arguments):
     task_name = arguments.task_name
     config_filepath = pathlib.Path(arguments.config_filepath)
@@ -138,6 +153,14 @@ def set_applications_deep_learning_arguments(parser: argparse.ArgumentParser):
 
     test_parser.add_argument('--device', type=str, choices=['CPU', 'GPU'], default='GPU')
     test_parser.set_defaults(run=deep_learning_test_run)
+
+    api_parser = subparser.add_parser('cli')
+    api_parser.add_argument('--task-name', type=str)
+    api_parser.add_argument('--config-filepath', type=str)
+    api_parser.add_argument('--checkpoint-filepath', type=str)
+    api_parser.add_argument('--device', type=str, choices=['CPU', 'GPU'], default='GPU')
+    api_parser.set_defaults(run=deep_learning_cli_run)
+
 
     api_parser = subparser.add_parser('api')
     api_parser.add_argument('--task-name', type=str)
