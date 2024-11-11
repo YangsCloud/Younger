@@ -9,6 +9,7 @@
 		* 1.3.1. [Prepare](#Prepare-1)
 		* 1.3.2. [Statistical Analysis](#StatisticalAnalysis)
 		* 1.3.3. [Structral Analysis](#StructralAnalysis)
+		* 1.3.4. [Analysis Results](#AnalysisResults)
 
 <!-- vscode-markdown-toc-config
 	numbering=true
