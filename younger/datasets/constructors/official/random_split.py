@@ -197,6 +197,7 @@ def main(
                     node_indices = sop_positions[instance_index]
                     node_index: str = str(numpy.random.choice(list(node_indices)))
                     subgraph = retrieve_subgraph(instances[instance_index].network.graph, node_index, subgraph_size)
+                    subgraph.graph['graph_hash'] = instances[instance_index].labels['hash']
                     if subgraph.number_of_nodes() < subgraph_size:
                         # all_sop_positions[sop_name][instance_index].remove(node_index)
                         # if len(all_sop_positions[sop_name][instance_index]) == 0:
