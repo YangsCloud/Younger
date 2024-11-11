@@ -10,8 +10,11 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import toml
 import pathlib
 
 
-def main(younger_dataset_dirpath: pathlib.Path, configuration_filepath: pathlib.Path):
-    pass
+def main(benchmark_dirpath: pathlib.Path, configuration_filepath: pathlib.Path):
+    configuration = toml.load(configuration_filepath)
+    user_requires = configuration['user_requires']
+    embs_filepath = configuration['embs_filepath']

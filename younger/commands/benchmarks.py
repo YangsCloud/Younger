@@ -52,12 +52,12 @@ def analyze_run(arguments):
 
 def generate_run(arguments):
     update_logger(arguments)
-    younger_dataset_dirpath = pathlib.Path(arguments.younger_dataset_dirpath)
+    benchmark_dirpath = pathlib.Path(arguments.benchmark_dirpath)
     configuration_filepath = pathlib.Path(arguments.configuration_filepath)
 
     from younger.benchmarks.generate import main
 
-    main(younger_dataset_dirpath, configuration_filepath)
+    main(benchmark_dirpath, configuration_filepath)
 
 
 def merge_run(arguments):
@@ -91,7 +91,7 @@ def set_analyze_arguments(parser: argparse.ArgumentParser):
 
 
 def set_generate_arguments(parser: argparse.ArgumentParser):
-    parser.add_argument('-d', '--younger-dataset-dirpath', type=str)
+    parser.add_argument('-b', '--benchmark-dirpath', type=str)
     parser.add_argument('-c', '--configuration-filepath', type=str)
 
     parser.add_argument('--logging-filepath', type=str, default=None)
