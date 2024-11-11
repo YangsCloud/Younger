@@ -198,7 +198,7 @@ def structural_analysis(stc_results_dirpath: pathlib.Path, configuration_filepat
         compare_emb_dicts[compare_emb['name']] = load_pickle(compare_emb['path'])
 
     timestamp = datetime.now()
-    timestamp_string = timestamp.strftime("%Y%m%d%H%M%S")
+    timestamp_string = timestamp.strftime("%Y%m%d_%H%M%S")
 
     younger_oplabs = [oplab for oplab, opemb in sorted(list(younger_emb_dict['op'].items()))]
     younger_opembs = [opemb for oplab, opemb in sorted(list(younger_emb_dict['op'].items()))]

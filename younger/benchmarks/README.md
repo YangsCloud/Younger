@@ -93,11 +93,11 @@ cd YoungBench/Embedding
 3. Extract subgraphs (only contains official ONNX operators) from Younger
 ```shell
 DATASET_DIRPATH="../Assets/younger/detailed_filter_series_without_attributes_paper/"
-younger datasets split --mode random --version subgraphs \
+younger datasets split --mode random --version YoungBench_Embedding \
     --dataset-dirpath ${DATASET_DIRPATH}/ \
     --save-dirpath . \
-    --subgraph-sizes 5 6 7 8 9 10 11 12 13 14 15 \
-    --subgraph-number 500 \
+    --subgraph-sizes 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 \
+    --subgraph-number 300 \
     --retrieve-try 3600 \
     --node-size-lbound 4 \
     --train-proportion 98.0 \
@@ -109,10 +109,10 @@ younger datasets split --mode random --version subgraphs \
 or one can extract subgraphs also contains `'com.microsoft'` operators with argument `--allow-domain 'com.microsoft'`, as follows:
 ```shell
 DATASET_DIRPATH="../Assets/younger/detailed_filter_series_without_attributes_paper/"
-younger datasets split --mode random --version subgraphs_with_ms \
+younger datasets split --mode random --version YoungBench_Embedding_With_MS \
     --dataset-dirpath ${DATASET_DIRPATH} \
     --save-dirpath . \
-    --subgraph-sizes 5 6 7 8 9 10 11 12 13 14 15 \
+    --subgraph-sizes 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 \
     --subgraph-number 500 \
     --retrieve-try 3600 \
     --node-size-lbound 4 \
@@ -132,64 +132,74 @@ or just download the preprocessed dataset with extracted subgraphs:
 # model.toml
 
 mode = 'Train'
+# mode = 'Test'
 
 [dataset]
-train_dataset_dirpath = "subgraphs/train"
-valid_dataset_dirpath = "subgraphs/valid"
-test_dataset_dirpath  = "subgraphs/test"
-
-# train_dataset_dirpath = "subgraphs_with_ms/train"
-# valid_dataset_dirpath = "subgraphs_with_ms/valid"
-# test_dataset_dirpath  = "subgraphs_with_ms/test"
+train_dataset_dirpath = "YoungBench_Embedding/train"
+valid_dataset_dirpath = "YoungBench_Embedding/valid"
+test_dataset_dirpath =  "YoungBench_Embedding/test"
 
 dataset_name = 'YoungBench_Embedding'
 encode_type = 'operator'
 standard_onnx = true
 worker_number = 32
+mask_ratio = 0.15
 
 [model]
-model_type = 'SAGE_NP'
+model_type = 'MAEGIN'
 node_dim = 512
-hidden_dim = 256
-dropout = 0.5
+hidden_dim = 1024
+dropout = 0.2
+layer_number = 3
 
 [optimizer]
-learning_rate = 1e-3
-weight_decay = 5e-5
+lr = 0.001
+eps = 1e-8
+weight_decay = 0.01
+amsgrad = true
 
 [scheduler]
-# step_size=40000
-# gamma=0.5
+start_factor = 0.1
+warmup_steps = 1500
+total_steps = 150000
+last_step = -1
 
-[embedding]
-activate = true
-embedding_dirpath = "./YBEmb_GCN_Subgraphs"
-
-[api]
-meta_filepath = ""
-onnx_model_dirpath = ""
+[cli]
+node_size_limit = 4
+meta_filepath = "YoungBench_Embedding/test/meta.json"
+embs_filepath = "EmbWeights/Phoronix.pkl"
+instances_dirpath = "../Assets/competitors/phoronix/instances"
+# embs_filepath = "EmbWeights/MLPerf_V4.1.pkl"
+# instances_dirpath = "../Assets/competitors/mlperf_v4.1/instances"
+# embs_filepath = "EmbWeights/MLPerf_V0.5.pkl"
+# instances_dirpath = "../Assets/competitors/mlperf_v0.5/instances"
+# embs_filepath = "EmbWeights/Younger.pkl"
+# instances_dirpath = "../Assets/younger/detailed_filter_series_without_attributes_paper/"
 
 [logging]
-name = "Subgraphs"
-# name = "Subgraphs_With_MS"
+name = "YoungBench_Embedding_MAEGIN"
 mode = "both"
-filepath = "./subgraphs.log"
-# filepath = "./subgraphs_with_ms.log"
-```
-The argument `model_type` can be set to either `'GCN_NP'` or `SAGE_NP`, and the dataset directory can be set to either `subgraphs` or `subgraphs_with_ms` to obtain different model performance or to servce various experimental purposes.
+filepath = "./youngbench_embedding_maegin.log"
 
-5. Change the name the sub-directory:
+# name = "YoungBench_Embedding_With_MS_MAEGIN"
+# mode = "both"
+# filepath = "./youngbench_embedding_with_ms_maegin.log"
+
+```
+The the arguments can be changed and the dataset directory can be set to either `YoungBench_Embedding` or `YoungBench_Embedding_With_MS` to obtain different model performance or to servce various experimental purposes.
+
+5. Change the name of the sub-directory:
 ```shell
-mv subgraphs/train/item subgraphs/train/YoungBench_Embedding_Raw
-mv subgraphs/valid/item subgraphs/valid/YoungBench_Embedding_Raw
-mv subgraphs/test/item  subgraphs/test/YoungBench_Embedding_Raw
+mv YoungBench_Embedding/train/item YoungBench_Embedding/train/YoungBench_Embedding_Raw
+mv YoungBench_Embedding/valid/item YoungBench_Embedding/valid/YoungBench_Embedding_Raw
+mv YoungBench_Embedding/test/item  YoungBench_Embedding/test/YoungBench_Embedding_Raw
 ```
 
 6. Create the training script `train.sh`:
 ```shell
 #!/bin/bash
 # train.sh
-THIS_NAME=GCN
+THIS_NAME=MAEGIN
 
 CONFIG_FILEPATH=${THIS_NAME}.toml
 CHECKPOINT_DIRPATH=./Checkpoint/${THIS_NAME}
@@ -199,16 +209,16 @@ MASTER_PORT=16161
 MASTER_RANK=0
 
 CUBLAS_WORKSPACE_CONFIG=:4096:8 younger applications deep_learning train \
-  --task-name node_prediciton \
+  --task-name ssl_prediction \
   --config-filepath ${CONFIG_FILEPATH} \
   --checkpoint-dirpath ${CHECKPOINT_DIRPATH} \
   --checkpoint-name ${CHECKPOINT_NAME} \
   --keep-number 200 \
   --train-batch-size 512 --valid-batch-size 512 --shuffle \
-  --life-cycle 500 --report-period 10 --update-period 1 \
-  --train-period 100 --valid-period 100 \
+  --life-cycle 200 --report-period 10 --update-period 1 \
+  --train-period 200 --valid-period 200 \
   --device GPU \
-  --world-size 4 --master-addr ${MASTER_ADDR} --master-port ${MASTER_PORT} --master-rank ${MASTER_RANK} \
+  --world-size 1 --master-addr ${MASTER_ADDR} --master-port ${MASTER_PORT} --master-rank ${MASTER_RANK} \
   --seed 12345
 ```
 
@@ -223,16 +233,16 @@ chmod +x train.sh
 #!/bin/bash
 # test.sh
 
-THIS_NAME=GCN
+THIS_NAME=MAEGIN
 
 CONFIG_FILEPATH=${THIS_NAME}.toml
-CHECKPOINT_FILEPATH=./Checkpoint/${THIS_NAME}/GCN_Epoch_100_Step_33800.cp
+CHECKPOINT_FILEPATH=./Checkpoint/${THIS_NAME}/MAEGIN_Epoch_150_Step_185800.cp
 MASTER_ADDR=localhost
 MASTER_PORT=16161
 MASTER_RANK=0
 
 CUBLAS_WORKSPACE_CONFIG=:4096:8 younger applications deep_learning test \
-  --task-name node_prediciton \
+  --task-name ssl_prediction \
   --config-filepath ${CONFIG_FILEPATH} \
   --checkpoint-filepath ${CHECKPOINT_FILEPATH} \
   --test-batch-size 512 \
@@ -243,42 +253,76 @@ chmod +x test.sh
 ./test.sh
 ```
 
-9. Select an appropriate checkpoint to get the `'op_embeddings'` and `'dag_embeddings'` of the operator embeddings, and change the value of `mode` argument to `'Test'` and `embedding.activate` to `true`, like:
+9. Select an appropriate checkpoint, and change the value of `mode` argument to `'Test'` and run the shell script `test.sh`, like:
 ```toml
 mode = "Test"
-
-# ...
-# ^ Other Settings
-
-[embedding]
-activate = true
-embedding_dirpath = "./YBEmb_GCN_Subgraphs"
 
 # v Other Settings
 # ...
 
 ```
 
-10. Run shell script `test.sh` again. The file `YBEmb_GCN_Subgraphs_E/weights.npy` and `YBEmb_GCN_Subgraphs/op_dict.json` will be saved under the directory `YoungBench/Embedding`:
 ```shell
 ./test.sh
 ```
-Finally the directory `YoungBench/Embedding` looks like:
+
+10. Select an appropriate checkpoint to get `'emb_dict's` of the operator embeddings and graph embeddings for each Benchmarks (e.g. MLPerf, Phoronix) or Datasets (e.g. Younger). (A). First, change the value of `mode` argument to `'CLI'`; (B). Then, create shell script `cli.sh` like `test.sh`, and run the script `cli.sh`, like:
+```toml
+mode = "CLI"
+
+# v Other Settings
+# ...
+
+```
+
+```shell
+#!/bin/bash
+# cli.sh
+
+THIS_NAME=MAEGIN
+
+CONFIG_FILEPATH=${THIS_NAME}.toml
+CHECKPOINT_FILEPATH=./Checkpoint/${THIS_NAME}/MAEGIN_Epoch_150_Step_185800.cp
+MASTER_ADDR=localhost
+MASTER_PORT=16161
+MASTER_RANK=0
+
+CUBLAS_WORKSPACE_CONFIG=:4096:8 younger applications deep_learning cli \
+  --task-name ssl_prediction \
+  --config-filepath ${CONFIG_FILEPATH} \
+  --checkpoint-filepath ${CHECKPOINT_FILEPATH}
+```
+
+```shell
+chmod +x cli.sh
+./cli.sh
+```
+
+```shell
+./cli.sh
+```
+
+11. The file `EmbWeights/*.pkl` will be saved under the directory `YoungBench/Embedding`. Finally the directory `YoungBench/Embedding` looks like:
 ```shell
 Embedding/
 ├── Checkpoint/
+├── cli.sh
+├── EmbWeights/
+│   ├── Phoronix.pkl
+│   ├── MLPerf_V0.5.pkl
+│   ├── MLPerf_V4.1.pkl
+│   └── Younger.pkl
 ├── extract_subgraphs.log
+├── extract_subgraphs.sh
 ├── extract_subgraphs_with_ms.log
+├── extract_subgraphs_with_ms.sh
 ├── model.toml
-├── subgraphs/
-├── subgraphs_gcn.log
-├── subgraphs_with_ms/
-├── subgraphs_with_ms_gcn.log
 ├── test.sh
 ├── train.sh
-└── YBEmb_GCN_Subgraphs/
-    ├── op_dict.json
-    └── weights.npy
+├── YoungBench_Embedding/
+├── youngbench_embedding_maegin.log
+├── YoungBench_Embedding_With_MS/
+└── youngbench_embedding_with_ms_maegin.log
 ```
 
 ###  1.2. <a name='BenchmarkGeneration'></a>Benchmark Generation
@@ -303,24 +347,52 @@ Change the working directory to `YoungBench/Analysis`:
 cd ./YoungBench/Analysis
 ```
 
-####  1.3.2. <a name='StatisticalAnalysis'></a>Statistical Analysis
+Create the configuration file `analysis.toml`:
+```toml
+[stc]
+younger_emb = { name = "Younger", path = "../Embedding/EmbWeights/Younger.pkl" }
+compare_embs = [
+    { name = "MLPerf_V0.5", path = "../Embedding/EmbWeights/MLPerf_V0.5.pkl" },
+    { name = "MLPerf_V4.1", path = "../Embedding/EmbWeights/MLPerf_V4.1.pkl" },
+    { name = "Phoronix",    path = "../Embedding/EmbWeights/Phoronix.pkl" }
+]
 
-Create a dataset indices file `other_dataset_indices` which contains multiple lines `Dataset_Name: Dataset_Directory`, suppose that one want to analysis both MLPerf and Phoronix, the file can contain lines:
-```shell
-mlperf_v0.5: ../Assets/competitors/mlperf_v0.5/instances
-mlperf_v4.1: ../Assets/competitors/mlperf_v4.1/instances
-phoronix: ../Assets/competitors/phoronix/instances
+op_cluster_type = "HDBSCAN"
+op_cluster_kwargs = { prediction_data = true }
+dag_cluster_type = "HDBSCAN"
+dag_cluster_kwargs = { prediction_data = true }
+
+op_reducer_type = "UMAP"
+op_reducer_kwargs = {}
+dag_reducer_type = "UMAP"
+dag_reducer_kwargs = {}
+
+[sts]
+younger_dataset = { name = "Younger", path = "../Assets/younger/detailed_filter_series_without_attributes_paper/" }
+compare_datasets = [
+    { name = "MLPerf_V0.5", path = "../Assets/competitors/mlperf_v0.5/instances" },
+    { name = "MLPerf_V4.1", path = "../Assets/competitors/mlperf_v4.1/instances" },
+    { name = "Phoronix",    path = "../Assets/competitors/phoronix/instances" }
+]
+
 ```
 
+####  1.3.2. <a name='StatisticalAnalysis'></a>Statistical Analysis
 Run command to perform analysis:
 ```shell
-younger benchmarks analyze --younger-dataset-dirpath ../Assets/younger/detailed_filter_series_without_attributes_paper --statistics-dirpath . --other-dataset-indices-filepath ./other_dataset_indices
+younger benchmarks analyze --results-dirpath . --configuration-filepath configuration.toml --mode sts
 ```
 
+####  1.3.3. <a name='StructralAnalysis'></a>Structral Analysis
+Run command to perform analysis:
+```shell
+younger benchmarks analyze --results-dirpath . --configuration-filepath configuration.toml --mode stc
+```
+
+####  1.3.4. <a name='AnalysisResults'></a>Analysis Results
 All analysis results will be placed at directory `YoungBench/Analysis`, and the structure is as below:
 ```
 Analysis/
-├── other_dataset_indices
 ├── statistical/
 │   ├── sts_results_compare_mlperf_v0.5.json
 │   ├── sts_results_compare_mlperf_v4.1.json
@@ -334,12 +406,9 @@ Analysis/
 │   ├── sts_results_younger.json
 │   └── sts_results_younger.xlsx
 ├── structural/
-│   ├── stc_results_compare_mlperf_v0.5.pkl
-│   ├── stc_results_compare_mlperf_v4.1.pkl
-│   ├── stc_results_compare_phoronix.pkl
-│   ├── stc_results_younger.pkl
-│   ├── stc_visualization_sketch.pdf
-└── vis.toml
+│   ├── stc_visualization_sketch_20241111_111111.pdf
+│   ├── stc_visualization_sketch_compare_MLPerf_V0.5_20241111_111111.pdf
+│   ├── stc_visualization_sketch_compare_MLPerf_V4.1_20241111_111111.pdf
+│   └── stc_visualization_sketch_compare_Phoronix_20241111_111111.pdf
+└── configuration.toml
 ```
-
-####  1.3.3. <a name='StructralAnalysis'></a>Structral Analysis
