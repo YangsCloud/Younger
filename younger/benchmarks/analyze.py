@@ -284,7 +284,7 @@ def structural_analysis(stc_results_dirpath: pathlib.Path, configuration_filepat
             )
             axes[0].scatter(
                 compare_reduced_opembs[:, 0],  compare_reduced_opembs[:, 1],
-                c=compare_opembs_labels, cmap='Paired', edgecolor='red', linewidth=2, marker='*', s=12**2, zorder=2, alpha=0.6,
+                c=compare_opembs_labels, cmap='Paired', edgecolor='red', linewidth=1, marker='*', s=12**2, zorder=2,# alpha=0.6,
             )
 
             sc_2 = axes[1].scatter(
@@ -293,7 +293,7 @@ def structural_analysis(stc_results_dirpath: pathlib.Path, configuration_filepat
             )
             axes[1].scatter(
                 compare_reduced_dagembs[:, 0], compare_reduced_dagembs[:, 1],
-                c=compare_dagembs_labels, cmap='Paired', edgecolor='red', linewidth=2, marker='*', s=12**2, zorder=2, alpha=0.6,
+                c=compare_dagembs_labels, cmap='Paired', edgecolor='red', linewidth=1, marker='*', s=12**2, zorder=2,# alpha=0.6,
             )
 
             axes[0].set_title('Operators')
