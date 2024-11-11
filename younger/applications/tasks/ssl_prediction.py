@@ -20,6 +20,7 @@ from collections import OrderedDict
 from torch_geometric.data import Data
 from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score
 
+from younger.commons.io import load_pickle
 from younger.datasets.modules import Instance, Network, Dataset
 from younger.datasets.utils.translation import get_complete_attributes_of_node
 
@@ -307,27 +308,36 @@ class SSLPrediction(YoungerTask):
                 cleansed_graph.nodes[node_index]['operator'] = cleansed_graph.nodes[node_index]['features']['operator']
             return cleansed_graph
 
-        embs_filepath = pathlib.Path(self.config['cli']['embs_filepath'])
         operator_embeddings = self.model.encoder.node_embedding_layer.weight.detach().to('cpu').numpy().tolist()
         assert len(operator_embeddings) == len(self.x_dict['o2i'])
 
         opembs_dict = dict()
         dagembs_dict = dict()
-        for instance in Dataset.load_instances(self.config['cli']['instances_dirpath']):
-            graph = cleanse_graph(instance.network.graph)
-            graph_hash = Network.hash(graph, node_attr='operator')
-            if graph.number_of_nodes() <= self.config['cli']['node_size_limit']:
-                continue
-            instance_name = instance.labels['model_name'][0]
+        graphs = list()
+        if self.config['cli']['input_type'] == 'instance':
+            for instance in Dataset.load_instances(self.config['cli']['instances_dirpath']):
+                graph = cleanse_graph(instance.network.graph)
+                graph_hash = Network.hash(graph, node_attr='operator')
+                if graph.number_of_nodes() <= self.config['cli']['node_size_limit']:
+                    continue
+                graphs[graph_hash] = graph
+
+        if self.config['cli']['input_type'] == 'subgraph':
+            for subgraph_filepath in pathlib.Path(self.config['cli']['subgraphs_dirpath']).iterdir():
+                subgraph_hash, subgraph, _ = load_pickle(subgraph_filepath)
+                graphs[subgraph_hash] = subgraph
+
+        for graph_hash, graph in graphs.items():
             data = SSLDataset.get_block_data((graph_hash, graph, None), self.x_dict, 'operator').to(device_descriptor)
             for index in torch.unique(data.x):
                 operator_id = self.x_dict['i2o'][index]
                 if operator_id not in opembs_dict:
                     opembs_dict[operator_id] = operator_embeddings[index]
-            dagembs_dict[instance_name] = torch.mean(self.model.encoder(data.x, data.edge_index), dim=0, keepdim=False).detach().to('cpu').numpy().tolist()
+            dagembs_dict[graph_hash] = torch.mean(self.model.encoder(data.x, data.edge_index), dim=0, keepdim=False).detach().to('cpu').numpy().tolist()
 
         embs_dict = dict(
             op = opembs_dict,
             dag = dagembs_dict,
         )
+        embs_filepath = pathlib.Path(self.config['cli']['embs_filepath'])
         save_pickle(embs_dict, embs_filepath)
