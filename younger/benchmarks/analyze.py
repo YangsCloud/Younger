@@ -264,12 +264,12 @@ def structural_analysis(stc_results_dirpath: pathlib.Path, configuration_filepat
     if len(compare_result_dicts) != 0:
         younger_op_indices = {oplab: index for index, (oplab, opemb) in enumerate(sorted(list(younger_result_dict['op'].items())))}
         # v Plot Sketch Figure (Compare Part)
-        for compare_emb_name, compare_emb_dict in compare_result_dicts.items():
-            compare_oplabs = [oplab for oplab, opemb in compare_emb_dict['op'].items()]
-            compare_opembs = [opemb for oplab, opemb in compare_emb_dict['op'].items()]
+        for compare_result_name, compare_result_dict in compare_result_dicts.items():
+            compare_oplabs = [oplab for oplab, opemb in compare_result_dict['op'].items()]
+            compare_opembs = [opemb for oplab, opemb in compare_result_dict['op'].items()]
 
-            compare_daglabs = [daglab for daglab, dagemb in compare_emb_dict['dag'].items()]
-            compare_dagembs = [dagemb for daglab, dagemb in compare_emb_dict['dag'].items()]
+            compare_daglabs = [daglab for daglab, dagemb in compare_result_dict['dag'].items()]
+            compare_dagembs = [dagemb for daglab, dagemb in compare_result_dict['dag'].items()]
 
             compare_reduced_opembs = numpy.array([younger_reduced_opembs[younger_op_indices[oplab]] for oplab in compare_oplabs])
             compare_opembs_labels = opembs_cluster.predict(numpy.array(compare_opembs))
@@ -299,13 +299,13 @@ def structural_analysis(stc_results_dirpath: pathlib.Path, configuration_filepat
             axes[0].set_title('Operators')
             axes[0].set_xlabel('X-axis')
             axes[0].set_ylabel('Y-axis')
-            axes[0].legend(*sc_1.legend_elements(), title=f'OP: Younger v.s. {compare_emb_name}')
+            axes[0].legend(*sc_1.legend_elements(), title=f'OP: Younger v.s. {compare_result_name}')
 
             axes[1].set_title('Graphs')
             axes[1].set_xlabel('X-axis')
             axes[1].set_ylabel('Y-axis')
-            axes[1].legend(*sc_2.legend_elements(), title=f'DAG: Younger v.s. {compare_emb_name}')
-            figure_filepath = stc_results_dirpath.joinpath(f'stc_visualization_sketch_compare_{compare_emb_name}_{timestamp_string}.pdf')
+            axes[1].legend(*sc_2.legend_elements(), title=f'DAG: Younger v.s. {compare_result_name}')
+            figure_filepath = stc_results_dirpath.joinpath(f'stc_visualization_sketch_compare_{compare_result_name}_{timestamp_string}.pdf')
             matplotlib.pyplot.tight_layout()
             fig.savefig(figure_filepath)
             logger.info(f'   Structural analysis results are visualized, and the figure is saved into: {figure_filepath}')
