@@ -84,10 +84,12 @@ class SSLPrediction(YoungerTask):
         # CLI
         cli_config = dict()
         custom_cli_config = custom_config.get('cli', dict())
+        cli_config['input_type'] = custom_cli_config.get('input_type', 'instance')
         cli_config['node_size_limit'] = custom_cli_config.get('node_size_limit', 4)
         cli_config['meta_filepath'] = custom_cli_config.get('meta_filepath', None)
-        cli_config['embs_filepath'] = custom_cli_config.get('embs_filepath', None)
+        cli_config['result_filepath'] = custom_cli_config.get('result_filepath', None)
         cli_config['instances_dirpath'] = custom_cli_config.get('instances_dirpath', None)
+        cli_config['subgraphs_dirpath'] = custom_cli_config.get('instances_dirpath', None)
 
         config = dict()
         config['dataset'] = dataset_config
@@ -335,7 +337,7 @@ class SSLPrediction(YoungerTask):
 
             op_detail = dict()
             for node_index in graph.nodes():
-                node_identifier = Network.get_node_identifier_from_features(graph.nodes[node_index]['operator'], mode='type')
+                node_identifier = Network.get_node_identifier_from_features(graph.nodes[node_index], mode='type')
                 op_detail[node_identifier] = op_detail.get(node_identifier, 0) + 1
             op_details_dict[graph_hash] = op_detail
 
