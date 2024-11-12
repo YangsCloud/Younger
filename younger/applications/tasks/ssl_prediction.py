@@ -89,7 +89,7 @@ class SSLPrediction(YoungerTask):
         cli_config['meta_filepath'] = custom_cli_config.get('meta_filepath', None)
         cli_config['result_filepath'] = custom_cli_config.get('result_filepath', None)
         cli_config['instances_dirpath'] = custom_cli_config.get('instances_dirpath', None)
-        cli_config['subgraphs_dirpath'] = custom_cli_config.get('instances_dirpath', None)
+        cli_config['subgraphs_dirpath'] = custom_cli_config.get('subgraphs_dirpath', None)
 
         config = dict()
         config['dataset'] = dataset_config
@@ -327,10 +327,14 @@ class SSLPrediction(YoungerTask):
                 s2p_hash_dict[graph_hash] = graph_hash
 
         if self.config['cli']['input_type'] == 'subgraph':
-            for subgraph_filepath in pathlib.Path(self.config['cli']['subgraphs_dirpath']).iterdir():
-                subgraph_hash, subgraph, _ = load_pickle(subgraph_filepath)
-                graphs[subgraph_hash] = subgraph
-                s2p_hash_dict[subgraph_hash] = subgraph.graph['graph_hash']
+            import tqdm
+            subgraph_filepaths = [subgraph_filepath for subgraph_filepath in pathlib.Path(self.config['cli']['subgraphs_dirpath']).iterdir()]
+            with tqdm.tqdm(total=len(subgraph_filepaths), desc='Processing Subgraphs') as progress_bar:
+                for subgraph_filepath in subgraph_filepaths:
+                    subgraph_hash, subgraph, _ = load_pickle(subgraph_filepath)
+                    graphs[subgraph_hash] = subgraph
+                    s2p_hash_dict[subgraph_hash] = subgraph.graph['graph_hash']
+                    progress_bar.update(1)
 
         op_details_dict = dict()
         for graph_hash, graph in graphs.items():
