@@ -188,23 +188,23 @@ def statistical_analysis(sts_results_dirpath: pathlib.Path, configuration_filepa
 
 def structural_analysis(stc_results_dirpath: pathlib.Path, configuration_filepath: pathlib.Path):
     configuration = load_toml(configuration_filepath)
-    younger_emb = configuration['stc'].get('younger_emb', None)
-    assert younger_emb is not None
-    younger_emb_dict = load_pickle(younger_emb['path'])
+    younger_result = configuration['stc'].get('younger_result', None)
+    assert younger_result is not None
+    younger_result_dict = load_pickle(younger_result['path'])
 
-    compare_embs = configuration['stc'].get('compare_embs', list())
-    compare_emb_dicts = dict()
-    for compare_emb in compare_embs:
-        compare_emb_dicts[compare_emb['name']] = load_pickle(compare_emb['path'])
+    compare_results = configuration['stc'].get('compare_results', list())
+    compare_result_dicts = dict()
+    for compare_result in compare_results:
+        compare_result_dicts[compare_result['name']] = load_pickle(compare_result['path'])
 
     timestamp = datetime.now()
     timestamp_string = timestamp.strftime("%Y%m%d_%H%M%S")
 
-    younger_oplabs = [oplab for oplab, opemb in sorted(list(younger_emb_dict['op'].items()))]
-    younger_opembs = [opemb for oplab, opemb in sorted(list(younger_emb_dict['op'].items()))]
+    younger_oplabs = [oplab for oplab, opemb in sorted(list(younger_result_dict['opembs'].items()))]
+    younger_opembs = [opemb for oplab, opemb in sorted(list(younger_result_dict['opembs'].items()))]
 
-    younger_daglabs = [daglab for daglab, dagemb in sorted(list(younger_emb_dict['dag'].items()))]
-    younger_dagembs = [dagemb for daglab, dagemb in sorted(list(younger_emb_dict['dag'].items()))]
+    younger_daglabs = [daglab for daglab, dagemb in sorted(list(younger_result_dict['dagembs'].items()))]
+    younger_dagembs = [dagemb for daglab, dagemb in sorted(list(younger_result_dict['dagembs'].items()))]
 
     op_cluster_type = configuration['stc'].get('op_cluster_type', 'HDBSCAN')
     op_reducer_type = configuration['stc'].get('op_reducer_type', 'UMAP')
@@ -261,10 +261,10 @@ def structural_analysis(stc_results_dirpath: pathlib.Path, configuration_filepat
     logger.info(f'   Structural analysis results are visualized, and the figure is saved into: {figure_filepath}')
     # ^ Plot Sketch Figure (Younger Part)
 
-    if len(compare_emb_dicts) != 0:
-        younger_op_indices = {oplab: index for index, (oplab, opemb) in enumerate(sorted(list(younger_emb_dict['op'].items())))}
+    if len(compare_result_dicts) != 0:
+        younger_op_indices = {oplab: index for index, (oplab, opemb) in enumerate(sorted(list(younger_result_dict['op'].items())))}
         # v Plot Sketch Figure (Compare Part)
-        for compare_emb_name, compare_emb_dict in compare_emb_dicts.items():
+        for compare_emb_name, compare_emb_dict in compare_result_dicts.items():
             compare_oplabs = [oplab for oplab, opemb in compare_emb_dict['op'].items()]
             compare_opembs = [opemb for oplab, opemb in compare_emb_dict['op'].items()]
 

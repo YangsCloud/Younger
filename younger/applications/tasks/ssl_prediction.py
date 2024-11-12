@@ -311,9 +311,10 @@ class SSLPrediction(YoungerTask):
         operator_embeddings = self.model.encoder.node_embedding_layer.weight.detach().to('cpu').numpy().tolist()
         assert len(operator_embeddings) == len(self.x_dict['o2i'])
 
-        opembs_dict = dict()
-        dagembs_dict = dict()
-        graphs = list()
+        opemb_dict = dict()
+        dagemb_dict = dict()
+        s2p_hash_dict = dict() # son -> parent
+        graphs = dict()
         if self.config['cli']['input_type'] == 'instance':
             for instance in Dataset.load_instances(self.config['cli']['instances_dirpath']):
                 graph = cleanse_graph(instance.network.graph)
@@ -321,23 +322,35 @@ class SSLPrediction(YoungerTask):
                 if graph.number_of_nodes() <= self.config['cli']['node_size_limit']:
                     continue
                 graphs[graph_hash] = graph
+                s2p_hash_dict[graph_hash] = graph_hash
 
         if self.config['cli']['input_type'] == 'subgraph':
             for subgraph_filepath in pathlib.Path(self.config['cli']['subgraphs_dirpath']).iterdir():
                 subgraph_hash, subgraph, _ = load_pickle(subgraph_filepath)
                 graphs[subgraph_hash] = subgraph
+                s2p_hash_dict[subgraph_hash] = subgraph.graph['graph_hash']
 
+        op_details_dict = dict()
         for graph_hash, graph in graphs.items():
+
+            op_detail = dict()
+            for node_index in graph.nodes():
+                node_identifier = Network.get_node_identifier_from_features(graph.nodes[node_index]['operator'], mode='type')
+                op_detail[node_identifier] = op_detail.get(node_identifier, 0) + 1
+            op_details_dict[graph_hash] = op_detail
+
             data = SSLDataset.get_block_data((graph_hash, graph, None), self.x_dict, 'operator').to(device_descriptor)
             for index in torch.unique(data.x):
                 operator_id = self.x_dict['i2o'][index]
-                if operator_id not in opembs_dict:
-                    opembs_dict[operator_id] = operator_embeddings[index]
-            dagembs_dict[graph_hash] = torch.mean(self.model.encoder(data.x, data.edge_index), dim=0, keepdim=False).detach().to('cpu').numpy().tolist()
+                if operator_id not in opemb_dict:
+                    opemb_dict[operator_id] = operator_embeddings[index]
+            dagemb_dict[graph_hash] = torch.mean(self.model.encoder(data.x, data.edge_index), dim=0, keepdim=False).detach().to('cpu').numpy().tolist()
 
-        embs_dict = dict(
-            op = opembs_dict,
-            dag = dagembs_dict,
+        result_dict = dict(
+            opembs = opemb_dict,
+            dagembs = dagemb_dict,
+            s2p_hash = s2p_hash_dict,
+            op_details = op_details_dict
         )
-        embs_filepath = pathlib.Path(self.config['cli']['embs_filepath'])
-        save_pickle(embs_dict, embs_filepath)
+        result_filepath = pathlib.Path(self.config['cli']['result_filepath'])
+        save_pickle(result_dict, result_filepath)

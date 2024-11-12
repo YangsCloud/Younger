@@ -18,7 +18,7 @@ from typing import Literal
 from xml.etree import ElementTree
 from optimum.exporters.onnx import main_export
 
-from younger.commons.io import tar_extract, create_dir
+from younger.commons.io import tar_extract, create_dir, save_json
 from younger.commons.logging import logger
 from younger.commons.download import download
 
@@ -346,6 +346,13 @@ def younger_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path) 
     logger.info(f' v Checking all Instances in Younger ...')
     instances = [instance for instance in Dataset.load_instances(younger_dirpath)]
     logger.info(f' ^ Done')
+
+    logger.info(f' v Saving Hash2Name (Instance Hash -> Model Names) ...')
+    hash2names = dict()
+    for instance in instances:
+        hash2names[instance.labels['hash']] = instance.labels['model_name']
+    hash2name_filepath = dataset_dirpath.joinpath('hash2names.json')
+    save_json(hash2names, hash2name_filepath, indent=2)
     return instances
 
 

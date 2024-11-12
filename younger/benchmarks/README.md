@@ -168,13 +168,13 @@ last_step = -1
 [cli]
 node_size_limit = 4
 meta_filepath = "YoungBench_Embedding/test/meta.json"
-embs_filepath = "EmbWeights/Phoronix.pkl"
+result_filepath = "Results/Phoronix.pkl"
 instances_dirpath = "../Assets/competitors/phoronix/instances"
-# embs_filepath = "EmbWeights/MLPerf_V4.1.pkl"
+# result_filepath = "Results/MLPerf_V4.1.pkl"
 # instances_dirpath = "../Assets/competitors/mlperf_v4.1/instances"
-# embs_filepath = "EmbWeights/MLPerf_V0.5.pkl"
+# result_filepath = "Results/MLPerf_V0.5.pkl"
 # instances_dirpath = "../Assets/competitors/mlperf_v0.5/instances"
-# embs_filepath = "EmbWeights/Younger.pkl"
+# result_filepath = "Results/Younger.pkl"
 # instances_dirpath = "../Assets/younger/detailed_filter_series_without_attributes_paper/"
 
 [logging]
@@ -303,12 +303,12 @@ chmod +x cli.sh
 ./cli.sh
 ```
 
-11. The file `EmbWeights/*.pkl` will be saved under the directory `YoungBench/Embedding`. Finally the directory `YoungBench/Embedding` looks like:
+11. The file `Results/*.pkl` will be saved under the directory `YoungBench/Embedding`. Finally the directory `YoungBench/Embedding` looks like:
 ```shell
 Embedding/
 ├── Checkpoint/
 ├── cli.sh
-├── EmbWeights/
+├── Results/
 │   ├── Phoronix.pkl
 │   ├── MLPerf_V0.5.pkl
 │   ├── MLPerf_V4.1.pkl
@@ -351,11 +351,11 @@ cd ./YoungBench/Analysis
 Create the configuration file `analysis.toml`:
 ```toml
 [stc]
-younger_emb = { name = "Younger", path = "../Embedding/EmbWeights/Younger.pkl" }
+younger_emb = { name = "Younger", path = "../Embedding/Results/Younger.pkl" }
 compare_embs = [
-    { name = "MLPerf_V0.5", path = "../Embedding/EmbWeights/MLPerf_V0.5.pkl" },
-    { name = "MLPerf_V4.1", path = "../Embedding/EmbWeights/MLPerf_V4.1.pkl" },
-    { name = "Phoronix",    path = "../Embedding/EmbWeights/Phoronix.pkl" }
+    { name = "MLPerf_V0.5", path = "../Embedding/Results/MLPerf_V0.5.pkl" },
+    { name = "MLPerf_V4.1", path = "../Embedding/Results/MLPerf_V4.1.pkl" },
+    { name = "Phoronix",    path = "../Embedding/Results/Phoronix.pkl" }
 ]
 
 op_cluster_type = "HDBSCAN"
