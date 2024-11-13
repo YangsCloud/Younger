@@ -316,28 +316,30 @@ class SSLPrediction(YoungerTask):
         opemb_dict = dict()
         dagemb_dict = dict()
         s2p_hash_dict = dict() # son -> parent
-        graphs = dict()
         if self.config['cli']['input_type'] == 'instance':
-            for instance in Dataset.load_instances(self.config['cli']['instances_dirpath']):
-                graph = cleanse_graph(instance.network.graph)
-                graph_hash = Network.hash(graph, node_attr='operator')
-                if graph.number_of_nodes() <= self.config['cli']['node_size_limit']:
-                    continue
-                graphs[graph_hash] = graph
-                s2p_hash_dict[graph_hash] = graph_hash
+            def instances2graphs_generator():
+                for instance in Dataset.load_instances(self.config['cli']['instances_dirpath']):
+                    graph = cleanse_graph(instance.network.graph)
+                    graph_hash = Network.hash(graph, node_attr='operator')
+                    if graph.number_of_nodes() <= self.config['cli']['node_size_limit']:
+                        continue
+                    yield (graph_hash, graph, graph_hash)
+            graphs = instances2graphs_generator()
 
         if self.config['cli']['input_type'] == 'subgraph':
-            import tqdm
-            subgraph_filepaths = [subgraph_filepath for subgraph_filepath in pathlib.Path(self.config['cli']['subgraphs_dirpath']).iterdir()]
-            with tqdm.tqdm(total=len(subgraph_filepaths), desc='Processing Subgraphs') as progress_bar:
-                for subgraph_filepath in subgraph_filepaths:
-                    subgraph_hash, subgraph, _ = load_pickle(subgraph_filepath)
-                    graphs[subgraph_hash] = subgraph
-                    s2p_hash_dict[subgraph_hash] = subgraph.graph['graph_hash']
-                    progress_bar.update(1)
+            def subgraphs2graphs_generator():
+                import tqdm
+                subgraph_filepaths = [subgraph_filepath for subgraph_filepath in pathlib.Path(self.config['cli']['subgraphs_dirpath']).iterdir()]
+                with tqdm.tqdm(total=len(subgraph_filepaths), desc='Processing Subgraphs') as progress_bar:
+                    for subgraph_filepath in subgraph_filepaths:
+                        subgraph_hash, subgraph, _ = load_pickle(subgraph_filepath)
+                        yield (subgraph_hash, subgraph, subgraph.graph['graph_hash'])
+                        progress_bar.update(1)
+            graphs = subgraphs2graphs_generator()
 
         op_details_dict = dict()
-        for graph_hash, graph in graphs.items():
+        for graph_hash, graph, parent_graph_hash in graphs:
+            s2p_hash_dict[graph_hash] = parent_graph_hash
 
             op_detail = dict()
             for node_index in graph.nodes():
