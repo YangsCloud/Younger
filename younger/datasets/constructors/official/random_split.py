@@ -22,6 +22,7 @@ from younger.commons.io import save_json, save_pickle, create_dir, tar_archive
 from younger.commons.logging import logger
 
 from younger.datasets.modules import Instance, Network
+from younger.datasets.utils.constants import YoungerDatasetTask
 from younger.datasets.utils.translation import get_operator_origin
 
 
@@ -136,12 +137,15 @@ def main(
     instances: list[Instance] = list() # [ins1, ins2, ...]
     # sop = standard_onnx_operator
     all_sop_positions: dict[str, dict[int, set[str]]] = dict() # {sop_identifier: {instance_index: set[node_index]}}
+    # All Tasks of Each Instance
+    tasks_of_instances: list[list[int]] = list()
     with tqdm.tqdm(total=len(paths)) as progress_bar:
         instance_index = 0
         for path in paths:
             progress_bar.update(1)
             instance = Instance()
             instance.load(path)
+            tasks_of_instance = set([YoungerDatasetTask.T2I[tag] for tag in instance.labels['tags'] if tag in YoungerDatasetTask.T2I])
             graph_node_num, graph_edge_num = instance.network.graph.number_of_nodes(), instance.network.graph.number_of_edges()
             node_size_lbound = graph_node_num if global_node_size_lbound is None else global_node_size_lbound
             node_size_ubound = graph_node_num if global_node_size_ubound is None else global_node_size_ubound
@@ -152,6 +156,7 @@ def main(
                 continue
 
             instances.append(instance)
+            tasks_of_instances.append(tasks_of_instance)
 
             for node_index in instance.network.graph.nodes():
                 node_features = instance.network.graph.nodes[node_index]['features']
@@ -206,6 +211,7 @@ def main(
                         continue
                     else:
                         subgraph_hash = Network.hash(subgraph, node_attr='operator')
+                        subgraph.graph['tasks'] = tasks_of_instances[instance_index]
                         if subgraph_hash in subgraphs[subgraph_size]:
                             continue
                         else:
@@ -250,6 +256,7 @@ def main(
 
     meta = dict(
         all_operators = sop_dict,
+        all_tasks = YoungerDatasetTask.I2T,
     )
 
     if len(subgraph_train_split):

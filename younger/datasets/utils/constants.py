@@ -159,3 +159,54 @@ class YOUNGER_DATASET_NODE_TYPE(Constant):
 YoungerDatasetNodeType = YOUNGER_DATASET_NODE_TYPE()
 YoungerDatasetNodeType.initialize()
 YoungerDatasetNodeType.freeze()
+
+
+class YOUNGER_DATASET_TASK(Constant):
+    def initialize(self) -> None:
+        self.I2T = [
+            "any-to-any",
+            "audio-classification",
+            "audio-to-audio",
+            "automatic-speech-recognition",
+            "depth-estimation",
+            "document-question-answering",
+            "feature-extraction",
+            "fill-mask",
+            "image-classification",
+            "image-feature-extraction",
+            "image-segmentation",
+            "image-to-image",
+            "image-text-to-text",
+            "image-to-text",
+            "keypoint-detection",
+            "mask-generation",
+            "object-detection",
+            "video-classification",
+            "question-answering",
+            "reinforcement-learning",
+            "sentence-similarity",
+            "summarization",
+            "table-question-answering",
+            "tabular-classification",
+            "tabular-regression",
+            "text-classification",
+            "text-generation",
+            "text-to-image",
+            "text-to-speech",
+            "text-to-video",
+            "token-classification",
+            "translation",
+            "unconditional-image-generation",
+            "video-text-to-text",
+            "visual-question-answering",
+            "zero-shot-classification",
+            "zero-shot-image-classification",
+            "zero-shot-object-detection",
+            "text-to-3d",
+            "image-to-3d"
+        ]
+        self.T2I = { task_type: index for index, task_type in enumerate(self.I2T) }
+
+YoungerDatasetTask = YOUNGER_DATASET_TASK()
+YoungerDatasetTask.initialize()
+YoungerDatasetTask.freeze()
