@@ -168,6 +168,8 @@ class SSLDataset(Dataset):
         if encode_type == 'operator':
             meta['all_operators'] = loaded_meta['all_operators']
 
+        meta['all_tasks'] = loaded_meta['all_tasks']
+
         meta['split'] = loaded_meta['split']
         meta['archive'] = loaded_meta['archive']
         meta['version'] = loaded_meta['version']
