@@ -22,6 +22,7 @@ from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_sc
 
 from younger.commons.io import load_pickle
 from younger.datasets.modules import Instance, Network, Dataset
+from younger.datasets.utils.constants import YoungerDatasetTask
 from younger.datasets.utils.translation import get_complete_attributes_of_node
 
 from younger.applications.models import MAEGIN
@@ -313,17 +314,15 @@ class SSLPrediction(YoungerTask):
         operator_embeddings = self.model.encoder.node_embedding_layer.weight.detach().to('cpu').numpy().tolist()
         assert len(operator_embeddings) == len(self.x_dict['o2i'])
 
-        opemb_dict = dict()
-        dagemb_dict = dict()
-        s2p_hash_dict = dict() # son -> parent
         if self.config['cli']['input_type'] == 'instance':
             def instances2graphs_generator():
                 for instance in Dataset.load_instances(self.config['cli']['instances_dirpath']):
                     graph = cleanse_graph(instance.network.graph)
                     graph_hash = Network.hash(graph, node_attr='operator')
+                    graph_tasks = [YoungerDatasetTask.T2I[tag] for tag in instance.labels['tags'] if tag in YoungerDatasetTask.T2I]
                     if graph.number_of_nodes() <= self.config['cli']['node_size_limit']:
                         continue
-                    yield (graph_hash, graph, graph_hash)
+                    yield (graph_hash, graph, graph_hash, graph_tasks)
             graphs = instances2graphs_generator()
 
         if self.config['cli']['input_type'] == 'subgraph':
@@ -333,32 +332,31 @@ class SSLPrediction(YoungerTask):
                 with tqdm.tqdm(total=len(subgraph_filepaths), desc='Processing Subgraphs') as progress_bar:
                     for subgraph_filepath in subgraph_filepaths:
                         subgraph_hash, subgraph, _ = load_pickle(subgraph_filepath)
-                        yield (subgraph_hash, subgraph, subgraph.graph['graph_hash'])
+                        yield (subgraph_hash, subgraph, subgraph.graph['graph_hash'], subgraph.graph['tasks'])
                         progress_bar.update(1)
             graphs = subgraphs2graphs_generator()
 
-        op_details_dict = dict()
-        for graph_hash, graph, parent_graph_hash in graphs:
-            s2p_hash_dict[graph_hash] = parent_graph_hash
-
-            op_detail = dict()
+        op_covered = dict()
+        dag_detail = dict()
+        for graph_hash, graph, parent_graph_hash, graph_tasks in graphs:
+            dagops = set()
             for node_index in graph.nodes():
                 node_identifier = Network.get_node_identifier_from_features(graph.nodes[node_index], mode='type')
-                op_detail[node_identifier] = op_detail.get(node_identifier, 0) + 1
-            op_details_dict[graph_hash] = op_detail
+                dagops.add(self.x_dict['o2i'][node_identifier])
 
             data = SSLDataset.get_block_data((graph_hash, graph, None), self.x_dict, 'operator').to(device_descriptor)
             for index in torch.unique(data.x):
                 operator_id = self.x_dict['i2o'][index]
-                if operator_id not in opemb_dict:
-                    opemb_dict[operator_id] = operator_embeddings[index]
-            dagemb_dict[graph_hash] = torch.mean(self.model.encoder(data.x, data.edge_index), dim=0, keepdim=False).detach().to('cpu').numpy().tolist()
+                if operator_id not in op_covered:
+                    op_covered[operator_id] = operator_embeddings[index]
+            dagemb = torch.mean(self.model.encoder(data.x, data.edge_index), dim=0, keepdim=False).detach().to('cpu').numpy().tolist()
+            dag_detail[graph_hash] = (dagops, dagemb, parent_graph_hash, graph_tasks)
 
         result_dict = dict(
-            opembs = opemb_dict,
-            dagembs = dagemb_dict,
-            s2p_hash = s2p_hash_dict,
-            op_details = op_details_dict
+            op_mapping = self.x_dict,
+            tk_mapping = self.meta['all_tasks'],
+            op_covered = op_covered,
+            dag_detail = dag_detail,
         )
         result_filepath = pathlib.Path(self.config['cli']['result_filepath'])
         save_pickle(result_dict, result_filepath)
