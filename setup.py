@@ -53,7 +53,6 @@ except FileNotFoundError:
 # Required Packages and Optional Packages
 # Required
 REQUIRED = [
-    'toml',
     'tqdm',
     'psutil',
     'pandas',
