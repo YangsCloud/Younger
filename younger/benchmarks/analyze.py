@@ -200,11 +200,11 @@ def structural_analysis(stc_results_dirpath: pathlib.Path, configuration_filepat
     timestamp = datetime.now()
     timestamp_string = timestamp.strftime("%Y%m%d_%H%M%S")
 
-    younger_oplabs = [oplab for oplab, opemb in sorted(list(younger_result_dict['opembs'].items()))]
-    younger_opembs = [opemb for oplab, opemb in sorted(list(younger_result_dict['opembs'].items()))]
+    younger_oplabs = [oplab for oplab, opemb in sorted(list(younger_result_dict['op_covered'].items()))]
+    younger_opembs = [opemb for oplab, opemb in sorted(list(younger_result_dict['op_covered'].items()))]
 
-    younger_daglabs = [daglab for daglab, dagemb in sorted(list(younger_result_dict['dagembs'].items()))]
-    younger_dagembs = [dagemb for daglab, dagemb in sorted(list(younger_result_dict['dagembs'].items()))]
+    younger_daglabs = [daglab for daglab, (opset, dagemb, parent_graph_hash) in sorted(list(younger_result_dict['dag_detail'].items()))]
+    younger_dagembs = [dagemb for daglab, (opset, dagemb, parent_graph_hash) in sorted(list(younger_result_dict['dag_detail'].items()))]
 
     op_cluster_type = configuration['stc'].get('op_cluster_type', 'HDBSCAN')
     op_reducer_type = configuration['stc'].get('op_reducer_type', 'UMAP')

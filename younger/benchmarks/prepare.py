@@ -353,6 +353,7 @@ def younger_prepare(bench_dirpath: pathlib.Path, dataset_dirpath: pathlib.Path) 
         hash2names[instance.labels['hash']] = instance.labels['model_name']
     hash2name_filepath = dataset_dirpath.joinpath('hash2names.json')
     save_json(hash2names, hash2name_filepath, indent=2)
+    logger.info(f' ^ Done')
     return instances
 
 
