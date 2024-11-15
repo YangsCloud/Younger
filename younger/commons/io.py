@@ -10,13 +10,13 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
-import toml
 import json
 import pickle
 import psutil
 import shutil
 import tarfile
 import pathlib
+import tomllib
 
 from younger.commons.hash import hash_bytes
 from younger.commons.logging import logger
@@ -159,7 +159,7 @@ def load_toml(filepath: pathlib.Path | str) -> dict:
     filepath = get_system_depend_path(filepath)
     try:
         with open(filepath, 'r') as file:
-            config = toml.load(file)
+            config = tomllib.load(file)
     except Exception as exception:
         logger.error(f'An Error occurred while reading serializable object from the \'json\' file: {str(exception)}')
         raise exception
