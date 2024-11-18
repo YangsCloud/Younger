@@ -11,6 +11,7 @@
 
 
 import onnx
+import types
 
 from younger.commons.constants import Constant
 
