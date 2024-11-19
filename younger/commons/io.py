@@ -158,7 +158,7 @@ def save_pickle(serializable_object: object, filepath: pathlib.Path | str) -> No
 def load_toml(filepath: pathlib.Path | str) -> dict:
     filepath = get_system_depend_path(filepath)
     try:
-        with open(filepath, 'r') as file:
+        with open(filepath, 'rb') as file:
             config = tomllib.load(file)
     except Exception as exception:
         logger.error(f'An Error occurred while reading serializable object from the \'json\' file: {str(exception)}')
