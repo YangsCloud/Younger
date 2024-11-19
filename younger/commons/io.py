@@ -41,7 +41,7 @@ def get_system_depend_paths(paths: list[pathlib.Path | str]) -> list[pathlib.Pat
 
         if isinstance(path, str):
             system_depend_paths.append(pathlib.Path(path))
-    return paths
+    return system_depend_paths
 
 
 def create_dir(dirpath: pathlib.Path | str) -> None:
