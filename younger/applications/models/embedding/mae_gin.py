@@ -1,3 +1,5 @@
+import numpy
+
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Embedding
@@ -28,11 +30,14 @@ class MAEGINEncoder(nn.Module):
         self.node_embedding_layer = Embedding(node_dict_size, node_dim)
 
         self.layers = nn.ModuleList()
-        self.layers.append(MAEGINConv(node_dim, hidden_dim, hidden_dim))
-        for i in range(layer_number):
-            self.layers.append(MAEGINConv(hidden_dim, hidden_dim, hidden_dim))
 
-        self.layers.append(MAEGINConv(hidden_dim, hidden_dim, hidden_dim))
+        dims = numpy.linspace(node_dim, hidden_dim, 1 + layer_number + 1 + 1, endpoint=True, dtype=int)
+
+        self.layers.append(MAEGINConv(dims[0], dims[0], dims[1]))
+        for i in range(1, 1 + layer_number):
+            self.layers.append(MAEGINConv(dims[i], dims[i+1], dims[i+1]))
+
+        self.layers.append(MAEGINConv(dims[1+layer_number], dims[1+layer_number], dims[1+layer_number+1]))
 
     def forward(self, x, edge_index):
         x = self.node_embedding_layer(x).squeeze(1)
@@ -47,8 +52,9 @@ class MAEGINDecoder(nn.Module):
     def __init__(self, node_dict_size, hidden_dim):
         super(MAEGINDecoder, self).__init__()
         self.gnn = GINConv(nn.Sequential(nn.Identity()))
-        self.trn = nn.Linear(hidden_dim, hidden_dim)
-        self.prd = nn.Linear(hidden_dim, node_dict_size)
+        middle_dim = hidden_dim + int((node_dict_size - hidden_dim) / 2)
+        self.trn = nn.Linear(hidden_dim, middle_dim)
+        self.prd = nn.Linear(middle_dim, node_dict_size)
 
     def forward(self, x, edge_index):
         x = self.gnn(x, edge_index)
