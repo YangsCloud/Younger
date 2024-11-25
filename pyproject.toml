@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "Younger"
+description = "A Younger Project for Artificial Intelligence: Datasets, Benchmarks, and Applications."
+version = "0.0.1alpha2"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "Apache Software License"}
+keywords = ["Younger", "Benchmark", "Artificial Intelligence"]
+authors = [{name = "Jason-Young-AI", email = "AI.Jason.Young@outlook.com"}]
+maintainers = [{name = "Jason-Young-AI", email = "AI.Jason.Young@outlook.com"}]
+classifiers=[
+    "Development Status :: 3 - Alpha",
+
+    'Intended Audience :: Developers',
+    'Intended Audience :: Education',
+    'Intended Audience :: Science/Research',
+    'Topic :: Scientific/Engineering :: Artificial Intelligence',
+
+    'License :: OSI Approved :: Apache Software License',
+
+    'Operating System :: OS Independent',
+
+    'Programming Language :: Python :: 3',
+    'Programming Language :: Python :: 3.11',
+    "Programming Language :: Python :: 3 :: Only",
+]
+
+dependencies = [
+    "tqdm",
+    "psutil",
+    "pandas",
+    "networkx",
+    "python-semantic-release"
+]
+
+[project.optional-dependencies]
+datasets-onnx = ["onnx"]
+datasets-torchvision = ["onnx", "torch", "torchvision"]
+datasets-huggingface-optimum = ["onnx", "isocodes", "huggingface-hub", "optimum[exporters]"]
+datasets-huggingface-onnx = ["onnx", "isocodes", "huggingface-hub"]
+datasets-huggingface-keras = ["onnx", "isocodes", "huggingface-hub", "tensorflow>=2.9,<=2.15", "tf2onnx"]
+datasets-huggingface-tflite = ["onnx", "isocodes", "huggingface-hub", "tensorflow>=2.9,<=2.15", "tf2onnx"]
+datasets-official = ["onnx"]
+benchmarks = []
+applications = ["torch-geometric"]
+
+[project.urls]
+Homepage = "https://github.com/YangsCloud/Younger.git"
+Issues = "https://github.com/YangsCloud/Younger.git/issues"
+Source = "https://github.com/YangsCloud/Younger.git"
+Repository = "https://github.com/YangsCloud/Younger.git"
+
+[project.scripts]
+younger = "younger.commands.main:main"
