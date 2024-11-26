@@ -395,6 +395,58 @@ def test(
         'Test',
     )
 
+def cli(
+    task_name: str, config_filepath: pathlib.Path,
+    checkpoint_filepath: pathlib.Path,
+    device: Literal['CPU', 'GPU'] = 'GPU',
+):
+    assert task_name in task_builders, f'Task ({task_name}) is not Defined'
+
+    assert device in {'CPU', 'GPU'}
+    device_descriptor = get_device_descriptor(device, 0)
+    assert torch.cuda.is_available() or device == 'CPU'
+
+    # Build Task
+    custom_config = load_toml(config_filepath)
+    task: YoungerTask = task_builders[task_name](custom_config)
+    task.logger.info(f'Configuration Loaded From {config_filepath}')
+
+    task.logger.info(f'Using Device: {device};')
+
+    task.logger.info(f'Preparing Task: Model & Dataset ...')
+    task.prepare_cli()
+
+    # Print Model
+    task.logger.info(f'  -> Model Specs:')
+    parameters_number = get_model_parameters_number(task.model)
+    parameters_number_str = str()
+    for name, number in parameters_number.items():
+        parameters_number_str += f'{name}: {number} Elements ;\n'
+    parameters_number_str += f'Total: {sum(parameters_number.values())} Elements .\n'
+    task.logger.info(
+        f'\n  - Model Architecture:'
+        f'\n{task.model}'
+        f'\n  - Number of Parameters:'
+        f'\n{parameters_number_str}'
+    )
+
+    task.logger.info(f'  v Loading Model Weights From Checkpoint [\'{checkpoint_filepath}\']...')
+    checkpoint = load_checkpoint(checkpoint_filepath)
+    
+    task.model.load_state_dict(checkpoint['model_state'], strict=True)
+    task.logger.info(f'  ^ Loaded ')
+
+    task.logger.info(f'  v Moving model to the specified device ...')
+    task.model.to(device_descriptor)
+    task.logger.info(f'  ^ Moved.')
+
+    tic = time.time()
+    with torch.no_grad():
+        task.cli(device_descriptor)
+    toc = time.time()
+
+    task.logger.info(f'  -> Test Finished. (Time Cost = {toc-tic:.2f}s)')
+
 def api(
     task_name: str, config_filepath: pathlib.Path,
     checkpoint_filepath: pathlib.Path,

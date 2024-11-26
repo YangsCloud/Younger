@@ -10,13 +10,13 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
-import toml
 import json
 import pickle
 import psutil
 import shutil
 import tarfile
 import pathlib
+import tomllib
 
 from younger.commons.hash import hash_bytes
 from younger.commons.logging import logger
@@ -41,7 +41,7 @@ def get_system_depend_paths(paths: list[pathlib.Path | str]) -> list[pathlib.Pat
 
         if isinstance(path, str):
             system_depend_paths.append(pathlib.Path(path))
-    return paths
+    return system_depend_paths
 
 
 def create_dir(dirpath: pathlib.Path | str) -> None:
@@ -158,8 +158,8 @@ def save_pickle(serializable_object: object, filepath: pathlib.Path | str) -> No
 def load_toml(filepath: pathlib.Path | str) -> dict:
     filepath = get_system_depend_path(filepath)
     try:
-        with open(filepath, 'r') as file:
-            config = toml.load(file)
+        with open(filepath, 'rb') as file:
+            config = tomllib.load(file)
     except Exception as exception:
         logger.error(f'An Error occurred while reading serializable object from the \'json\' file: {str(exception)}')
         raise exception

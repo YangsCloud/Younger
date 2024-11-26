@@ -11,7 +11,6 @@
 
 
 import torch
-import pathlib
 import torch.utils.data
 
 from typing import Any, Callable, Literal
@@ -90,5 +89,11 @@ class YoungerTask(object):
     def eval_calculate_logs(self, all_outputs: list[torch.Tensor], all_goldens: list[torch.Tensor]) -> OrderedDict[str, tuple[torch.Tensor, Callable | None]]:
         raise NotImplementedError
 
+    def prepare_cli(self):
+        self.logger.warning(f'Not Implemented!')
+
+    def cli(self, **kwargs):
+        self.logger.warning(f'Not Implemented!')
+
     def api(self, **kwargs):
-        raise NotImplementedError
+        self.logger.warning(f'Not Implemented!')

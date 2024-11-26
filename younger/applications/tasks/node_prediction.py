@@ -9,7 +9,9 @@
 # This source code is licensed under the Apache-2.0 license found in the
 # LICENSE file in the root directory of this source tree.
 
+import numpy
 import pathlib
+
 import torch
 import torch.utils.data
 
@@ -19,12 +21,11 @@ from torch_geometric.data import Batch, Data
 from torch_geometric.nn import GAE, VGAE
 
 from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score
-from younger.commons.logging import Logger
 
 from younger.datasets.modules import Instance, Network
 from younger.datasets.utils.translation import get_complete_attributes_of_node
 
-from younger.applications.models import GCN_NP, GAT_NP, SAGE_NP, Encoder_NP, LinearCls
+from younger.applications.models import GCN_NP, GIN_NP, GAT_NP, SAGE_NP, Encoder_NP, LinearCls
 from younger.applications.datasets import NodeDataset
 from younger.applications.tasks.base_task import YoungerTask
 from younger.applications.utils.neural_network import load_checkpoint
@@ -50,7 +51,9 @@ class NodePrediction(YoungerTask):
         dataset_config['train_dataset_dirpath'] = custom_dataset_config.get('train_dataset_dirpath', None)
         dataset_config['valid_dataset_dirpath'] = custom_dataset_config.get('valid_dataset_dirpath', None)
         dataset_config['test_dataset_dirpath'] = custom_dataset_config.get('test_dataset_dirpath', None)
+        dataset_config['dataset_name'] = custom_dataset_config.get('dataset_name', 'Younger_NP')
         dataset_config['encode_type'] = custom_dataset_config.get('encode_type', 'node')
+        dataset_config['standard_onnx'] = custom_dataset_config.get('standard_onnx', False)
         dataset_config['worker_number'] = custom_dataset_config.get('worker_number', 4)
 
         # Model
@@ -59,6 +62,7 @@ class NodePrediction(YoungerTask):
         model_config["model_type"] = custom_model_config.get('model_type', None)
         model_config['node_dim'] = custom_model_config.get('node_dim', 512)
         model_config['hidden_dim'] = custom_model_config.get('hidden_dim', 256)
+        model_config['layer_number'] = custom_model_config.get('layer_number', 3)
         model_config['dropout'] = custom_model_config.get('dropout', 0.5)
         model_config['stage'] = custom_model_config.get('stage', None) # This is for VGAE or GAE
         model_config['ae_type'] = custom_model_config.get('ae_type', 'VGAE') # This is for VGAE or GAE
@@ -76,6 +80,12 @@ class NodePrediction(YoungerTask):
         scheduler_config['factor'] = custom_scheduler_config.get('factor', 0.2)
         scheduler_config['min_lr'] = custom_scheduler_config.get('min_lr', 5e-5)
 
+        # Embedding
+        embedding_config = dict()
+        custom_embedding_config = custom_config.get('embedding', dict())
+        embedding_config['activate'] = custom_embedding_config.get('activate', False)
+        embedding_config['embedding_dirpath'] = custom_embedding_config.get('embedding_dirpath', None)
+
         # API
         api_config = dict()
         custom_api_config = custom_config.get('api', dict())
@@ -87,6 +97,7 @@ class NodePrediction(YoungerTask):
         config['model'] = model_config
         config['optimizer'] = optimizer_config
         config['scheduler'] = scheduler_config
+        config['embedding'] = embedding_config
         config['api'] = api_config
         config['mode'] = mode
         self.config = config
@@ -100,8 +111,10 @@ class NodePrediction(YoungerTask):
                 self._train_dataset = NodeDataset(
                     self.config['dataset']['train_dataset_dirpath'],
                     'train',
-                    worker_number=self.config['dataset']['worker_number'],
+                    dataset_name=self.config['dataset']['dataset_name'],
                     encode_type=self.config['dataset']['encode_type'],
+                    standard_onnx=self.config['dataset']['standard_onnx'],
+                    worker_number=self.config['dataset']['worker_number'],
                 )
 
                 if self.config['dataset']['encode_type'] == 'node':
@@ -124,8 +137,10 @@ class NodePrediction(YoungerTask):
                 self._valid_dataset = NodeDataset(
                     self.config['dataset']['valid_dataset_dirpath'],
                     'valid',
-                    worker_number=self.config['dataset']['worker_number'],
+                    dataset_name=self.config['dataset']['dataset_name'],
                     encode_type=self.config['dataset']['encode_type'],
+                    standard_onnx=self.config['dataset']['standard_onnx'],
+                    worker_number=self.config['dataset']['worker_number'],
                 )
             else:
                 self._valid_dataset = None
@@ -141,8 +156,10 @@ class NodePrediction(YoungerTask):
                 self._test_dataset = NodeDataset(
                     self.config['dataset']['test_dataset_dirpath'],
                     'test',
-                    worker_number=self.config['dataset']['worker_number'],
+                    dataset_name=self.config['dataset']['dataset_name'],
                     encode_type=self.config['dataset']['encode_type'],
+                    standard_onnx=self.config['dataset']['standard_onnx'],
+                    worker_number=self.config['dataset']['worker_number'],
                 )
                 if self.config['dataset']['encode_type'] == 'node':
                     self.logger.info(f'    -> Nodes Dict Size: {len(self._test_dataset.x_dict["n2i"])}')
@@ -167,6 +184,15 @@ class NodePrediction(YoungerTask):
                     node_dim=self.config['model']['node_dim'],
                     hidden_dim=self.config['model']['hidden_dim'],
                     dropout=self.config['model']['dropout'],
+                )
+
+            elif self.config['model']['model_type'] == 'GIN_NP':
+                self._model = GIN_NP(
+                    node_dict_size=self.node_dict_size,
+                    node_dim=self.config['model']['node_dim'],
+                    hidden_dim=self.config['model']['hidden_dim'],
+                    dropout=self.config['model']['dropout'],
+                    layer_number=self.config['model']['layer_number'],
                 )
 
             elif self.config['model']['model_type'] == 'VGAE_NP':
@@ -292,13 +318,14 @@ class NodePrediction(YoungerTask):
             output = self.model(embeddings, minibatch.mask_x_position)
         else:
             output = self.model(minibatch.x, minibatch.edge_index, minibatch.mask_x_position)
+
         # Return Output & Golden
         return output, minibatch.mask_x_label
 
     def eval_calculate_logs(self, all_outputs: list[torch.Tensor], all_goldens: list[torch.Tensor]) -> OrderedDict:
         if self.config['model']['stage'] == 'encoder':
-            return 
-            
+            return
+
         all_outputs = torch.cat(all_outputs)
         all_goldens = torch.cat(all_goldens)
 

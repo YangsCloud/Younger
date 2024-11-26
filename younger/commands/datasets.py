@@ -47,16 +47,27 @@ def filter_run(arguments):
         dataset_dirpath, save_dirpath,
         arguments.worker_number,
         arguments.max_inclusive_version,
+        arguments.clean,
     )
 
 
 def split_run(arguments):
     update_logger(arguments)
-    tasks_filepath = pathlib.Path(arguments.tasks_filepath)
-    dataset_dirpath = pathlib.Path(arguments.dataset_dirpath)
-    save_dirpath = pathlib.Path(arguments.save_dirpath)
+    tasks_filepath = pathlib.Path(arguments.tasks_filepath) if arguments.tasks_filepath is not None else None
+    dataset_dirpath = pathlib.Path(arguments.dataset_dirpath) if arguments.dataset_dirpath is not None else None
+    save_dirpath = pathlib.Path(arguments.save_dirpath) if arguments.save_dirpath is not None else None
 
-    if arguments.community:
+    if arguments.mode == 'ego':
+        from younger.datasets.constructors.official import ego_split
+        ego_split.main(
+            dataset_dirpath, save_dirpath,
+            range_left=arguments.range_left,
+            range_right=arguments.range_right,
+            sample_frequency=arguments.sample_frequency,
+            worker_number=arguments.worker_number,
+            seed=arguments.seed,
+        )
+    elif arguments.mode == 'community':
         from younger.datasets.constructors.official import community_split
         community_split.main(
             tasks_filepath, dataset_dirpath, save_dirpath,
@@ -69,9 +80,22 @@ def split_run(arguments):
             arguments.worker_number,
             arguments.seed
         )
+    elif arguments.mode == 'random':
+        from younger.datasets.constructors.official import random_split
+        random_split.main(
+            dataset_dirpath, save_dirpath,
+            arguments.version,
+            arguments.allow_domains,
+            arguments.subgraph_sizes,
+            arguments.subgraph_number,
+            arguments.retrieve_try,
+            arguments.node_size_lbound, arguments.node_size_ubound,
+            arguments.edge_size_lbound, arguments.edge_size_ubound,
+            arguments.train_proportion, arguments.valid_proportion, arguments.test_proportion,
+            arguments.seed
+        )
     else:
         from younger.datasets.constructors.official import split
-
         split.main(
             tasks_filepath, dataset_dirpath, save_dirpath,
             arguments.version,
@@ -288,6 +312,8 @@ def set_datasets_filter_arguments(parser: argparse.ArgumentParser):
 
     parser.add_argument('--max-inclusive-version', type=int, default=None)
 
+    parser.add_argument('--clean', action='store_true')
+
     parser.add_argument('--worker-number', type=int, default=4)
 
     parser.add_argument('--logging-filepath', type=str, default=None)
@@ -295,23 +321,31 @@ def set_datasets_filter_arguments(parser: argparse.ArgumentParser):
 
 
 def set_datasets_split_arguments(parser: argparse.ArgumentParser):
-    parser.add_argument('--tasks-filepath', type=str, required=True)
-    parser.add_argument('--dataset-dirpath', type=str, required=True)
-    parser.add_argument('--save-dirpath', type=str, default='.')
+    parser.add_argument('--tasks-filepath', type=str, default=None)
+    parser.add_argument('--dataset-dirpath', type=str, default=None)
+    parser.add_argument('--save-dirpath', type=str, default=None)
 
     parser.add_argument('--version', type=str, required=True)
     parser.add_argument('--silly', action='store_true')
-    parser.add_argument('--community', action='store_true')
+    parser.add_argument('--allow-domains', type=str, nargs='*', default=[])
+    parser.add_argument('--subgraph-sizes', type=int, nargs='+', default=[5])
+    parser.add_argument('--subgraph-number', type=int, default=10)
+    parser.add_argument('--retrieve-try', type=int, default=1000)
+    parser.add_argument('--mode', type=str, choices=['ego', 'community', 'random'], default='community')
     parser.add_argument('--metric-name', type=str, default=None)
+
+    parser.add_argument('--sample-frequency', type=int, default=None)
+    parser.add_argument('--range-left', type=int, default=None)
+    parser.add_argument('--range-right', type=int, default=None)
 
     parser.add_argument('--node-size-lbound', type=int, default=None)
     parser.add_argument('--node-size-ubound', type=int, default=None)
     parser.add_argument('--edge-size-lbound', type=int, default=None)
     parser.add_argument('--edge-size-ubound', type=int, default=None)
 
-    parser.add_argument('--train-proportion', type=int, default=80)
-    parser.add_argument('--valid-proportion', type=int, default=10)
-    parser.add_argument('--test-proportion', type=int, default=10)
+    parser.add_argument('--train-proportion', type=float, default=80)
+    parser.add_argument('--valid-proportion', type=float, default=10)
+    parser.add_argument('--test-proportion', type=float, default=10)
 
     parser.add_argument('--partition-number', type=int, default=10)
 

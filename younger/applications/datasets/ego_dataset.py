@@ -139,11 +139,9 @@ class EgoDataset(Dataset):
         meta: dict[str, Any] = dict()
 
         meta['all_operators'] = loaded_meta['all_operators']
-        meta['lt_operators'] = loaded_meta['lt_operators']
+        meta['tail_index'] = loaded_meta['tail_index']
 
-        meta['split'] = loaded_meta['split']
         meta['archive'] = loaded_meta['archive']
-        meta['version'] = loaded_meta['version']
         meta['size'] = loaded_meta['size']
         meta['url'] = loaded_meta['url']
 
@@ -155,14 +153,14 @@ class EgoDataset(Dataset):
 
     @classmethod
     def get_x_dict(cls, meta: dict[str, Any]) -> dict[str, list[str] | dict[str, int]]:
-        all_operators = [(operator_id, operator_count) for operator_id, operator_count in meta['all_operators']['onnx'].items()]
-        all_operators = sorted(all_operators, key=lambda x: x[1])
+        all_operators = [(operator_id, operator_count) for operator_id, operator_count in meta['all_operators'].items()]
+        all_operators = sorted(all_operators, key=lambda x: (x[1], x[0]))[::-1]
 
-        lt_operators = [(operator_id, operator_count) for operator_id, operator_count in meta['lt_operators']['onnx'].items()]
-        lt_operators = sorted(lt_operators, key=lambda x: x[1])
+        top_operators = [(op_id, op_count) for (op_id, op_count) in all_operators[:meta['tail_index']]]
+        lt_operators = [(op_id, op_count) for (op_id, op_count) in all_operators[meta['tail_index']:]]
 
         x_dict = dict()
-        x_dict['i2o'] = ['__UNK__'] + ['__MASK__'] + ['__TAIL__'] + [operator_id for operator_id, operator_count in all_operators if operator_id not in meta['lt_operators']['onnx']]
+        x_dict['i2o'] = ['__UNK__'] + ['__MASK__'] + ['__TAIL__'] + [operator_id for operator_id, operator_count in top_operators]
         x_dict['o2i'] = {operator_id: index for index, operator_id in enumerate(x_dict['i2o'])}
         x_dict['lto'] = {operator_id for operator_id, operator_count in lt_operators}
         return x_dict
@@ -208,8 +206,8 @@ class EgoDataset(Dataset):
         sample: tuple[str, networkx.DiGraph, tuple],
         x_dict: dict[str, Any]
     ) -> EgoData:
-        subgraph_hash, subgraph, focus = sample
-        mapping = cls.get_mapping(subgraph) # e.g.
+        focus, ego, ego_hash= sample
+        mapping = cls.get_mapping(ego) # e.g.
                                             # dict(zip(sorted(G.nodes()), range(G.number_of_nodes())))
                                             # >>> print(node_mapping)
                                             # {2: 0, 3: 1, 5: 2, 10: 3}
@@ -218,9 +216,9 @@ class EgoDataset(Dataset):
                                             # >>> print(sorted(G.nodes()))
                                             # [2, 3, 5, 10]
 
-        x = cls.get_x(subgraph, mapping, focus, x_dict)
-        edge_index = cls.get_edge_index(subgraph, mapping)
-        mask_x_label = torch.tensor([cls.get_node_class(subgraph.nodes[focus]['features'], x_dict)], dtype=torch.long)
+        x = cls.get_x(ego, mapping, focus, x_dict)
+        edge_index = cls.get_edge_index(ego, mapping)
+        mask_x_label = torch.tensor([cls.get_node_class(ego.nodes[node_index]['features'], x_dict) for node_index in ego.nodes() if node_index != focus], dtype=torch.long)
         mask_x_position = torch.tensor([mapping[focus]], dtype=torch.long)
 
         ego_data = EgoData(x=x, edge_index=edge_index, mask_x_label=mask_x_label, mask_x_position=mask_x_position)

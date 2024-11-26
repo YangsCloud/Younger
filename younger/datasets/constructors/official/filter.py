@@ -46,7 +46,7 @@ def update_unique_instance(unique_instance: Instance, purified_instance: Instanc
 
 
 def purify_instance_with_graph_hash(parameter: tuple[str, int]) -> tuple[Instance, str]:
-    path, max_inclusive_version = parameter
+    path, max_inclusive_version, clean = parameter
     instance = Instance()
     instance.load(path)
 
@@ -59,30 +59,37 @@ def purify_instance_with_graph_hash(parameter: tuple[str, int]) -> tuple[Instanc
     standardized_graph.graph.clear()
 
     instance.setup_network(Network(standardized_graph))
-    graph_hash = Network.hash(instance.network.graph, node_attr='features')
 
-    # cleansed_graph = networkx.DiGraph()
-    # cleansed_graph.add_nodes_from(instance.network.graph.nodes(data=True))
-    # cleansed_graph.add_edges_from(instance.network.graph.edges(data=True))
-    # for node_index in cleansed_graph.nodes():
-    #     cleansed_graph.nodes[node_index]['operator'] = cleansed_graph.nodes[node_index]['features']['operator']
-    # graph_hash = networkx.weisfeiler_lehman_graph_hash(cleansed_graph, node_attr='operator', iterations=3, digest_size=16)
+    if clean:
+        cleansed_graph = networkx.DiGraph()
+        cleansed_graph.add_nodes_from(instance.network.graph.nodes(data=True))
+        cleansed_graph.add_edges_from(instance.network.graph.edges(data=True))
+        for node_index in cleansed_graph.nodes():
+            cleansed_graph.nodes[node_index]['operator'] = cleansed_graph.nodes[node_index]['features']['operator']
+        graph_hash = Network.hash(cleansed_graph, node_attr='operator')
+    else:
+        graph_hash = Network.hash(instance.network.graph, node_attr='features')
 
     return (instance, graph_hash)
 
 
-def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, worker_number: int = 4, max_inclusive_version: int | None = None):
+def main(dataset_dirpath: pathlib.Path, save_dirpath: pathlib.Path, worker_number: int = 4, max_inclusive_version: int | None = None, clean: bool = False):
     if max_inclusive_version:
         logger.info(f'Using ONNX Max Inclusive Version: {max_inclusive_version}')
     else:
         max_inclusive_version = get_onnx_opset_version()
         logger.info(f'Not Specified ONNX Max Inclusive Version. Using Latest Version: {max_inclusive_version}')
 
+    if clean:
+        logger.info(f'Filter without Attributes')
+    else:
+        logger.info(f'Filter with Attributes')
+
     logger.info(f'Scanning Dataset Directory Path: {dataset_dirpath}')
     parameters = list()
     for path in dataset_dirpath.iterdir():
         if path.is_dir():
-            parameters.append((path, max_inclusive_version))
+            parameters.append((path, max_inclusive_version, clean))
 
     logger.info(f'Total Instances To Be Filtered: {len(parameters)}')
 

@@ -26,6 +26,6 @@ class SAGE_NP(nn.Module):
         if self.output_embedding:
             return torch.mean(x, dim=0).unsqueeze(0)
         return F.log_softmax(x[mask_x_position], dim=1)
-    
+
     def initialize_parameters(self):
         nn.init.normal_(self.node_embedding_layer.weight, mean=0, std=self.node_embedding_layer.embedding_dim ** -0.5)
