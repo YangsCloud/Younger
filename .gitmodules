@@ -1,0 +1,12 @@
+[submodule "younger/logics/core"]
+	path = younger/logics/core
+	url = git@github.com:YangsCloud/Younger-Logic-Core.git
+[submodule "younger/logics/ir"]
+	path = younger/logics/ir
+	url = git@github.com:YangsCloud/Younger-Logic-IR.git
+[submodule "younger/tools/bench"]
+	path = younger/tools/bench
+	url = git@github.com:YangsCloud/Younger-Tool-Bench.git
+[submodule "younger/apps/dl"]
+	path = younger/apps/dl
+	url = git@github.com:YangsCloud/Younger-App-DL.git
