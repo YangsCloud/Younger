@@ -1,1 +1,0 @@
-from .mae_gin import MAEGIN

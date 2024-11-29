@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-#
-# Copyright (c) Jason Young (杨郑鑫).
-#
-# E-Mail: <AI.Jason.Young@outlook.com>
-# 2023-09-10 14:58
-#
-# This source code is licensed under the Apache-2.0 license found in the
+# -*- encoding=utf8 -*-
+
+########################################################################
+# Created time: 2024-08-27 18:03:44
+# Author: Jason Young (杨郑鑫).
+# E-Mail: AI.Jason.Young@outlook.com
+# Last Modified by: Jason Young (杨郑鑫)
+# Last Modified time: 2024-11-27 11:19:10
+# Copyright (c) 2024 Yangs.AI
+# 
+# This source code is licensed under the Apache License 2.0 found in the
 # LICENSE file in the root directory of this source tree.
+########################################################################
+
 
 class Constant:
     __slots__ = ("_frozen_", "_attributes_")
@@ -41,10 +46,9 @@ class Constant:
 class YOUNGER_HANDLE(Constant):
     def initialize(self) -> None:
         self.MainName = 'Younger'
-        self.DatasetsName = 'Younger-Datasets'
-        self.BenchmarksName = 'Younger-Benchmarks'
-        self.ApplicationsName = 'Younger-Applications'
-
+        self.AppName = 'Younger-App'
+        self.ToolName = 'Younger-Tool'
+        self.LogicName = 'Younger-Logic'
 
 YoungerHandle = YOUNGER_HANDLE()
 YoungerHandle.initialize()
