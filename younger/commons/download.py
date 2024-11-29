@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-#
-# Copyright (c) Jason Young (杨郑鑫).
-#
-# E-Mail: <AI.Jason.Young@outlook.com>
-# 2024-08-30 16:26
-#
-# This source code is licensed under the Apache-2.0 license found in the
+# -*- encoding=utf8 -*-
+
+########################################################################
+# Created time: 2024-10-19 22:12:17
+# Author: Jason Young (杨郑鑫).
+# E-Mail: AI.Jason.Young@outlook.com
+# Last Modified by: Jason Young (杨郑鑫)
+# Last Modified time: 2024-11-28 09:36:24
+# Copyright (c) 2024 Yangs.AI
+# 
+# This source code is licensed under the Apache License 2.0 found in the
 # LICENSE file in the root directory of this source tree.
+########################################################################
 
 
 import tqdm
