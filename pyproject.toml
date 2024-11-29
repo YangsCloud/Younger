@@ -31,28 +31,51 @@ classifiers=[
 
 dependencies = [
     "tqdm",
+    "click",
+    "fsspec",
     "psutil",
-    "pandas",
-    "networkx",
     "python-semantic-release"
 ]
 
 [project.optional-dependencies]
-datasets-onnx = ["onnx"]
-datasets-torchvision = ["onnx", "torch", "torchvision"]
-datasets-huggingface-optimum = ["onnx", "isocodes", "huggingface-hub", "optimum[exporters]"]
-datasets-huggingface-onnx = ["onnx", "isocodes", "huggingface-hub"]
-datasets-huggingface-keras = ["onnx", "isocodes", "huggingface-hub", "tensorflow>=2.9,<=2.15", "tf2onnx"]
-datasets-huggingface-tflite = ["onnx", "isocodes", "huggingface-hub", "tensorflow>=2.9,<=2.15", "tf2onnx"]
-datasets-official = ["onnx"]
-benchmarks = []
-applications = ["torch-geometric"]
+apps = [
+    "younger-apps-dl",
+]
+apps-dl = [
+    "younger-apps-dl",
+]
+
+tools = [
+    "younger-tools-bench",
+]
+tools-bench = [
+    "younger-tools-bench",
+]
+
+logics = [
+    "younger-logics-ir",
+    "younger-logics-core",
+]
+logics-ir = [
+    "younger-logics-ir",
+]
+logics-core = [
+    "younger-logics-core",
+]
+
+develop = [
+    "sphinx"
+]
 
 [project.urls]
-Homepage = "https://github.com/YangsCloud/Younger.git"
-Issues = "https://github.com/YangsCloud/Younger.git/issues"
-Source = "https://github.com/YangsCloud/Younger.git"
-Repository = "https://github.com/YangsCloud/Younger.git"
+Homepage = "https://younger.yangs.ai/"
+Issues = "https://github.com/Yangs-AI/Younger/issues"
+Source = "https://github.com/Yangs-AI/Younger"
+Repository = "https://github.com/Yangs-AI/Younger.git"
 
 [project.scripts]
 younger = "younger.commands.main:main"
+
+[project.entry-points."younger.logics"]
+ir = "younger_logics_ir.commands.main:main"
+core = "younger_logics_core.commands.main:main"
